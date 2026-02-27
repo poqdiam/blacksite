@@ -14,9 +14,36 @@ app:
     - dan
 
 employees:               # Known employees (non-admin Authelia users)
-  - username: ""         # Authelia Remote-User value
-    name: ""
-    email: ""
+  - username: "alice.chen"
+    name: "Alice Chen"
+    email: "alice.chen@thekramerica.com"
+  - username: "marcus.okafor"
+    name: "Marcus Okafor"
+    email: "marcus.okafor@thekramerica.com"
+  - username: "priya.sharma"
+    name: "Priya Sharma"
+    email: "priya.sharma@thekramerica.com"
+  - username: "derek.holloway"
+    name: "Derek Holloway"
+    email: "derek.holloway@thekramerica.com"
+  - username: "samira.nazari"
+    name: "Samira Nazari"
+    email: "samira.nazari@thekramerica.com"
+  - username: "james.trent"
+    name: "James Trent"
+    email: "james.trent@thekramerica.com"
+  - username: "lucia.reyes"
+    name: "Lucia Reyes"
+    email: "lucia.reyes@thekramerica.com"
+  - username: "ben.ashworth"
+    name: "Ben Ashworth"
+    email: "ben.ashworth@thekramerica.com"
+  - username: "kwame.asante"
+    name: "Kwame Asante"
+    email: "kwame.asante@thekramerica.com"
+  - username: "nadia.volkov"
+    name: "Nadia Volkov"
+    email: "nadia.volkov@thekramerica.com"
 
 quiz:
   daily: true

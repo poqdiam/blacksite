@@ -1253,23 +1253,25 @@ async def employee_dashboard(request: Request):
         for d in week_dates
     ]
 
-    quiz_cfg       = CONFIG.get("quiz", {})
-    pass_threshold = quiz_cfg.get("pass_threshold", 75)
+    quiz_cfg        = CONFIG.get("quiz", {})
+    pass_threshold  = quiz_cfg.get("pass_threshold", 75)
+    question_count  = quiz_cfg.get("question_count", 15)
 
     return templates.TemplateResponse("dashboard.html", {
-        "request":         request,
-        "today_activity":  today_activity,
-        "quiz_done":       quiz_done,
-        "quiz_passed":     quiz_passed,
-        "quiz_score":      quiz_score_val,
-        "streak":          streak,
-        "week_data":       week_data,
-        "score_history":   score_history,
-        "my_entries":      my_entries,
+        "request":          request,
+        "today_activity":   today_activity,
+        "quiz_done":        quiz_done,
+        "quiz_passed":      quiz_passed,
+        "quiz_score":       quiz_score_val,
+        "streak":           streak,
+        "week_data":        week_data,
+        "score_history":    score_history,
+        "my_entries":       my_entries,
         "assigned_systems": assigned_systems,
-        "pass_threshold":  pass_threshold,
-        "view_as_mode":    False,
-        "viewing_as":      "",
+        "pass_threshold":   pass_threshold,
+        "question_count":   question_count,
+        "view_as_mode":     False,
+        "viewing_as":       "",
         **_tpl_ctx(request),
     })
 
@@ -2989,3 +2991,30 @@ async def update_submission(request: Request, sub_id: str):
         await session.commit()
 
     return RedirectResponse(url=f"/submissions/{sub_id}", status_code=303)
+
+
+# ── RSS / Advisory Feed ────────────────────────────────────────────────────────
+
+from app.rss_feed import get_feed_items, get_all_feed_items
+
+@app.get("/api/feeds")
+async def api_feeds(request: Request):
+    """Return merged advisory feed items as JSON. Filtered by user's systems if available."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        sys_ids = await _user_system_ids(request, session)
+        systems_list = []
+        if sys_ids:
+            sys_rows = await session.execute(
+                select(System).where(System.id.in_(sys_ids))
+            )
+            systems_list = list(sys_rows.scalars().all())
+
+    loop = asyncio.get_event_loop()
+    items = await loop.run_in_executor(
+        None, lambda: get_feed_items(systems=systems_list, max_items=25, min_score=0)
+    )
+    return JSONResponse({"items": items, "system_count": len(systems_list)})

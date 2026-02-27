@@ -9,51 +9,53 @@
     50%  { border-color: rgba(0,255,204,0.9); box-shadow: 0 0 0 6px rgba(0,255,204,0.04); }
     100% { border-color: rgba(0,255,204,0.4); box-shadow: 0 0 0 0 rgba(0,255,204,0.15); }
   }
-  .quiz-pending-card {
-    animation: pulse-border 2.2s ease-in-out infinite;
-    border-color: rgba(0,255,204,0.4) !important;
-  }
-  .cal-day {
-    width: 28px; height: 28px;
-    border-radius: 4px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 0.65em; font-weight: 700;
-    cursor: default;
-    flex-shrink: 0;
-  }
+  .quiz-pending-card { animation: pulse-border 2.2s ease-in-out infinite; border-color: rgba(0,255,204,0.4) !important; }
+
+  .cal-day { width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center;
+             justify-content: center; font-size: 0.65em; font-weight: 700; cursor: default; flex-shrink: 0; }
   .cal-day.done-pass  { background: rgba(0,200,83,0.2);  color: var(--green); border: 1px solid rgba(0,200,83,0.4); }
   .cal-day.done-fail  { background: rgba(244,67,54,0.15); color: var(--red);   border: 1px solid rgba(244,67,54,0.3); }
-  .cal-day.not-done   { background: rgba(255,255,255,0.04); color: #333;      border: 1px solid #1a1a28; }
+  .cal-day.not-done   { background: rgba(255,255,255,0.04); color: #333;       border: 1px solid #1a1a28; }
   .cal-day.today-ring { outline: 2px solid var(--cyan); outline-offset: 1px; }
 
-  /* ── Two-column layout ── */
+  /* ── Two-column layout — LEFT sidebar + RIGHT main ── */
   .dash-layout {
     display: grid;
-    grid-template-columns: 1fr 280px;
+    grid-template-columns: 300px 1fr;
     gap: 24px;
     align-items: start;
   }
-  .dash-sidebar {
-    position: sticky;
-    top: 72px;  /* nav height + a bit */
-  }
+  .dash-sidebar { position: sticky; top: 72px; }
   .sidebar-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 18px;
-    margin-bottom: 16px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 18px; margin-bottom: 16px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03);
   }
   .sidebar-card-title {
-    font-size: 0.6em;
-    font-weight: 700;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--cyan);
-    margin-bottom: 12px;
+    font-size: 0.6em; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--cyan); margin-bottom: 12px;
   }
-  @media (max-width: 760px) {
+
+  /* ── RSS feed ── */
+  .feed-item {
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8em;
+  }
+  .feed-item:last-child { border-bottom: none; }
+  .feed-item-title {
+    font-weight: 600; color: var(--text); line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .feed-item-meta { margin-top: 3px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .feed-source-pill {
+    font-size: 0.68em; font-weight: 700; letter-spacing: 0.5px; padding: 1px 6px;
+    border-radius: 3px; border: 1px solid rgba(255,255,255,0.08); white-space: nowrap;
+  }
+  .feed-loading { color: var(--muted); font-size: 0.82em; text-align: center; padding: 16px 0; }
+  .feed-score-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); flex-shrink: 0; }
+
+  @media (max-width: 800px) {
     .dash-layout { grid-template-columns: 1fr; }
     .dash-sidebar { position: static; }
   }
@@ -71,19 +73,144 @@
 </div>
 {% endif %}
 
-<div style="margin-bottom:24px">
+<div style="margin-bottom:20px">
   <h1 style="margin:0">
     {% if view_as_mode %}{{ viewing_as }}{% elif remote_user %}{{ remote_user }}{% else %}Dashboard{% endif %}
   </h1>
-  <p class="text-muted" style="margin-top:4px;font-size:0.88em">
-    {{ app_name }} — {{ tagline }}
-  </p>
+  <p class="text-muted" style="margin-top:4px;font-size:0.88em">{{ app_name }} — {{ tagline }}</p>
 </div>
 
 <div class="dash-layout">
 
   {# ════════════════════════════════════════════════════════════
-     LEFT — Main content
+     LEFT — Sidebar (daily challenge + RSS + systems)
+  ════════════════════════════════════════════════════════════ #}
+  <aside class="dash-sidebar">
+
+    {# ── Daily Challenge card ── #}
+    <div class="sidebar-card {% if not quiz_done %}quiz-pending-card{% endif %}">
+      <div class="sidebar-card-title">Daily Challenge</div>
+
+      {# streak badge #}
+      {% if streak > 0 %}
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;
+                  padding:5px 10px;width:fit-content;
+                  background:rgba(255,179,0,0.1);border:1px solid rgba(255,179,0,0.3);border-radius:20px">
+        <span style="font-size:1em">🔥</span>
+        <span style="font-weight:700;color:var(--yellow);font-size:0.9em">{{ streak }} day streak</span>
+      </div>
+      {% endif %}
+
+      {% if quiz_done %}
+        <div style="text-align:center;padding:12px 0 8px">
+          <div style="font-size:2.8em;font-weight:900;line-height:1;
+                      color:{% if quiz_passed %}var(--green){% else %}var(--red){% endif %}">
+            {{ quiz_score }}%
+          </div>
+          <div style="font-size:0.65em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:4px">
+            Today's Score
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:8px;font-size:0.82em">
+          {% if quiz_passed %}
+            <span style="color:var(--green);font-weight:700">✓ Passed</span><br>
+            <span class="text-muted">Back tomorrow for a new quiz.</span>
+          {% else %}
+            <span style="color:var(--yellow);font-weight:700">Need {{ pass_threshold }}% to pass</span><br>
+            <span class="text-muted">Keep at it — tomorrow's fresh.</span>
+          {% endif %}
+        </div>
+      {% else %}
+        <div style="font-size:0.82em;color:var(--text);margin-bottom:8px">
+          Today's quiz is waiting.<br>
+          <span class="text-muted">{{ question_count }} questions · CISSP · ~5 min</span>
+        </div>
+        <a href="/dashboard/quiz" class="btn btn-primary"
+           style="font-size:0.85em;padding:9px 16px;width:100%;text-align:center;display:block;box-sizing:border-box">
+          Start Today's Quiz →
+        </a>
+      {% endif %}
+
+      {# 7-day mini calendar #}
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:0.6em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Last 7 Days</div>
+        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+          {% for d in week_data|reverse %}
+          {% set is_today = (loop.revindex == 1) %}
+          {% if d.done %}
+            <div class="cal-day {% if d.passed %}done-pass{% else %}done-fail{% endif %} {% if is_today %}today-ring{% endif %}"
+                 title="{{ d.date }}: {{ d.score }}%">
+              {{ d.score if d.score is not none else '?' }}
+            </div>
+          {% else %}
+            <div class="cal-day not-done {% if is_today %}today-ring{% endif %}"
+                 title="{{ d.date }}: not done">·</div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+
+      {# Score trend sparkline (compact) #}
+      {% if score_history %}
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="font-size:0.6em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">30-Day Trend</div>
+        <canvas id="chartSparkline" style="max-height:60px"></canvas>
+      </div>
+      {% endif %}
+    </div>{# /daily challenge #}
+
+    {# ── Vulnerability Feed ── #}
+    <div class="sidebar-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="sidebar-card-title" style="margin:0">Security Advisories</div>
+        <button onclick="refreshFeed()" id="feedRefreshBtn"
+                style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:0.75em;padding:0">
+          ↻ Refresh
+        </button>
+      </div>
+      {% if assigned_systems %}
+      <div style="font-size:0.65em;color:var(--muted);margin-bottom:8px">
+        Filtered for {{ assigned_systems|length }} assigned system{{ 's' if assigned_systems|length != 1 else '' }}
+      </div>
+      {% endif %}
+      <div id="feedContainer">
+        <div class="feed-loading">Loading advisories…</div>
+      </div>
+      <div style="margin-top:10px;text-align:center">
+        <span style="font-size:0.65em;color:var(--border)">CISA · SANS ISC · US-CERT</span>
+      </div>
+    </div>
+
+    {# ── My Systems card ── #}
+    {% if assigned_systems %}
+    <div class="sidebar-card">
+      <div class="sidebar-card-title">My Systems</div>
+      {% for item in assigned_systems %}
+      {% set s = item.system %}
+      <div style="padding:8px 0;{% if not loop.last %}border-bottom:1px solid var(--border){% endif %}">
+        <a href="/systems/{{ s.id }}" style="font-weight:600;font-size:0.88em;color:var(--text)">{{ s.name }}</a>
+        <div style="display:flex;gap:6px;margin-top:3px;flex-wrap:wrap;align-items:center">
+          {% if s.abbreviation %}
+          <span style="font-family:var(--mono);font-size:0.65em;color:var(--cyan)">{{ s.abbreviation }}</span>
+          {% endif %}
+          {% set auth_colors = {'authorized':'var(--green)','in_progress':'var(--yellow)','expired':'var(--red)','not_authorized':'var(--grey)'} %}
+          <span style="font-size:0.65em;color:{{ auth_colors.get(s.auth_status, 'var(--muted)') }}">
+            {{ s.auth_status | replace('_',' ') | title }}
+          </span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <a href="/systems/{{ s.id }}/controls" style="font-size:0.7em;color:var(--cyan)">Control Plan</a>
+          <a href="/poam?system_id={{ s.id }}" style="font-size:0.7em;color:var(--muted)">POA&Ms</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+  </aside>
+
+  {# ════════════════════════════════════════════════════════════
+     RIGHT — Main content
   ════════════════════════════════════════════════════════════ #}
   <div class="dash-main">
 
@@ -148,9 +275,27 @@
       {% endif %}
     </div>
 
-    {# ── Score Trend ── #}
-    {% if score_history %}
-    <div class="section-header">Daily Quiz Score Trend</div>
+    {# ── Quick GRC Actions (if has systems) ── #}
+    {% if assigned_systems %}
+    <div class="section-header">Quick Actions</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:24px">
+      {% for item in assigned_systems[:3] %}
+      {% set s = item.system %}
+      <div class="card" style="padding:14px;margin-bottom:0">
+        <div style="font-size:0.72em;font-weight:700;color:var(--text);margin-bottom:8px;
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.name }}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <a href="/systems/{{ s.id }}/controls" class="btn btn-ghost btn-sm" style="font-size:0.7em;padding:3px 8px">Controls</a>
+          <a href="/poam/new?system_id={{ s.id }}" class="btn btn-ghost btn-sm" style="font-size:0.7em;padding:3px 8px;color:var(--yellow);border-color:var(--yellow)">+ POA&M</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ── Score Trend (full chart, now in main area) ── #}
+    {% if score_history and score_history|length > 3 %}
+    <div class="section-header">Quiz Score Trend</div>
     <div class="card" style="padding:20px">
       <canvas id="chartTrend" style="max-height:160px"></canvas>
     </div>
@@ -158,115 +303,100 @@
 
   </div>{# /dash-main #}
 
-
-  {# ════════════════════════════════════════════════════════════
-     RIGHT — Sidebar
-  ════════════════════════════════════════════════════════════ #}
-  <aside class="dash-sidebar">
-
-    {# ── Daily Challenge card ── #}
-    <div class="sidebar-card {% if not quiz_done %}quiz-pending-card{% endif %}">
-      <div class="sidebar-card-title">Daily Challenge</div>
-
-      {# streak badge #}
-      {% if streak > 0 %}
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;
-                  padding:5px 10px;width:fit-content;
-                  background:rgba(255,179,0,0.1);border:1px solid rgba(255,179,0,0.3);border-radius:20px">
-        <span style="font-size:1em">🔥</span>
-        <span style="font-weight:700;color:var(--yellow);font-size:0.9em">{{ streak }} day streak</span>
-      </div>
-      {% endif %}
-
-      {% if quiz_done %}
-        {# Result display #}
-        <div style="text-align:center;padding:12px 0 8px">
-          <div style="font-size:2.8em;font-weight:900;line-height:1;
-                      color:{% if quiz_passed %}var(--green){% else %}var(--red){% endif %}">
-            {{ quiz_score }}%
-          </div>
-          <div style="font-size:0.65em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:4px">
-            Today's Score
-          </div>
-        </div>
-        <div style="text-align:center;margin-top:8px;font-size:0.82em">
-          {% if quiz_passed %}
-            <span style="color:var(--green);font-weight:700">✓ Passed</span><br>
-            <span class="text-muted">Back tomorrow for a new quiz.</span>
-          {% else %}
-            <span style="color:var(--yellow);font-weight:700">Need {{ pass_threshold }}% to pass</span><br>
-            <span class="text-muted">Keep at it — tomorrow's fresh.</span>
-          {% endif %}
-        </div>
-      {% else %}
-        {# Not done — CTA #}
-        <div style="font-size:0.82em;color:var(--text);margin-bottom:8px">
-          Today's quiz is waiting.<br>
-          <span class="text-muted">15 questions · CISSP · ~5 min</span>
-        </div>
-        <a href="/dashboard/quiz" class="btn btn-primary"
-           style="font-size:0.85em;padding:9px 16px;width:100%;text-align:center;display:block;box-sizing:border-box">
-          Start Today's Quiz →
-        </a>
-      {% endif %}
-
-      {# 7-day mini calendar #}
-      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
-        <div style="font-size:0.6em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Last 7 Days</div>
-        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
-          {% for d in week_data|reverse %}
-          {% set is_today = (loop.revindex == 1) %}
-          {% if d.done %}
-            <div class="cal-day {% if d.passed %}done-pass{% else %}done-fail{% endif %} {% if is_today %}today-ring{% endif %}"
-                 title="{{ d.date }}: {{ d.score }}%">
-              {{ d.score if d.score is not none else '?' }}
-            </div>
-          {% else %}
-            <div class="cal-day not-done {% if is_today %}today-ring{% endif %}"
-                 title="{{ d.date }}: not done">·</div>
-          {% endif %}
-          {% endfor %}
-        </div>
-      </div>
-    </div>{# /daily challenge #}
-
-    {# ── My Systems card ── #}
-    {% if assigned_systems %}
-    <div class="sidebar-card">
-      <div class="sidebar-card-title">My Systems</div>
-      {% for item in assigned_systems %}
-      {% set s = item.system %}
-      <div style="padding:8px 0;{% if not loop.last %}border-bottom:1px solid var(--border){% endif %}">
-        <a href="/systems/{{ s.id }}" style="font-weight:600;font-size:0.88em;color:var(--text)">{{ s.name }}</a>
-        <div style="display:flex;gap:6px;margin-top:3px;flex-wrap:wrap;align-items:center">
-          {% if s.abbreviation %}
-          <span style="font-family:var(--mono);font-size:0.65em;color:var(--cyan)">{{ s.abbreviation }}</span>
-          {% endif %}
-          {% set auth_colors = {'authorized':'var(--green)','in_progress':'var(--yellow)','expired':'var(--red)','not_authorized':'var(--grey)'} %}
-          <span style="font-size:0.65em;color:{{ auth_colors.get(s.auth_status, 'var(--muted)') }}">
-            {{ s.auth_status | replace('_',' ') | title }}
-          </span>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% endif %}
-
-  </aside>
-
 </div>{# /dash-layout #}
 {% endblock %}
 
 {% block scripts %}
-{% if score_history %}
 <script>
+// ── Feed loader ──────────────────────────────────────────────
+function loadFeed() {
+  fetch('/api/feeds')
+    .then(r => r.json())
+    .then(data => {
+      const container = document.getElementById('feedContainer');
+      if (!data.items || data.items.length === 0) {
+        container.innerHTML = '<div class="feed-loading" style="color:var(--muted)">No advisories available right now.</div>';
+        return;
+      }
+      container.innerHTML = data.items.map(item => `
+        <div class="feed-item">
+          <a href="${item.link || '#'}" target="_blank" rel="noopener"
+             style="text-decoration:none;color:inherit">
+            <div class="feed-item-title">${escHtml(item.title)}</div>
+          </a>
+          <div class="feed-item-meta">
+            <span class="feed-source-pill" style="color:${item.source_color};border-color:${item.source_color}33">
+              ${escHtml(item.source)}
+            </span>
+            ${item.score > 0 ? '<span class="feed-score-dot" title="Matches your assigned systems"></span>' : ''}
+            ${item.pub ? `<span style="font-size:0.75em;color:var(--muted)">${escHtml(item.pub.slice(0,16))}</span>` : ''}
+          </div>
+        </div>
+      `).join('');
+    })
+    .catch(() => {
+      document.getElementById('feedContainer').innerHTML =
+        '<div class="feed-loading" style="color:var(--red)">Feed unavailable — check network.</div>';
+    });
+}
+
+function refreshFeed() {
+  const btn = document.getElementById('feedRefreshBtn');
+  btn.textContent = '↻ …';
+  document.getElementById('feedContainer').innerHTML = '<div class="feed-loading">Refreshing…</div>';
+  setTimeout(() => { loadFeed(); btn.textContent = '↻ Refresh'; }, 400);
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.addEventListener('DOMContentLoaded', loadFeed);
+
+// ── Sparkline chart ──────────────────────────────────────────
+{% if score_history %}
+const sparkDates  = {{ score_history | map(attribute='quiz_date') | list | tojson }};
+const sparkScores = {{ score_history | map(attribute='score') | list | tojson }};
+const sparkPassed = {{ score_history | map(attribute='passed') | list | tojson }};
+
+const sparkCtx = document.getElementById('chartSparkline');
+if (sparkCtx) {
+  new Chart(sparkCtx, {
+    type: 'line',
+    data: {
+      labels: sparkDates,
+      datasets: [{
+        data: sparkScores,
+        borderColor: '#00ffcc',
+        backgroundColor: 'rgba(0,255,204,0.06)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.4,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { display: false },
+        y: { display: false, min: 0, max: 100 },
+      },
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      animation: false,
+    }
+  });
+}
+{% endif %}
+
+// ── Main trend chart ─────────────────────────────────────────
+{% if score_history and score_history|length > 3 %}
 const trendDates  = {{ score_history | map(attribute='quiz_date') | list | tojson }};
 const trendScores = {{ score_history | map(attribute='score') | list | tojson }};
 const trendPassed = {{ score_history | map(attribute='passed') | list | tojson }};
 
-const ctx = document.getElementById('chartTrend');
-if (ctx) {
-  new Chart(ctx, {
+const trendCtx = document.getElementById('chartTrend');
+if (trendCtx) {
+  new Chart(trendCtx, {
     type: 'line',
     data: {
       labels: trendDates,
@@ -283,30 +413,20 @@ if (ctx) {
       }]
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       scales: {
-        x: {
-          ticks: { color: '#555', font: { size: 10 }, maxTicksLimit: 10 },
-          grid: { color: '#1a1a28' },
-        },
-        y: {
-          min: 0, max: 100,
-          ticks: { color: '#555', font: { size: 10 }, callback: v => v + '%' },
-          grid: { color: '#1a1a28' },
-        },
+        x: { ticks: { color: '#555', font: { size: 10 }, maxTicksLimit: 10 }, grid: { color: '#1a1a28' } },
+        y: { min: 0, max: 100, ticks: { color: '#555', font: { size: 10 }, callback: v => v + '%' }, grid: { color: '#1a1a28' } },
       },
       plugins: {
         legend: { display: false },
         tooltip: {
-          callbacks: {
-            label: ctx => ` ${ctx.raw}% — ${trendPassed[ctx.dataIndex] ? 'Passed' : 'Failed'}`,
-          }
+          callbacks: { label: ctx => ` ${ctx.raw}% — ${trendPassed[ctx.dataIndex] ? 'Passed' : 'Failed'}` }
         }
       }
     }
   });
 }
-</script>
 {% endif %}
+</script>
 {% endblock %}
