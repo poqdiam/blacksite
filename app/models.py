@@ -195,6 +195,7 @@ class UserProfile(Base):
     display_name          = Column(String, nullable=True)
     email                 = Column(String, nullable=True)
     department            = Column(String, nullable=True)
+    role                  = Column(String, default="employee")  # employee|auditor|bcdr|system_owner
     notifications_email   = Column(Boolean, default=True)
     notifications_quiz    = Column(Boolean, default=True)
     quiz_domains          = Column(Text, nullable=True)         # JSON list e.g. ["D1","D3"]
@@ -298,6 +299,26 @@ class Submission(Base):
     created_by       = Column(String, nullable=True)
 
 
+# ── Phase 6 Models ─────────────────────────────────────────────────────────────
+
+class RmfRecord(Base):
+    """Per-system RMF step tracking (NIST SP 800-37 Rev 2)."""
+    __tablename__ = "rmf_records"
+
+    id          = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    system_id   = Column(String, ForeignKey("systems.id"), nullable=False, index=True)
+    step        = Column(String, nullable=False)   # prepare|categorize|select|implement|assess|authorize|monitor
+    status      = Column(String, default="not_started")  # not_started|in_progress|complete|waived
+    owner       = Column(String, nullable=True)
+    target_date = Column(String, nullable=True)    # ISO date
+    actual_date = Column(String, nullable=True)    # ISO date
+    evidence    = Column(Text, nullable=True)
+    artifacts   = Column(Text, nullable=True)      # JSON list of references
+    created_at  = Column(DateTime, default=_now)
+    updated_at  = Column(DateTime, default=_now, onupdate=_now)
+    created_by  = Column(String, nullable=True)
+
+
 # ── Database setup ─────────────────────────────────────────────────────────────
 
 def get_db_url(config: dict) -> str:
@@ -313,6 +334,7 @@ async def _migrate_db(engine):
         ("control_results", "is_na",               "BOOLEAN DEFAULT 0"),
         ("control_results", "proctor_assessment",  "TEXT"),
         ("control_results", "proctor_score",       "INTEGER"),
+        ("user_profiles",   "role",                "TEXT DEFAULT 'employee'"),
     ]
     # Performance indexes — CREATE INDEX IF NOT EXISTS is idempotent
     index_migrations = [

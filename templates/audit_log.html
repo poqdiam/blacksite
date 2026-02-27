@@ -54,22 +54,36 @@
 </div>
 
 {# ── Page header ─────────────────────────────────────────────────────────── #}
-<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
   <div>
     <h1 style="margin:0">Audit Log</h1>
     <p class="text-muted" style="margin-top:5px;font-size:0.85em">
       System event trail &middot; NIST AU-2 / AU-12
     </p>
   </div>
-  <div style="display:flex;gap:8px;align-items:center">
-    <a href="/admin/audit/export" class="btn btn-ghost btn-sm">↓ Export CSV</a>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    {# Days filter #}
+    <form method="get" action="/admin/audit" style="display:flex;align-items:center;gap:6px">
+      <label style="font-size:0.72em;color:var(--muted);margin:0;text-transform:uppercase;letter-spacing:1px">Range</label>
+      <select name="days" onchange="this.form.submit()"
+              style="background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 8px;font-size:0.8em;cursor:pointer">
+        <option value="30"  {% if days==30 %}selected{% endif %}>30 days</option>
+        <option value="90"  {% if days==90 %}selected{% endif %}>90 days</option>
+        <option value="365" {% if days==365 %}selected{% endif %}>1 year</option>
+        <option value="0"   {% if days==0 %}selected{% endif %}>All time</option>
+      </select>
+    </form>
+    {# Export buttons #}
+    <a href="/admin/audit/export?format=csv&days={{ days }}" class="btn btn-ghost btn-sm">↓ CSV</a>
+    <a href="/admin/audit/export?format=json&days={{ days }}" class="btn btn-ghost btn-sm">↓ JSON</a>
   </div>
 </div>
 
 {# ── Section header with count ────────────────────────────────────────────── #}
 <div class="section-header" style="margin-bottom:16px">
   {% if entries %}
-    Showing {{ entries | length }} most recent event{% if entries | length != 1 %}s{% endif %}
+    Showing {{ entries | length }} event{% if entries | length != 1 %}s{% endif %}
+    {% if days and days > 0 %}(last {{ days }} days){% endif %}
   {% else %}
     Audit Events
   {% endif %}

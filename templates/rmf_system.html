@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — RMF: {{ system.name }}{% endblock %}
+
+{% block head %}
+<style>
+  .rmf-step-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .rmf-step-card.status-complete    { border-left: 4px solid var(--green); }
+  .rmf-step-card.status-in_progress { border-left: 4px solid var(--yellow); }
+  .rmf-step-card.status-waived      { border-left: 4px solid var(--muted); }
+  .rmf-step-card.status-not_started { border-left: 4px solid #2a2a40; }
+
+  .step-header-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 20px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .step-num-badge {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 0.9em;
+    font-family: var(--mono);
+    flex-shrink: 0;
+    border: 2px solid;
+  }
+  .step-num-badge.status-not_started { border-color: #2a2a40; color: #3a3a55; background: rgba(30,30,48,0.5); }
+  .step-num-badge.status-in_progress { border-color: var(--yellow); color: var(--yellow); background: rgba(255,179,0,0.08); }
+  .step-num-badge.status-complete    { border-color: var(--green);  color: var(--green);  background: rgba(0,200,83,0.08); }
+  .step-num-badge.status-waived      { border-color: var(--muted);  color: var(--muted);  background: rgba(136,136,136,0.06); }
+
+  .step-meta { flex: 1; min-width: 0; }
+  .step-title-row { display: flex; align-items: center; gap: 8px; }
+  .step-title { font-weight: 700; font-size: 0.95em; }
+  .step-ref { font-size: 0.65em; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
+
+  .status-pill {
+    font-size: 0.65em;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+  .status-pill.status-not_started { background: rgba(42,42,64,0.5); color: #555; }
+  .status-pill.status-in_progress { background: rgba(255,179,0,0.1); color: var(--yellow); }
+  .status-pill.status-complete    { background: rgba(0,200,83,0.1); color: var(--green); }
+  .status-pill.status-waived      { background: rgba(136,136,136,0.1); color: var(--muted); }
+
+  .step-body { padding: 0 20px 20px; border-top: 1px solid var(--border); }
+  .step-desc { font-size: 0.85em; color: var(--muted); padding: 14px 0 12px; }
+
+  .activities-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 6px;
+  }
+  .activities-list li {
+    font-size: 0.8em;
+    color: var(--muted);
+    padding: 6px 10px;
+    background: rgba(255,255,255,0.02);
+    border-radius: 4px;
+    border: 1px solid rgba(30,30,48,0.6);
+  }
+  .activities-list li::before { content: '▸ '; color: var(--cyan); }
+
+  .step-form {
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 16px;
+    margin-top: 12px;
+  }
+  .step-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .step-form label { font-size: 0.68em; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; display: block; }
+  .step-form input, .step-form select, .step-form textarea {
+    width: 100%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    padding: 7px 10px;
+    font-size: 0.85em;
+    font-family: var(--sans);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .step-form input:focus, .step-form select:focus, .step-form textarea:focus {
+    border-color: var(--cyan);
+  }
+
+  .audit-mini { margin-top: 12px; }
+  .audit-mini-entry {
+    font-size: 0.75em;
+    color: var(--muted);
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(30,30,48,0.4);
+    display: flex;
+    gap: 10px;
+  }
+  .audit-mini-entry:last-child { border-bottom: none; }
+  .audit-ts { font-family: var(--mono); flex-shrink: 0; }
+
+  .progress-bar-wrap {
+    background: rgba(255,255,255,0.05);
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+    margin: 8px 0 2px;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(to right, var(--cyan), #00e6b8);
+    border-radius: 4px;
+    transition: width 0.5s ease;
+  }
+
+  .app-link-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.72em;
+    color: var(--cyan);
+    border: 1px solid rgba(0,255,204,0.2);
+    border-radius: 4px;
+    padding: 3px 8px;
+    text-decoration: none;
+    margin-top: 6px;
+    transition: background 0.15s;
+  }
+  .app-link-badge:hover { background: rgba(0,255,204,0.06); text-decoration: none; }
+
+  .expand-toggle { font-size: 0.7em; color: var(--muted); margin-left: auto; transition: transform 0.2s; }
+  details[open] .expand-toggle { transform: rotate(180deg); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/rmf">RMF Tracker</a>
+  <span class="sep">›</span>
+  <span>{{ system.name }}</span>
+</div>
+
+{# ── System header ── #}
+<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <h1>{{ system.name }}</h1>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:4px;flex-wrap:wrap">
+      {% if system.abbreviation %}
+        <span class="mono" style="font-size:0.85em;color:var(--muted)">{{ system.abbreviation }}</span>
+      {% endif %}
+      {% if system.overall_impact %}
+        <span class="badge
+          {% if system.overall_impact == 'High' %}badge-insufficient
+          {% elif system.overall_impact == 'Moderate' %}badge-partial
+          {% else %}badge-complete{% endif %}
+        ">FIPS 199 {{ system.overall_impact }}</span>
+      {% endif %}
+      {% if system.auth_status %}
+        <span class="badge
+          {% if system.auth_status == 'authorized' %}badge-complete
+          {% elif system.auth_status == 'in_progress' %}badge-processing
+          {% elif system.auth_status == 'expired' %}badge-insufficient
+          {% else %}badge-not_found{% endif %}
+        ">ATO {{ system.auth_status|replace('_',' ') }}</span>
+      {% endif %}
+    </div>
+  </div>
+  <a href="/systems/{{ system.id }}" class="btn btn-ghost btn-sm">View System →</a>
+</div>
+
+{# ── Progress bar ── #}
+<div class="card" style="padding:16px 20px;margin-bottom:24px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <span style="font-size:0.8em;color:var(--muted);font-weight:600">RMF Progress</span>
+    <span style="font-size:0.85em;color:var(--cyan);font-weight:700">{{ complete_ct }}/7 steps complete</span>
+  </div>
+  <div class="progress-bar-wrap">
+    <div class="progress-bar-fill" style="width:{{ (complete_ct / 7 * 100)|int }}%"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-top:6px">
+    {% for step in rmf_steps %}
+    {% set rec = records.get(step.key) %}
+    {% set st = rec.status if rec else 'not_started' %}
+    <div style="text-align:center;flex:1;font-size:0.62em;color:
+      {% if st == 'complete' %}var(--green){% elif st == 'in_progress' %}var(--yellow){% else %}#3a3a55{% endif %}">
+      {{ step.num }}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{# ── Step cards ── #}
+{% for step in rmf_steps %}
+{% set rec = records.get(step.key) %}
+{% set st  = rec.status if rec else 'not_started' %}
+{% set step_link = step.app_link.replace('{system_id}', system.id) %}
+<div class="rmf-step-card status-{{ st }}" id="step-{{ step.key }}">
+  <details {% if st == 'in_progress' %}open{% endif %}>
+    <summary class="step-header-row">
+      <div class="step-num-badge status-{{ st }}">
+        {% if st == 'complete' %}✓{% elif st == 'in_progress' %}…{% elif st == 'waived' %}—{% else %}{{ step.num }}{% endif %}
+      </div>
+      <div class="step-meta">
+        <div class="step-title-row">
+          <span class="step-title">Step {{ step.num }}: {{ step.title }}</span>
+          <span class="status-pill status-{{ st }}">{{ st.replace('_', ' ')|title }}</span>
+        </div>
+        <div class="step-ref">{{ step.nist_ref }}</div>
+      </div>
+      {% if rec and rec.owner %}
+        <span style="font-size:0.75em;color:var(--muted)">👤 {{ rec.owner }}</span>
+      {% endif %}
+      {% if rec and rec.target_date %}
+        <span style="font-size:0.72em;color:var(--muted);font-family:var(--mono)">{{ rec.target_date }}</span>
+      {% endif %}
+      <span class="expand-toggle">▾</span>
+    </summary>
+
+    <div class="step-body">
+      <p class="step-desc">{{ step.desc }}</p>
+
+      {# Key activities #}
+      <div style="font-size:0.7em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Key Activities</div>
+      <ul class="activities-list">
+        {% for act in step.activities %}
+        <li>{{ act }}</li>
+        {% endfor %}
+      </ul>
+
+      {# App context link #}
+      <a href="{{ step_link }}" class="app-link-badge">
+        ↗ {{ step.app_label }}
+      </a>
+
+      {# Data context from system #}
+      {% if step.key == 'categorize' and system.overall_impact %}
+      <div style="margin-top:10px;font-size:0.8em;color:var(--muted)">
+        Current categorization: <span style="color:var(--text)">{{ system.confidentiality_impact or '?' }} / {{ system.integrity_impact or '?' }} / {{ system.availability_impact or '?' }}</span>
+        → Overall <span style="color:var(--cyan);font-weight:700">{{ system.overall_impact }}</span>
+      </div>
+      {% endif %}
+
+      {# ── Edit form ── #}
+      <form class="step-form" method="post" action="/rmf/{{ system.id }}/step/{{ step.key }}">
+        <div style="font-size:0.72em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--cyan);margin-bottom:12px">Update Step</div>
+        <div class="step-form-grid">
+          <div>
+            <label>Status</label>
+            <select name="status">
+              <option value="not_started" {% if st == 'not_started' %}selected{% endif %}>Not Started</option>
+              <option value="in_progress" {% if st == 'in_progress' %}selected{% endif %}>In Progress</option>
+              <option value="complete"    {% if st == 'complete' %}selected{% endif %}>Complete</option>
+              <option value="waived"      {% if st == 'waived' %}selected{% endif %}>Waived</option>
+            </select>
+          </div>
+          <div>
+            <label>Owner / Responsible Party</label>
+            <input type="text" name="owner" value="{{ rec.owner if rec else '' }}" placeholder="Name or role">
+          </div>
+          <div>
+            <label>Target Date</label>
+            <input type="date" name="target_date" value="{{ rec.target_date if rec else '' }}">
+          </div>
+          <div>
+            <label>Actual Completion Date</label>
+            <input type="date" name="actual_date" value="{{ rec.actual_date if rec else '' }}">
+          </div>
+        </div>
+        <div style="margin-bottom:12px">
+          <label>Evidence &amp; Notes</label>
+          <textarea name="evidence" rows="3" placeholder="Document evidence, findings, or implementation notes…">{{ rec.evidence if rec else '' }}</textarea>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button type="submit" class="btn btn-primary btn-sm">Save Step</button>
+          {% if loop.index < rmf_steps|length %}
+          <a href="#step-{{ rmf_steps[loop.index].key }}" style="font-size:0.8em;color:var(--muted)">Next: {{ rmf_steps[loop.index].title }} →</a>
+          {% endif %}
+        </div>
+      </form>
+
+      {# ── Recent audit trail ── #}
+      {% set step_audit = all_audit | selectattr('resource_id', 'defined') | list %}
+      {% set step_audit_filtered = [] %}
+      {% for entry in all_audit %}
+        {% if ':' + step.key in (entry.resource_id or '') %}
+          {% if step_audit_filtered.append(entry) %}{% endif %}
+        {% endif %}
+      {% endfor %}
+      {% if step_audit_filtered %}
+      <div class="audit-mini">
+        <div style="font-size:0.68em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Recent Activity</div>
+        {% for entry in step_audit_filtered[:3] %}
+        <div class="audit-mini-entry">
+          <span class="audit-ts">{{ entry.timestamp.strftime('%Y-%m-%d %H:%M') if entry.timestamp else '—' }}</span>
+          <span>{{ entry.remote_user or '—' }}</span>
+          <span>{{ entry.action }}</span>
+          {% if entry.details %}
+            {% set d = entry.details|fromjson if entry.details else {} %}
+            <span style="color:var(--muted)">→ {{ d.get('new_status', d.get('status', '')) }}</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </details>
+</div>
+{% endfor %}
+{% endblock %}

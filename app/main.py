@@ -82,10 +82,12 @@ import csv
 import io
 import os
 import random
+import time
 import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
+from io import StringIO
 from pathlib import Path
 from typing import Optional, Dict, List
 
@@ -105,7 +107,7 @@ from sqlalchemy import func, select, update, text, case as sa_case
 from app.models import (
     Assessment, Candidate, ControlResult, ControlsMeta, DailyQuizActivity, QuizResponse,
     System, PoamItem, Risk, UserProfile, AuditLog, SystemAssignment, ControlEdit,
-    SystemControl, Submission,
+    SystemControl, Submission, RmfRecord,
     init_db, make_engine, make_session_factory
 )
 from app.updater    import load_catalog, update_if_needed
@@ -138,6 +140,7 @@ CONFIG = load_config()
 engine       = make_engine(CONFIG)
 SessionLocal = make_session_factory(engine)
 templates    = Jinja2Templates(directory="templates")
+templates.env.filters["fromjson"] = lambda s: (json.loads(s) if s else {})
 
 CATALOG: dict = {}
 
@@ -295,6 +298,149 @@ async def _user_system_ids(request: Request, session) -> list:
         .where(SystemAssignment.remote_user == user)
     )
     return [r[0] for r in result.all()]
+
+
+async def _get_user_role(request: Request, session) -> str:
+    """Return the RBAC role string for the current user."""
+    if _is_admin(request):
+        return "admin"
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        return "anonymous"
+    row = (await session.execute(
+        select(UserProfile.role).where(UserProfile.remote_user == user)
+    )).scalar_one_or_none()
+    return row or "employee"
+
+
+def _require_role(role: str, allowed: list):
+    """Raise 403 if role not in allowed list."""
+    if role not in allowed:
+        raise HTTPException(status_code=403, detail=f"Role '{role}' cannot access this resource")
+
+
+async def _full_ctx(request: Request, session, **extra) -> dict:
+    """Extended template context including user_role for sidebar rendering."""
+    role = await _get_user_role(request, session)
+    return {**_tpl_ctx(request), "user_role": role, **extra}
+
+
+# ── RMF step definitions ────────────────────────────────────────────────────────
+
+RMF_STEPS = [
+    {
+        "key": "prepare",
+        "num": 1,
+        "title": "Prepare",
+        "nist_ref": "NIST SP 800-37 Rev 2, §2.1",
+        "desc": "Establish organization- and system-level context to manage security and privacy risk.",
+        "activities": [
+            "Identify key roles (Risk Executive, AO, ISSO, ISSM)",
+            "Define risk management strategy and risk tolerance",
+            "Identify common controls and control inheritance",
+            "Conduct organizational risk assessment",
+        ],
+        "app_link": "/systems",
+        "app_label": "System Catalog",
+    },
+    {
+        "key": "categorize",
+        "num": 2,
+        "title": "Categorize",
+        "nist_ref": "NIST SP 800-37 Rev 2, §2.2 / FIPS 199",
+        "desc": "Categorize the system and information processed based on FIPS 199 impact levels.",
+        "activities": [
+            "Identify system types and information types",
+            "Determine confidentiality, integrity, availability impact levels",
+            "Assign overall system categorization (Low/Moderate/High)",
+            "Document categorization in the System Security Plan",
+        ],
+        "app_link": "/systems",
+        "app_label": "Impact Levels",
+    },
+    {
+        "key": "select",
+        "num": 3,
+        "title": "Select",
+        "nist_ref": "NIST SP 800-37 Rev 2, §2.3 / SP 800-53",
+        "desc": "Select, tailor, and document the controls that will protect the system.",
+        "activities": [
+            "Select baseline controls (Low/Moderate/High from SP 800-53)",
+            "Apply overlays and tailoring guidance",
+            "Identify control inheritance from common control providers",
+            "Document control selection in the SSP",
+        ],
+        "app_link": "/controls",
+        "app_label": "Control Catalog",
+    },
+    {
+        "key": "implement",
+        "num": 4,
+        "title": "Implement",
+        "nist_ref": "NIST SP 800-37 Rev 2, §2.4",
+        "desc": "Implement the controls and document implementation details.",
+        "activities": [
+            "Implement selected controls in the system",
+            "Document implementation narratives in the SSP",
+            "Apply configuration baselines and hardening guides",
+            "Address planned implementations and timelines",
+        ],
+        "app_link": "/systems/{system_id}/controls",
+        "app_label": "System Control Plan",
+    },
+    {
+        "key": "assess",
+        "num": 5,
+        "title": "Assess",
+        "nist_ref": "NIST SP 800-37 Rev 2, §2.5 / SP 800-53A",
+        "desc": "Assess controls to determine if implemented correctly and operating as intended.",
+        "activities": [
+            "Develop Security Assessment Plan (SAP)",
+            "Conduct assessment using SP 800-53A procedures",
+            "Produce Security Assessment Report (SAR)",
+            "Identify weaknesses and deficiencies",
+        ],
+        "app_link": "/poam",
+        "app_label": "POA&M Tracker",
+    },
+    {
+        "key": "authorize",
+        "num": 6,
+        "title": "Authorize",
+        "nist_ref": "NIST SP 800-37 Rev 2, §2.6",
+        "desc": "Authorizing Official reviews risk and makes an authorization decision.",
+        "activities": [
+            "Compile authorization package (SSP, SAR, POA&M)",
+            "Conduct risk determination and acceptance",
+            "Issue Authorization to Operate (ATO) or denial",
+            "Document authorization decision and conditions",
+        ],
+        "app_link": "/submissions",
+        "app_label": "ATO Submissions",
+    },
+    {
+        "key": "monitor",
+        "num": 7,
+        "title": "Monitor",
+        "nist_ref": "NIST SP 800-37 Rev 2, §2.7 / SP 800-137",
+        "desc": "Continuously monitor controls and system security posture.",
+        "activities": [
+            "Implement continuous monitoring strategy",
+            "Monitor security controls on an ongoing basis",
+            "Report security status to authorizing official",
+            "Conduct ongoing risk response and remediation",
+        ],
+        "app_link": "/posture",
+        "app_label": "Compliance Posture",
+    },
+]
+
+# Status ordering for progress calculation
+_RMF_STEP_KEYS = [s["key"] for s in RMF_STEPS]
+
+# ── Ticker cache ────────────────────────────────────────────────────────────────
+
+_ticker_cache: dict = {"ts": 0.0, "items": [], "count": 0}
 
 
 # ── Background: process SSP ────────────────────────────────────────────────────
@@ -942,21 +1088,30 @@ async def admin_page(request: Request):
 # ── Admin: audit log ───────────────────────────────────────────────────────────
 
 @app.get("/admin/audit", response_class=HTMLResponse)
-async def admin_audit(request: Request):
+async def admin_audit(request: Request, days: str = "90"):
     if not _is_admin(request):
         raise HTTPException(status_code=403)
 
+    try:
+        days_int = int(days)
+    except ValueError:
+        days_int = 90
+
     async with SessionLocal() as session:
-        rows = await session.execute(
-            select(AuditLog)
-            .order_by(AuditLog.timestamp.desc())
-            .limit(200)
-        )
+        q = select(AuditLog).order_by(AuditLog.timestamp.desc())
+        if days_int > 0:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days_int)
+            q = q.where(AuditLog.timestamp >= cutoff)
+        q = q.limit(500)
+        rows = await session.execute(q)
         entries = rows.scalars().all()
+        role = await _get_user_role(request, session)
 
     return templates.TemplateResponse("audit_log.html", {
         "request": request,
         "entries": entries,
+        "days": days_int,
+        "user_role": role,
         **_tpl_ctx(request),
     })
 
@@ -1896,6 +2051,11 @@ async def assign_system(request: Request, system_id: str,
     if not _is_admin(request):
         raise HTTPException(status_code=403)
     admin = request.headers.get("Remote-User", "")
+    # Allow admin self-assignment; otherwise validate against employees list
+    if username != admin:
+        known = [e["username"] for e in CONFIG.get("employees", [])]
+        if username not in known:
+            raise HTTPException(status_code=400, detail="Unknown user")
     async with SessionLocal() as session:
         # Check system exists
         sys_obj = await session.get(System, system_id)
@@ -4035,3 +4195,388 @@ async def api_feeds(request: Request):
         None, lambda: get_feed_items(systems=systems_list, max_items=25, min_score=0)
     )
     return JSONResponse({"items": items, "system_count": len(systems_list)})
+
+
+# ── Phase 6 routes ──────────────────────────────────────────────────────────────
+
+# ── Ticker ─────────────────────────────────────────────────────────────────────
+
+@app.get("/api/ticker")
+async def api_ticker(request: Request):
+    """Security advisory ticker feed — 60-minute cached, combines internal alerts + CISA KEV."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    now = time.time()
+    if now - _ticker_cache["ts"] < 3600:
+        return JSONResponse(_ticker_cache)
+
+    items = []
+
+    # Internal GRC alerts (reuse alert query logic)
+    today_str = date.today().isoformat()
+    week_str  = (date.today() + timedelta(days=7)).isoformat()
+    in_90     = (date.today() + timedelta(days=90)).isoformat()
+
+    async with SessionLocal() as session:
+        overdue_ct = (await session.execute(
+            select(func.count(PoamItem.id))
+            .where(PoamItem.status.in_(["open","in_progress"]))
+            .where(PoamItem.scheduled_completion.isnot(None))
+            .where(PoamItem.scheduled_completion < today_str)
+        )).scalar() or 0
+        if overdue_ct:
+            items.append({"text": f"{overdue_ct} POA&M item{'s' if overdue_ct!=1 else ''} overdue — remediation milestones past due", "level": "critical"})
+
+        crit_ct = (await session.execute(
+            select(func.count(PoamItem.id))
+            .where(PoamItem.status.in_(["open","in_progress"]))
+            .where(PoamItem.severity.in_(["Critical","High"]))
+        )).scalar() or 0
+        if crit_ct:
+            items.append({"text": f"{crit_ct} Critical/High severity weakness{'es' if crit_ct!=1 else ''} open — priority remediation required", "level": "high"})
+
+        expired_ct = (await session.execute(
+            select(func.count(System.id)).where(System.auth_status == "expired")
+        )).scalar() or 0
+        if expired_ct:
+            items.append({"text": f"{expired_ct} system ATO{'s' if expired_ct!=1 else ''} expired — reauthorization required", "level": "critical"})
+
+        expiring_ct = (await session.execute(
+            select(func.count(System.id))
+            .where(System.auth_status == "authorized")
+            .where(System.auth_expiry.isnot(None))
+            .where(System.auth_expiry <= in_90)
+            .where(System.auth_expiry >= today_str)
+        )).scalar() or 0
+        if expiring_ct:
+            items.append({"text": f"{expiring_ct} ATO{'s' if expiring_ct!=1 else ''} expiring within 90 days — begin reauthorization package", "level": "warn"})
+
+    # CISA KEV — latest 8 entries
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(
+                "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+            )
+        kev = r.json()
+        vulns = sorted(
+            kev.get("vulnerabilities", []),
+            key=lambda x: x.get("dateAdded", ""),
+            reverse=True
+        )[:8]
+        for v in vulns:
+            desc = v.get("shortDescription", "")[:80]
+            items.append({
+                "text": f"{v['cveID']} · {v.get('vendorProject','')} {v.get('product','')} — {desc}",
+                "level": "warn"
+            })
+    except Exception:
+        pass  # graceful degradation — CISA feed optional
+
+    if not items:
+        items = [{"text": "All systems nominal · No active security advisories", "level": "info"}]
+
+    _ticker_cache.update({"ts": now, "items": items, "count": len(items)})
+    return JSONResponse(_ticker_cache)
+
+
+# ── RMF Lifecycle Tracker ───────────────────────────────────────────────────────
+
+@app.get("/rmf", response_class=HTMLResponse)
+async def rmf_overview(request: Request):
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        sys_ids = await _user_system_ids(request, session)
+        systems = []
+        if sys_ids:
+            rows = await session.execute(
+                select(System).where(System.id.in_(sys_ids)).order_by(System.name)
+            )
+            systems = list(rows.scalars().all())
+
+        # Fetch all RMF records for these systems
+        rmf_rows = {}
+        if sys_ids:
+            rr = await session.execute(
+                select(RmfRecord).where(RmfRecord.system_id.in_(sys_ids))
+            )
+            for rec in rr.scalars().all():
+                rmf_rows.setdefault(rec.system_id, {})[rec.step] = rec
+
+        ctx = await _full_ctx(request, session,
+                              systems=systems,
+                              rmf_rows=rmf_rows,
+                              rmf_steps=RMF_STEPS,
+                              step_keys=_RMF_STEP_KEYS)
+
+    return templates.TemplateResponse("rmf.html", {"request": request, **ctx})
+
+
+@app.get("/rmf/{system_id}", response_class=HTMLResponse)
+async def rmf_system(request: Request, system_id: str):
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        sys_obj = await session.get(System, system_id)
+        if not sys_obj:
+            raise HTTPException(status_code=404)
+
+        rr = await session.execute(
+            select(RmfRecord).where(RmfRecord.system_id == system_id)
+        )
+        records = {rec.step: rec for rec in rr.scalars().all()}
+
+        # Recent audit for each step
+        audit_rows = await session.execute(
+            select(AuditLog)
+            .where(AuditLog.resource_type == "rmf_record")
+            .where(AuditLog.resource_id.like(f"{system_id}%"))
+            .order_by(AuditLog.timestamp.desc())
+            .limit(21)
+        )
+        all_audit = list(audit_rows.scalars().all())
+
+        complete_ct = sum(1 for s in _RMF_STEP_KEYS if records.get(s) and records[s].status == "complete")
+        ctx = await _full_ctx(request, session,
+                              system=sys_obj,
+                              records=records,
+                              rmf_steps=RMF_STEPS,
+                              step_keys=_RMF_STEP_KEYS,
+                              complete_ct=complete_ct,
+                              all_audit=all_audit)
+
+    return templates.TemplateResponse("rmf_system.html", {"request": request, **ctx})
+
+
+@app.post("/rmf/{system_id}/step/{step}")
+async def rmf_update_step(request: Request, system_id: str, step: str,
+                          status: str = Form("not_started"),
+                          owner: str = Form(""),
+                          target_date: str = Form(""),
+                          actual_date: str = Form(""),
+                          evidence: str = Form("")):
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+    if step not in _RMF_STEP_KEYS:
+        raise HTTPException(status_code=400, detail="Invalid RMF step")
+    valid_statuses = {"not_started", "in_progress", "complete", "waived"}
+    if status not in valid_statuses:
+        raise HTTPException(status_code=400, detail="Invalid status")
+
+    async with SessionLocal() as session:
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        existing = (await session.execute(
+            select(RmfRecord)
+            .where(RmfRecord.system_id == system_id)
+            .where(RmfRecord.step == step)
+        )).scalar_one_or_none()
+
+        if existing:
+            old_status = existing.status
+            existing.status      = status
+            existing.owner       = owner or None
+            existing.target_date = target_date or None
+            existing.actual_date = actual_date or None
+            existing.evidence    = evidence or None
+            existing.updated_at  = datetime.now(timezone.utc)
+            details = {"step": step, "old_status": old_status, "new_status": status}
+            rid = f"{system_id}:{step}"
+        else:
+            rec = RmfRecord(
+                system_id   = system_id,
+                step        = step,
+                status      = status,
+                owner       = owner or None,
+                target_date = target_date or None,
+                actual_date = actual_date or None,
+                evidence    = evidence or None,
+                created_by  = user,
+            )
+            session.add(rec)
+            details = {"step": step, "status": status}
+            rid = f"{system_id}:{step}"
+
+        await _log_audit(session, user, "UPDATE", "rmf_record", rid, details)
+        await session.commit()
+
+    return RedirectResponse(url=f"/rmf/{system_id}", status_code=303)
+
+
+# ── Admin: User Management ──────────────────────────────────────────────────────
+
+@app.get("/admin/users", response_class=HTMLResponse)
+async def admin_users(request: Request):
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+
+    async with SessionLocal() as session:
+        rows = await session.execute(
+            select(UserProfile).order_by(UserProfile.remote_user)
+        )
+        profiles = list(rows.scalars().all())
+
+        # Count assignments per user
+        assign_rows = await session.execute(
+            select(SystemAssignment.remote_user, func.count(SystemAssignment.id))
+            .group_by(SystemAssignment.remote_user)
+        )
+        assign_counts = dict(assign_rows.all())
+
+        role = await _get_user_role(request, session)
+
+    admin_users_cfg = set(CONFIG.get("app", {}).get("admin_users", ["dan"]))
+    employees_cfg   = CONFIG.get("employees", [])
+
+    role_counts: dict = {}
+    for p in profiles:
+        r = "admin" if p.remote_user in admin_users_cfg else (p.role or "employee")
+        role_counts[r] = role_counts.get(r, 0) + 1
+
+    return templates.TemplateResponse("admin_users.html", {
+        "request": request,
+        "profiles": profiles,
+        "assign_counts": assign_counts,
+        "admin_users_cfg": admin_users_cfg,
+        "employees_cfg": employees_cfg,
+        "role_counts": role_counts,
+        "user_role": role,
+        **_tpl_ctx(request),
+    })
+
+
+@app.post("/admin/users/add")
+async def admin_add_user(request: Request,
+                         username: str = Form(...),
+                         display_name: str = Form(""),
+                         email: str = Form(""),
+                         role: str = Form("employee")):
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+    admin = request.headers.get("Remote-User", "")
+    valid_roles = {"employee", "auditor", "bcdr", "system_owner"}
+    if role not in valid_roles:
+        role = "employee"
+
+    async with SessionLocal() as session:
+        existing = await session.get(UserProfile, username)
+        if existing:
+            existing.display_name = display_name or existing.display_name
+            existing.email        = email or existing.email
+            existing.role         = role
+        else:
+            profile = UserProfile(
+                remote_user  = username,
+                display_name = display_name or None,
+                email        = email or None,
+                role         = role,
+            )
+            session.add(profile)
+        await _log_audit(session, admin, "CREATE", "user_profile", username,
+                         {"display_name": display_name, "role": role})
+        await session.commit()
+
+    return RedirectResponse(url="/admin/users", status_code=303)
+
+
+@app.post("/admin/users/{username}/role")
+async def admin_set_role(request: Request, username: str, role: str = Form(...)):
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+    admin = request.headers.get("Remote-User", "")
+    valid_roles = {"employee", "auditor", "bcdr", "system_owner"}
+    if role not in valid_roles:
+        raise HTTPException(status_code=400, detail="Invalid role")
+
+    async with SessionLocal() as session:
+        profile = await session.get(UserProfile, username)
+        if not profile:
+            profile = UserProfile(remote_user=username, role=role)
+            session.add(profile)
+        else:
+            old_role = profile.role
+            profile.role = role
+            await _log_audit(session, admin, "UPDATE", "user_profile", username,
+                             {"old_role": old_role, "new_role": role})
+        await session.commit()
+
+    return JSONResponse({"status": "ok", "username": username, "role": role})
+
+
+# ── Audit export ────────────────────────────────────────────────────────────────
+
+@app.get("/admin/audit/export")
+async def audit_export(request: Request, format: str = "csv", days: str = "90"):
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+
+    try:
+        days_int = int(days)
+    except ValueError:
+        days_int = 90
+
+    async with SessionLocal() as session:
+        q = select(AuditLog).order_by(AuditLog.timestamp.desc())
+        if days_int > 0:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days_int)
+            q = q.where(AuditLog.timestamp >= cutoff)
+        rows = await session.execute(q)
+        entries = list(rows.scalars().all())
+
+    today_str = date.today().isoformat()
+    admin_user = request.headers.get("Remote-User", "unknown")
+    async with SessionLocal() as session:
+        await _log_audit(session, admin_user, "EXPORT", "audit_log", "bulk",
+                         {"format": format, "days": days_int, "count": len(entries)})
+        await session.commit()
+
+    if format == "json":
+        data = [
+            {
+                "id":            e.id,
+                "timestamp":     e.timestamp.isoformat() if e.timestamp else None,
+                "remote_user":   e.remote_user,
+                "action":        e.action,
+                "resource_type": e.resource_type,
+                "resource_id":   e.resource_id,
+                "details":       e.details,
+            }
+            for e in entries
+        ]
+        content = json.dumps(data, indent=2, default=str)
+        return Response(
+            content     = content,
+            media_type  = "application/json",
+            headers     = {"Content-Disposition": f'attachment; filename="audit_log_{today_str}.json"'},
+        )
+    else:
+        buf = StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["id", "timestamp", "remote_user", "action", "resource_type", "resource_id", "details"])
+        for e in entries:
+            writer.writerow([
+                e.id,
+                e.timestamp.isoformat() if e.timestamp else "",
+                e.remote_user or "",
+                e.action or "",
+                e.resource_type or "",
+                e.resource_id or "",
+                e.details or "",
+            ])
+        return Response(
+            content     = buf.getvalue(),
+            media_type  = "text/csv",
+            headers     = {"Content-Disposition": f'attachment; filename="audit_log_{today_str}.csv"'},
+        )
