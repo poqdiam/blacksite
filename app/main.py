@@ -62,6 +62,7 @@ Routes:
   GET  /systems/{id}/controls       System control plan (per-system implementation tracker)
   POST /systems/{id}/controls/{ctrl_id}  Update system control record
   POST /systems/{id}/import-controls    Bulk-import control status from latest assessment
+  GET  /systems/{id}/report         Printable compliance report (PDF-ready)
   GET  /systems/{id}/submit         ATO submission form
   POST /systems/{id}/submit         Create ATO submission
   GET  /submissions                 All submissions list (admin)
@@ -1687,6 +1688,112 @@ async def system_detail(request: Request, system_id: str):
         "sc_impl":                 sc_impl,
         "sc_coverage_pct":         sc_coverage_pct,
         "family_coverage":         family_coverage,
+        **_tpl_ctx(request),
+    })
+
+
+@app.get("/systems/{system_id}/report", response_class=HTMLResponse)
+async def system_report(request: Request, system_id: str):
+    """Printable compliance report — PDF-ready standalone document."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        sys_row = await session.execute(select(System).where(System.id == system_id))
+        sys = sys_row.scalar_one_or_none()
+        if not sys:
+            raise HTTPException(status_code=404, detail="System not found")
+
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # POA&M items (all, not paginated — report shows summary + full list)
+        poam_rows = await session.execute(
+            select(PoamItem)
+            .where(PoamItem.system_id == system_id)
+            .order_by(PoamItem.severity, PoamItem.scheduled_completion)
+        )
+        all_poams = poam_rows.scalars().all()
+
+        # Risks (all)
+        risk_rows = await session.execute(
+            select(Risk)
+            .where(Risk.system_id == system_id)
+            .order_by(Risk.risk_score.desc())
+        )
+        all_risks = risk_rows.scalars().all()
+
+        # Control coverage (totals + by family)
+        sc_total = (await session.execute(
+            select(func.count(SystemControl.id)).where(SystemControl.system_id == system_id)
+        )).scalar() or 0
+        sc_impl = (await session.execute(
+            select(func.count(SystemControl.id))
+            .where(SystemControl.system_id == system_id)
+            .where(SystemControl.status.in_(["implemented", "inherited", "not_applicable"]))
+        )).scalar() or 0
+        sc_coverage_pct = round(sc_impl / max(sc_total, 1) * 100)
+
+        family_rows = await session.execute(
+            select(
+                SystemControl.control_family,
+                func.count(SystemControl.id).label("total"),
+                func.sum(sa_case(
+                    (SystemControl.status.in_(["implemented", "inherited", "not_applicable"]), 1),
+                    else_=0
+                )).label("impl"),
+            )
+            .where(SystemControl.system_id == system_id)
+            .group_by(SystemControl.control_family)
+            .order_by(SystemControl.control_family)
+        )
+        family_coverage = []
+        for row in family_rows.all():
+            pct = round((row.impl or 0) / max(row.total, 1) * 100)
+            family_coverage.append({"family": row.control_family, "total": row.total,
+                                    "impl": row.impl or 0, "pct": pct})
+
+    today_str  = date.today().isoformat()
+    week_str   = (date.today() + timedelta(days=7)).isoformat()
+
+    # POA&M breakdowns
+    sev_order  = ["Critical", "High", "Moderate", "Low", "Informational"]
+    open_poams = [p for p in all_poams if p.status in ("open", "in_progress")]
+    poam_by_sev = {s: sum(1 for p in open_poams if (p.severity or "Low") == s) for s in sev_order}
+    poam_overdue  = [p for p in open_poams if p.scheduled_completion and p.scheduled_completion < today_str]
+    poam_due_week = [p for p in open_poams if p.scheduled_completion and today_str <= p.scheduled_completion <= week_str]
+
+    # Risk breakdowns
+    level_order = ["Critical", "High", "Moderate", "Low"]
+    open_risks  = [r for r in all_risks if r.status in ("open", "accepted")]
+    risk_by_level = {l: sum(1 for r in open_risks if (r.risk_level or "Low") == l) for l in level_order}
+
+    # Auth days remaining
+    auth_days_remaining = None
+    if sys.auth_expiry:
+        try:
+            exp = date.fromisoformat(sys.auth_expiry)
+            auth_days_remaining = (exp - date.today()).days
+        except ValueError:
+            pass
+
+    return templates.TemplateResponse("system_report.html", {
+        "request":              request,
+        "system":               sys,
+        "generated_at":         datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+        "generated_date":       date.today().isoformat(),
+        "sc_total":             sc_total,
+        "sc_impl":              sc_impl,
+        "sc_coverage_pct":      sc_coverage_pct,
+        "family_coverage":      family_coverage,
+        "open_poams":           open_poams,
+        "poam_by_sev":          poam_by_sev,
+        "poam_overdue_ct":      len(poam_overdue),
+        "poam_due_week_ct":     len(poam_due_week),
+        "open_risks":           open_risks,
+        "risk_by_level":        risk_by_level,
+        "auth_days_remaining":  auth_days_remaining,
         **_tpl_ctx(request),
     })
 
