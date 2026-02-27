@@ -3574,6 +3574,131 @@ async def update_submission(request: Request, sub_id: str):
 
 from app.rss_feed import get_feed_items, get_all_feed_items
 
+@app.get("/api/alerts")
+async def api_alerts(request: Request):
+    """
+    Return actionable GRC alerts for the current user.
+    Admin: org-wide alerts. Employee: scoped to their systems.
+    """
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+    is_adm = _is_admin(request)
+
+    today_str = date.today().isoformat()
+    week_str  = (date.today() + timedelta(days=7)).isoformat()
+    in_90     = (date.today() + timedelta(days=90)).isoformat()
+
+    alerts = []
+    async with SessionLocal() as session:
+        if is_adm:
+            sys_scope = None
+        else:
+            sys_scope = await _user_system_ids(request, session)
+
+        def _ps(q):
+            return q if sys_scope is None else q.where(PoamItem.system_id.in_(sys_scope))
+        def _rs(q):
+            return q if sys_scope is None else q.where(Risk.system_id.in_(sys_scope))
+        def _ss(q):
+            return q if sys_scope is None else q.where(System.id.in_(sys_scope))
+
+        # Overdue POA&Ms
+        overdue_ct = (await session.execute(
+            _ps(select(func.count(PoamItem.id))
+                .where(PoamItem.status.in_(["open","in_progress"]))
+                .where(PoamItem.scheduled_completion.isnot(None))
+                .where(PoamItem.scheduled_completion < today_str))
+        )).scalar() or 0
+        if overdue_ct:
+            alerts.append({
+                "level": "critical", "icon": "⚑",
+                "title": f"{overdue_ct} POA&M{'s' if overdue_ct!=1 else ''} Overdue",
+                "body": "Remediation milestones have passed without closure.",
+                "url": "/poam?status=open",
+                "action": "View Overdue"
+            })
+
+        # Critical/High POA&Ms
+        crit_ct = (await session.execute(
+            _ps(select(func.count(PoamItem.id))
+                .where(PoamItem.status.in_(["open","in_progress"]))
+                .where(PoamItem.severity.in_(["Critical","High"])))
+        )).scalar() or 0
+        if crit_ct:
+            alerts.append({
+                "level": "high", "icon": "◈",
+                "title": f"{crit_ct} Critical/High POA&M{'s' if crit_ct!=1 else ''}",
+                "body": "High-severity weaknesses require priority remediation.",
+                "url": "/poam?status=open&severity=Critical",
+                "action": "Review Now"
+            })
+
+        # Critical/High risks unreviewed
+        crit_risk_ct = (await session.execute(
+            _rs(select(func.count(Risk.id))
+                .where(Risk.status != "closed")
+                .where(Risk.risk_level.in_(["Critical","High"])))
+        )).scalar() or 0
+        if crit_risk_ct:
+            alerts.append({
+                "level": "high", "icon": "⚠",
+                "title": f"{crit_risk_ct} Critical/High Risk{'s' if crit_risk_ct!=1 else ''}",
+                "body": "Unaccepted high-impact risks need treatment plans.",
+                "url": "/risks?level=Critical",
+                "action": "View Risks"
+            })
+
+        # Expired ATOs
+        expired_ct = (await session.execute(
+            _ss(select(func.count(System.id)).where(System.auth_status == "expired"))
+        )).scalar() or 0
+        if expired_ct:
+            alerts.append({
+                "level": "critical", "icon": "⏳",
+                "title": f"{expired_ct} System ATO{'s' if expired_ct!=1 else ''} Expired",
+                "body": "Systems operating without valid authorization.",
+                "url": "/systems",
+                "action": "View Systems"
+            })
+
+        # ATOs expiring in 90 days
+        expiring_ct = (await session.execute(
+            _ss(select(func.count(System.id))
+                .where(System.auth_status == "authorized")
+                .where(System.auth_expiry.isnot(None))
+                .where(System.auth_expiry <= in_90)
+                .where(System.auth_expiry >= today_str))
+        )).scalar() or 0
+        if expiring_ct:
+            alerts.append({
+                "level": "warn", "icon": "📋",
+                "title": f"{expiring_ct} ATO{'s' if expiring_ct!=1 else ''} Expiring in 90 Days",
+                "body": "Begin reauthorization packages before expiry.",
+                "url": "/submissions",
+                "action": "Start Reauth"
+            })
+
+        # POA&Ms due this week
+        due_soon_ct = (await session.execute(
+            _ps(select(func.count(PoamItem.id))
+                .where(PoamItem.status.in_(["open","in_progress"]))
+                .where(PoamItem.scheduled_completion.isnot(None))
+                .where(PoamItem.scheduled_completion >= today_str)
+                .where(PoamItem.scheduled_completion <= week_str))
+        )).scalar() or 0
+        if due_soon_ct:
+            alerts.append({
+                "level": "warn", "icon": "⏱",
+                "title": f"{due_soon_ct} POA&M{'s' if due_soon_ct!=1 else ''} Due This Week",
+                "body": "Scheduled remediation deadlines approaching.",
+                "url": "/poam?status=open",
+                "action": "View Due"
+            })
+
+    return JSONResponse({"alerts": alerts, "count": len(alerts)})
+
+
 @app.get("/api/feeds")
 async def api_feeds(request: Request):
     """Return merged advisory feed items as JSON. Filtered by user's systems if available."""

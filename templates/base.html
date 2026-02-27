@@ -531,6 +531,11 @@
   </div>
 </nav>
 
+{# ── GRC Alerts Banner ────────────────────────────────────────────────────── #}
+<div id="alerts-banner" style="display:none;background:var(--surface);
+     border-bottom:1px solid var(--border);padding:0">
+</div>
+
 <div class="container page">
   {% block content %}{% endblock %}
 </div>
@@ -538,6 +543,63 @@
 {% block scripts %}{% endblock %}
 
 <script>
+// ── GRC Alerts Banner ─────────────────────────────────────────────────────────
+(function(){
+  const banner = document.getElementById('alerts-banner');
+  if (!banner) return;
+
+  const LEVEL_STYLE = {
+    critical: {bg:'rgba(244,67,54,0.08)',  border:'rgba(244,67,54,0.25)', color:'#f44336'},
+    high:     {bg:'rgba(255,107,53,0.08)', border:'rgba(255,107,53,0.25)',color:'#ff6b35'},
+    warn:     {bg:'rgba(255,179,0,0.07)',  border:'rgba(255,179,0,0.2)',  color:'#ffb300'},
+  };
+
+  // Only show if not dismissed in this session
+  const dismissed = sessionStorage.getItem('alerts-dismissed');
+
+  fetch('/api/alerts')
+    .then(r => r.json())
+    .then(function(data){
+      if (!data.alerts || !data.alerts.length || dismissed === 'true') return;
+      const alerts = data.alerts.slice(0, 3); // max 3 shown
+
+      let html = '<div style="max-width:1100px;margin:0 auto;padding:8px 24px;' +
+        'display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
+
+      alerts.forEach(function(a){
+        const s = LEVEL_STYLE[a.level] || LEVEL_STYLE['warn'];
+        html += `<div style="flex:1;min-width:240px;max-width:360px;
+          background:${s.bg};border:1px solid ${s.border};border-radius:6px;
+          padding:8px 12px;display:flex;align-items:center;gap:8px">
+          <span style="font-size:1.1em;flex-shrink:0">${a.icon}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:0.78em;font-weight:700;color:${s.color};
+                        white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+              ${a.title}
+            </div>
+            <div style="font-size:0.7em;color:var(--muted);
+                        white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+              ${a.body}
+            </div>
+          </div>
+          <a href="${a.url}" style="font-size:0.68em;color:${s.color};
+             white-space:nowrap;text-decoration:none;border:1px solid ${s.border};
+             border-radius:4px;padding:3px 8px;flex-shrink:0">${a.action}</a>
+        </div>`;
+      });
+
+      // Dismiss button
+      html += `<button onclick="document.getElementById('alerts-banner').style.display='none';
+                 sessionStorage.setItem('alerts-dismissed','true')"
+               style="background:none;border:none;color:var(--muted);cursor:pointer;
+                      font-size:1.1em;flex-shrink:0;padding:4px 8px" title="Dismiss">✕</button>`;
+      html += '</div>';
+      banner.innerHTML = html;
+      banner.style.display = 'block';
+    })
+    .catch(function(){});
+})();
+
 // ── Nav search autocomplete ───────────────────────────────────────────────────
 (function(){
   const inp  = document.getElementById('nav-search-q');

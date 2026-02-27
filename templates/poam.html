@@ -219,8 +219,11 @@
             <span style="color:#444">—</span>
           {% endif %}
         </td>
-        <td>
-          <span class="badge" style="background:{{ st_bg }};color:{{ st_color }}">
+        <td style="white-space:nowrap">
+          <span class="badge poam-status-badge" id="st-{{ item.id }}"
+                style="background:{{ st_bg }};color:{{ st_color }};cursor:pointer"
+                title="Click to cycle status"
+                onclick="cyclePoamStatus('{{ item.id }}', '{{ st }}', this)">
             {{ st | replace('_', ' ') }}
           </span>
         </td>
@@ -259,4 +262,44 @@
 {# Pass date strings to template for overdue coloring #}
 {% set today_str = today_str if today_str is defined else '' %}
 {% set week_str  = week_str  if week_str  is defined else '' %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Cycle POA&M status inline without page reload
+const STATUS_CYCLE = ['open', 'in_progress', 'closed', 'risk_accepted'];
+const STATUS_STYLE = {
+  'open':          {bg:'rgba(158,158,158,0.15)', color:'var(--grey)',   label:'open'},
+  'in_progress':   {bg:'rgba(255,179,0,0.15)',  color:'var(--yellow)', label:'in progress'},
+  'closed':        {bg:'rgba(0,200,83,0.15)',   color:'var(--green)',  label:'closed'},
+  'risk_accepted': {bg:'rgba(0,255,204,0.1)',   color:'var(--cyan)',   label:'risk accepted'},
+  'false_positive':{bg:'rgba(136,136,136,0.1)', color:'var(--muted)', label:'false positive'},
+};
+
+function cyclePoamStatus(itemId, currentStatus, el) {
+  const idx   = STATUS_CYCLE.indexOf(currentStatus);
+  const next  = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
+  const style = STATUS_STYLE[next] || STATUS_STYLE['open'];
+
+  // Optimistic update
+  el.textContent = style.label;
+  el.style.background = style.bg;
+  el.style.color      = style.color;
+  el.setAttribute('onclick', `cyclePoamStatus('${itemId}', '${next}', this)`);
+
+  fetch(`/api/poam/${itemId}/status`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status: next})
+  }).catch(function(err){
+    console.error('Status update failed:', err);
+    // Revert on error
+    const prev = STATUS_STYLE[currentStatus] || STATUS_STYLE['open'];
+    el.textContent     = prev.label;
+    el.style.background = prev.bg;
+    el.style.color      = prev.color;
+    el.setAttribute('onclick', `cyclePoamStatus('${itemId}', '${currentStatus}', this)`);
+  });
+}
+</script>
 {% endblock %}
