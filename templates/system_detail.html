@@ -172,6 +172,87 @@
   .badge-auth-expired     { background: rgba(244,67,54,0.15); color: var(--red);    border: 1px solid rgba(244,67,54,0.25); }
   .badge-auth-not_auth    { background: rgba(158,158,158,0.1);color: var(--grey);   border: 1px solid rgba(158,158,158,0.2); }
 
+  /* ── RMF / ATO Timeline ──────────────────────────────────────────────────── */
+  .rmf-timeline {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .rmf-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    min-width: 80px;
+    position: relative;
+  }
+  .rmf-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 18px;
+    left: calc(50% + 18px);
+    right: calc(-50% + 18px);
+    height: 2px;
+    background: var(--border);
+    z-index: 0;
+  }
+  .rmf-step.st-complete:not(:last-child)::after { background: var(--green); }
+  .rmf-step.st-in_progress:not(:last-child)::after { background: rgba(255,179,0,0.4); }
+  .rmf-step-dot {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7em;
+    font-weight: 900;
+    z-index: 1;
+    background: var(--card);
+    color: var(--muted);
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .rmf-step-dot:hover { transform: scale(1.1); box-shadow: 0 0 12px rgba(0,255,204,0.15); }
+  .rmf-step.st-not_started .rmf-step-dot { border-color: var(--border); color: var(--muted); }
+  .rmf-step.st-in_progress .rmf-step-dot { border-color: var(--yellow); color: var(--yellow); background: rgba(255,179,0,0.08); }
+  .rmf-step.st-complete .rmf-step-dot    { border-color: var(--green);  color: var(--green);  background: rgba(0,200,83,0.08); }
+  .rmf-step.st-waived .rmf-step-dot      { border-color: var(--muted);  color: var(--muted);  background: rgba(158,158,158,0.05); }
+  .rmf-step-num {
+    font-size: 0.6em;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+  .rmf-step-label {
+    font-size: 0.65em;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 6px;
+    text-align: center;
+    line-height: 1.3;
+  }
+  .rmf-step.st-in_progress .rmf-step-label { color: var(--yellow); }
+  .rmf-step.st-complete .rmf-step-label    { color: var(--green); }
+  .rmf-progress-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 14px 0 10px;
+    overflow: hidden;
+  }
+  .rmf-progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(to right, var(--cyan), var(--green));
+    transition: width 0.6s ease;
+  }
+
   /* ── Delete modal ─────────────────────────────────────────────────────────── */
   .modal-overlay {
     display: none;
@@ -402,6 +483,79 @@
   </div>
 </div>
 {% endif %}
+
+{# ── RMF / ATO Process Timeline ──────────────────────────────────────────── #}
+<div class="card" style="margin-bottom:16px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div class="card-title" style="margin-bottom:0">ATO Process — RMF Lifecycle</div>
+    <a href="/rmf/{{ system.id }}" class="btn btn-ghost btn-sm" style="color:var(--cyan);border-color:var(--cyan)">Manage →</a>
+  </div>
+
+  {# Compute step statuses from rmf_records #}
+  {% set step_keys = ['prepare','categorize','select','implement','assess','authorize','monitor'] %}
+  {% set step_labels = ['Prepare','Categorize','Select','Implement','Assess','Authorize','Monitor'] %}
+  {% set step_refs   = ['SP 800-37 §2.1','FIPS 199','SP 800-53','SP 800-53A','SP 800-53A','NIST §2.6','SP 800-137'] %}
+  {% set ns = namespace(complete=0) %}
+  {% for sk in step_keys %}
+    {% if rmf_records.get(sk) and rmf_records[sk].status == 'complete' %}
+      {% set ns.complete = ns.complete + 1 %}
+    {% endif %}
+  {% endfor %}
+
+  {# Progress bar #}
+  {% set pct = ((ns.complete / 7) * 100) | int %}
+  <div class="rmf-progress-bar">
+    <div class="rmf-progress-fill" style="width:{{ pct }}%"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <span style="font-size:0.72em;color:var(--muted)">{{ ns.complete }}/7 steps complete</span>
+    <span style="font-size:0.72em;color:var(--muted)">{{ pct }}%</span>
+  </div>
+
+  {# Step dots #}
+  <div class="rmf-timeline">
+    {% for i in range(7) %}
+    {% set sk = step_keys[i] %}
+    {% set rec = rmf_records.get(sk) %}
+    {% set st = rec.status if rec else 'not_started' %}
+    <div class="rmf-step st-{{ st }}" title="{{ step_labels[i] }} · {{ step_refs[i] }} · {{ st.replace('_',' ').title() }}">
+      <div class="rmf-step-num">{{ i + 1 }}</div>
+      <a href="/rmf/{{ system.id }}" class="rmf-step-dot">
+        {% if st == 'complete' %}✓
+        {% elif st == 'in_progress' %}⬡
+        {% elif st == 'waived' %}—
+        {% else %}{{ i + 1 }}{% endif %}
+      </a>
+      <div class="rmf-step-label">{{ step_labels[i] }}</div>
+      {% if rec and rec.owner %}
+      <div style="font-size:0.58em;color:var(--muted);margin-top:2px;text-align:center;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ rec.owner }}</div>
+      {% endif %}
+      {% if rec and rec.target_date %}
+      <div style="font-size:0.55em;color:var(--muted);margin-top:1px;text-align:center">{{ rec.target_date }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {# Status legend #}
+  <div style="display:flex;gap:16px;margin-top:16px;padding-top:12px;border-top:1px solid var(--border);flex-wrap:wrap">
+    <span style="font-size:0.68em;color:var(--muted);display:flex;align-items:center;gap:5px">
+      <span style="width:10px;height:10px;border-radius:50%;background:rgba(158,158,158,0.2);border:1px solid var(--muted);display:inline-block"></span>Not Started
+    </span>
+    <span style="font-size:0.68em;color:var(--yellow);display:flex;align-items:center;gap:5px">
+      <span style="width:10px;height:10px;border-radius:50%;background:rgba(255,179,0,0.15);border:1px solid var(--yellow);display:inline-block"></span>In Progress
+    </span>
+    <span style="font-size:0.68em;color:var(--green);display:flex;align-items:center;gap:5px">
+      <span style="width:10px;height:10px;border-radius:50%;background:rgba(0,200,83,0.1);border:1px solid var(--green);display:inline-block"></span>Complete
+    </span>
+    <span style="font-size:0.68em;color:var(--muted);display:flex;align-items:center;gap:5px">
+      <span style="width:10px;height:10px;border-radius:50%;background:rgba(158,158,158,0.05);border:1px solid var(--muted);display:inline-block"></span>Waived
+    </span>
+    <span style="font-size:0.68em;color:var(--muted);margin-left:auto">
+      NIST SP 800-37 Rev 2
+    </span>
+  </div>
+</div>
 
 {# ── Access Control — Assigned Users ─────────────────────────────────────── #}
 <div class="card" style="margin-bottom:16px">

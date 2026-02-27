@@ -233,11 +233,15 @@ def _tpl_ctx(request: Request) -> dict:
     """Common template context included in every page render."""
     user = request.headers.get("Remote-User", "")
     employees = CONFIG.get("employees", [])
+    # Best-effort display name: check employees config first, then title-case username
+    emp_map = {e.get("username"): e.get("name") for e in employees if e.get("username")}
+    display_name = emp_map.get(user) or (user.replace(".", " ").title() if user else "")
     return {
         "app_name":    _cfg("app.name", "BLACKSITE"),
         "brand":       _cfg("app.brand", "TheKramerica"),
         "tagline":     _cfg("app.tagline", "Security Assessment Platform"),
         "remote_user": user,
+        "display_name": display_name,
         "is_admin":    _is_admin(request),
         "view_mode":   _view_mode(request),
         "employees":   employees,
@@ -1827,6 +1831,12 @@ async def system_detail(request: Request, system_id: str):
                     current_user_assignment = a
                     break
 
+        # RMF step records for this system (used by ATO timeline)
+        rmf_rr = await session.execute(
+            select(RmfRecord).where(RmfRecord.system_id == system_id)
+        )
+        rmf_records = {rec.step: rec for rec in rmf_rr.scalars().all()}
+
     today_str = date.today().isoformat()
     poam_overdue  = [p for p in poam_items if p.scheduled_completion and p.scheduled_completion < today_str and p.status in ("open","in_progress")]
     poam_due_week = [p for p in poam_items if p.scheduled_completion and today_str <= p.scheduled_completion <= (date.today() + timedelta(days=7)).isoformat() and p.status in ("open","in_progress")]
@@ -1848,6 +1858,8 @@ async def system_detail(request: Request, system_id: str):
         "sc_impl":                 sc_impl,
         "sc_coverage_pct":         sc_coverage_pct,
         "family_coverage":         family_coverage,
+        "rmf_records":             rmf_records,
+        "rmf_steps":               RMF_STEPS,
         **_tpl_ctx(request),
     })
 
@@ -2051,12 +2063,14 @@ async def assign_system(request: Request, system_id: str,
     if not _is_admin(request):
         raise HTTPException(status_code=403)
     admin = request.headers.get("Remote-User", "")
-    # Allow admin self-assignment; otherwise validate against employees list
-    if username != admin:
-        known = [e["username"] for e in CONFIG.get("employees", [])]
-        if username not in known:
-            raise HTTPException(status_code=400, detail="Unknown user")
     async with SessionLocal() as session:
+        # Allow admin self-assignment; otherwise validate against employees config OR UserProfile table
+        if username != admin:
+            known_cfg = {e["username"] for e in CONFIG.get("employees", [])}
+            if username not in known_cfg:
+                profile = await session.get(UserProfile, username)
+                if not profile:
+                    raise HTTPException(status_code=400, detail=f"Unknown user: {username!r}")
         # Check system exists
         sys_obj = await session.get(System, system_id)
         if not sys_obj:
@@ -3654,9 +3668,9 @@ async def system_controls_page(request: Request, system_id: str, family: str = "
         stats = _sc_stats([s for s in all_sc_objs if s is not None])
         stats["total"] = len(CATALOG)
 
-        # Other systems for inheritance dropdown
+        # Other systems for inheritance dropdown (limit to 100 for performance)
         other_sys_rows = await session.execute(
-            select(System).where(System.id != system_id).order_by(System.name)
+            select(System).where(System.id != system_id).order_by(System.name).limit(100)
         )
         other_systems = list(other_sys_rows.scalars().all())
 
@@ -4580,3 +4594,90 @@ async def audit_export(request: Request, format: str = "csv", days: str = "90"):
             media_type  = "text/csv",
             headers     = {"Content-Disposition": f'attachment; filename="audit_log_{today_str}.csv"'},
         )
+
+
+# ── Reports center ────────────────────────────────────────────────────────────
+
+@app.get("/reports", response_class=HTMLResponse)
+async def reports_center(request: Request):
+    """Aggregated reporting center — all downloadable/viewable reports."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+    is_adm = _is_admin(request)
+
+    today_str = date.today().isoformat()
+
+    async with SessionLocal() as session:
+        role = await _get_user_role(request, session)
+
+        # Scope for non-admins
+        if is_adm:
+            sys_ids_scope = None
+        else:
+            sys_ids_scope = await _user_system_ids(request, session)
+
+        def _sys_scope(q):
+            return q if sys_ids_scope is None else q.where(System.id.in_(sys_ids_scope))
+        def _poam_scope(q):
+            return q if sys_ids_scope is None else q.where(PoamItem.system_id.in_(sys_ids_scope))
+        def _risk_scope(q):
+            return q if sys_ids_scope is None else q.where(Risk.system_id.in_(sys_ids_scope))
+
+        # ── Summary stats for report cards ────────────────────────────────────
+        total_sys   = (await session.execute(_sys_scope(select(func.count(System.id))))).scalar() or 0
+        total_poams = (await session.execute(_poam_scope(select(func.count(PoamItem.id))))).scalar() or 0
+        total_risks = (await session.execute(_risk_scope(select(func.count(Risk.id))))).scalar() or 0
+
+        auth_counts: dict = {}
+        for row in (await session.execute(
+            _sys_scope(select(System.auth_status, func.count(System.id)).group_by(System.auth_status))
+        )).all():
+            auth_counts[row[0]] = row[1]
+
+        open_poams = (await session.execute(
+            _poam_scope(select(func.count(PoamItem.id)).where(PoamItem.status == "open"))
+        )).scalar() or 0
+
+        overdue_poams = (await session.execute(
+            _poam_scope(select(func.count(PoamItem.id)).where(
+                PoamItem.status == "open",
+                PoamItem.scheduled_completion < today_str,
+                PoamItem.scheduled_completion.isnot(None),
+            ))
+        )).scalar() or 0
+
+        high_risks = (await session.execute(
+            _risk_scope(select(func.count(Risk.id)).where(
+                (Risk.likelihood * Risk.impact) >= 15
+            ))
+        )).scalar() or 0
+
+        # Submissions count
+        total_subs = (await session.execute(select(func.count(Submission.id)))).scalar() or 0
+
+        # RMF step completion across systems
+        rmf_complete = (await session.execute(
+            select(func.count(RmfRecord.id)).where(RmfRecord.status == "complete")
+        )).scalar() or 0
+
+        rmf_total_records = (await session.execute(
+            select(func.count(RmfRecord.id))
+        )).scalar() or 0
+
+        ctx = await _full_ctx(request, session,
+            today=today_str,
+            total_sys=total_sys,
+            total_poams=total_poams,
+            total_risks=total_risks,
+            open_poams=open_poams,
+            overdue_poams=overdue_poams,
+            high_risks=high_risks,
+            auth_counts=auth_counts,
+            total_subs=total_subs,
+            rmf_complete=rmf_complete,
+            rmf_total_records=rmf_total_records,
+            user_role=role,
+        )
+
+    return templates.TemplateResponse("reports.html", {"request": request, **ctx})

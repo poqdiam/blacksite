@@ -633,7 +633,7 @@
     <summary>
       <div class="nav-user">
         <span class="dot"></span>
-        <span>{{ remote_user }}</span>
+        <span>{{ display_name or remote_user }}</span>
         {% if is_admin %}
           {% if view_mode == 'employee' %}
             <span class="badge-empview">emp view</span>
@@ -645,7 +645,7 @@
     </summary>
     <div class="nav-user-dropdown">
       <div class="nav-dd-header">
-        <div class="nav-dd-username">{{ remote_user }}</div>
+        <div class="nav-dd-username">{{ display_name or remote_user }}</div>
         <div class="nav-dd-role">
           {% if is_admin %}
             {% if view_mode == 'employee' %}Employee View{% else %}Admin{% endif %}
@@ -753,6 +753,9 @@
       <a href="/submissions" class="sb-link{% if p.startswith('/submissions') %} active{% endif %}">
         <span class="sb-icon">✓</span><span class="sb-text">ATO Submissions</span>
       </a>
+      <a href="/reports" class="sb-link{% if p.startswith('/reports') %} active{% endif %}">
+        <span class="sb-icon">↓</span><span class="sb-text">Reports</span>
+      </a>
     </div>
 
     <div class="sb-group">
@@ -799,6 +802,9 @@
 
     <div class="sb-group">
       <div class="sb-group-label">Reports</div>
+      <a href="/reports" class="sb-link{% if p.startswith('/reports') %} active{% endif %}">
+        <span class="sb-icon">↓</span><span class="sb-text">Reports Center</span>
+      </a>
       <a href="/systems" class="sb-link{% if p.startswith('/systems') %} active{% endif %}">
         <span class="sb-icon">⊟</span><span class="sb-text">System Reports</span>
       </a>
@@ -840,6 +846,9 @@
       <a href="/rmf" class="sb-link{% if p.startswith('/rmf') %} active{% endif %}">
         <span class="sb-icon">⟳</span><span class="sb-text">RMF Workflow</span>
       </a>
+      <a href="/reports" class="sb-link{% if p.startswith('/reports') %} active{% endif %}">
+        <span class="sb-icon">↓</span><span class="sb-text">Reports</span>
+      </a>
     </div>
 
     {% else %}
@@ -866,6 +875,9 @@
       <a href="/risks" class="sb-link{% if p.startswith('/risks') %} active{% endif %}">
         <span class="sb-icon">⚠</span><span class="sb-text">My Risks</span>
       </a>
+      <a href="/reports" class="sb-link{% if p.startswith('/reports') %} active{% endif %}">
+        <span class="sb-icon">↓</span><span class="sb-text">Reports</span>
+      </a>
     </div>
 
     {# Admin in employee-view mode #}
@@ -887,7 +899,7 @@
   <div class="sb-footer">
     <a href="/profile" class="sb-link{% if p == '/profile' %} active{% endif %}">
       <span class="sb-icon">◉</span>
-      <span class="sb-text">{{ remote_user }}</span>
+      <span class="sb-text">{{ display_name or remote_user }}</span>
     </a>
   </div>
 </aside>
@@ -947,7 +959,7 @@ async function initTicker() {
     }).join('');
     content.innerHTML = html + html;  // duplicate for seamless loop
     const totalChars = items.reduce(function(s, i){ return s + i.text.length; }, 0);
-    const duration = Math.max(45, Math.min(120, totalChars * 0.06));
+    const duration = Math.max(90, Math.min(240, totalChars * 0.15));
     content.style.animationDuration = duration + 's';
   } catch(e) {
     const c = document.getElementById('ticker-content');

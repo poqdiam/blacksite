@@ -76,6 +76,28 @@
 
   .required-star { color: var(--red); margin-left: 2px; }
 
+  .field-help {
+    font-size: 0.78em;
+    color: var(--muted);
+    line-height: 1.5;
+    margin-top: 5px;
+    margin-bottom: 0;
+    padding: 6px 10px;
+    background: rgba(0,255,204,0.03);
+    border-left: 2px solid rgba(0,255,204,0.18);
+    border-radius: 0 3px 3px 0;
+  }
+  .section-intro {
+    font-size: 0.82em;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 18px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+  }
+
   .form-actions {
     display: flex;
     align-items: center;
@@ -121,12 +143,17 @@
     ════════════════════════════════════════════════════════════════════════ #}
     <div class="form-section">
       <div class="section-header">Identity</div>
+      <p class="section-intro">
+        Basic identifying information for this system. Use the official name as it appears in your agency's system inventory.
+        If you're not sure what to call it, use the name most people in your organization already use for it.
+      </p>
 
       <div class="form-group">
         <label for="name">System Name <span class="required-star">*</span></label>
         <input type="text" id="name" name="name" required
                placeholder="e.g. Agency Financial Management System"
                value="{{ system.name or '' if system else '' }}"/>
+        <p class="field-help">The full, official name of the system. Be specific — "Payroll Processing System" is better than "Payroll."</p>
       </div>
 
       <div class="form-row">
@@ -135,6 +162,7 @@
           <input type="text" id="abbreviation" name="abbreviation"
                  placeholder="e.g. AFMS"
                  value="{{ system.abbreviation or '' if system else '' }}"/>
+          <p class="field-help">A short acronym or code name used internally (optional). For example, "AFMS" for Agency Financial Management System.</p>
         </div>
         <div class="form-group" style="margin-bottom:0">
           {# placeholder to keep grid balanced on mobile #}
@@ -159,6 +187,11 @@
               Minor Application
             </option>
           </select>
+          <p class="field-help">
+            <strong>Major Application</strong> — a standalone application that handles important agency business (e.g., a grants management portal).<br>
+            <strong>General Support System</strong> — shared infrastructure other systems rely on (e.g., a data center, network, or cloud platform).<br>
+            <strong>Minor Application</strong> — a smaller app that runs on top of a General Support System.
+          </p>
         </div>
 
         <div class="form-group" style="margin-bottom:0">
@@ -190,6 +223,12 @@
               IaaS
             </option>
           </select>
+          <p class="field-help">
+            Where does the system live?
+            <strong>On-Premises</strong> = your agency's own servers or data center.
+            <strong>Cloud / SaaS / PaaS / IaaS</strong> = hosted by a third-party provider (e.g., AWS, Azure, Google Cloud, Salesforce).
+            <strong>Hybrid</strong> = partly on-premises and partly in the cloud.
+          </p>
         </div>
       </div>
     </div>
@@ -199,6 +238,10 @@
     ════════════════════════════════════════════════════════════════════════ #}
     <div class="form-section">
       <div class="section-header">Ownership</div>
+      <p class="section-intro">
+        The System Owner is the individual responsible for this system — they ensure it operates correctly, stays compliant,
+        and that security requirements are met. This is usually a manager or program lead, not an IT support person.
+      </p>
 
       <div class="form-row">
         <div class="form-group">
@@ -206,6 +249,7 @@
           <input type="text" id="owner_name" name="owner_name"
                  placeholder="e.g. Jane Smith"
                  value="{{ system.owner_name or '' if system else '' }}"/>
+          <p class="field-help">Full name of the person accountable for this system. This person signs off on security decisions.</p>
         </div>
 
         <div class="form-group" style="margin-bottom:0">
@@ -213,6 +257,7 @@
           <input type="email" id="owner_email" name="owner_email"
                  placeholder="owner@agency.gov"
                  value="{{ system.owner_email or '' if system else '' }}"/>
+          <p class="field-help">Official work email address. Used for compliance notifications and audit correspondence.</p>
         </div>
       </div>
     </div>
@@ -222,8 +267,10 @@
     ════════════════════════════════════════════════════════════════════════ #}
     <div class="form-section">
       <div class="section-header">FIPS 199 Categorization</div>
-      <p class="text-muted" style="font-size:0.8em;margin-bottom:16px">
-        Select the impact level for each security objective. The overall system impact is the highest of the three.
+      <p class="section-intro">
+        FIPS 199 categorization tells us how sensitive this system is. Think about what would happen <em>if something went wrong</em>
+        — if data was stolen, altered, or the system went offline. Your answers here determine how many security controls are required.
+        When in doubt, select the level that matches the worst realistic scenario for your agency.
       </p>
 
       <div class="form-row-3">
@@ -244,6 +291,11 @@
               High
             </option>
           </select>
+          <p class="field-help">
+            <strong>Low</strong> — limited harm if data is disclosed (e.g., public info).<br>
+            <strong>Moderate</strong> — serious harm if data is improperly disclosed (e.g., employee PII).<br>
+            <strong>High</strong> — severe or catastrophic harm (e.g., classified data, financial records, health info).
+          </p>
         </div>
 
         <div class="form-group">
@@ -263,6 +315,11 @@
               High
             </option>
           </select>
+          <p class="field-help">
+            <strong>Low</strong> — minor harm if data is altered (e.g., internal notes).<br>
+            <strong>Moderate</strong> — significant harm if data is corrupted or tampered with (e.g., employee records).<br>
+            <strong>High</strong> — catastrophic harm if data is altered (e.g., financial ledgers, safety-critical systems).
+          </p>
         </div>
 
         <div class="form-group">
@@ -282,6 +339,11 @@
               High
             </option>
           </select>
+          <p class="field-help">
+            <strong>Low</strong> — it's OK if the system is down for a while (e.g., internal reporting tool).<br>
+            <strong>Moderate</strong> — outages cause significant disruption (e.g., email, internal HR portal).<br>
+            <strong>High</strong> — any downtime is unacceptable (e.g., 911 dispatch, emergency response systems).
+          </p>
         </div>
       </div>
 
@@ -297,23 +359,38 @@
     ════════════════════════════════════════════════════════════════════════ #}
     <div class="form-section">
       <div class="section-header">Description</div>
+      <p class="section-intro">
+        These fields give auditors and reviewers the context they need to understand what this system does and where it lives.
+        Plain language is encouraged — write as if explaining to someone who is not a technical expert.
+      </p>
 
       <div class="form-group">
         <label for="purpose">System Purpose</label>
         <textarea id="purpose" name="purpose" rows="3"
                   placeholder="Describe the primary mission or business purpose of this system…">{{ system.purpose or '' if system else '' }}</textarea>
+        <p class="field-help">
+          Why does this system exist? What business problem does it solve?
+          Example: "This system processes payroll for 4,500 agency employees, calculating wages, withholdings, and issuing direct deposits bi-weekly."
+        </p>
       </div>
 
       <div class="form-group">
         <label for="boundary">System Boundary</label>
         <textarea id="boundary" name="boundary" rows="3"
                   placeholder="Describe the authorization boundary — what components, data, and users are in scope…">{{ system.boundary or '' if system else '' }}</textarea>
+        <p class="field-help">
+          What is included in this system's security boundary? List the servers, databases, applications, and user groups that are part of this system.
+          Example: "Includes the web application server, Oracle database, and all agency HR staff with access. Excludes the underlying cloud infrastructure managed by the provider."
+        </p>
       </div>
 
       <div class="form-group" style="margin-bottom:0">
         <label for="description">Additional Description</label>
         <textarea id="description" name="description" rows="4"
                   placeholder="Any additional technical or operational context…">{{ system.description or '' if system else '' }}</textarea>
+        <p class="field-help">
+          Any other relevant details: integrations with other systems, special handling requirements, known limitations, or compliance notes.
+        </p>
       </div>
     </div>
 
@@ -322,6 +399,12 @@
     ════════════════════════════════════════════════════════════════════════ #}
     <div class="form-section">
       <div class="section-header">Authorization</div>
+      <p class="section-intro">
+        An Authorization to Operate (ATO) is the official management decision to allow a system to operate.
+        It is granted by an Authorizing Official (AO) — typically a senior agency executive — after reviewing the system's security posture.
+        ATOs are typically valid for 3 years, after which they must be renewed.
+        If your system is new and hasn't been through this process yet, select "Not Authorized."
+      </p>
 
       <div class="form-group">
         <label for="auth_status">Authorization Status</label>
@@ -344,6 +427,12 @@
             Expired
           </option>
         </select>
+        <p class="field-help">
+          <strong>Not Authorized</strong> — the system has not yet gone through the formal authorization process.<br>
+          <strong>In Progress</strong> — authorization package is being prepared or is under review.<br>
+          <strong>Authorized</strong> — the system has a valid, active ATO signed by an Authorizing Official.<br>
+          <strong>Expired</strong> — the ATO existed but has lapsed; the system needs re-authorization.
+        </p>
       </div>
 
       <div class="form-row">
@@ -351,12 +440,14 @@
           <label for="auth_date">Authorization Date</label>
           <input type="date" id="auth_date" name="auth_date"
                  value="{{ system.auth_date.strftime('%Y-%m-%d') if system and system.auth_date else '' }}"/>
+          <p class="field-help">The date the Authorizing Official signed the ATO decision letter. Leave blank if not yet authorized.</p>
         </div>
 
         <div class="form-group" style="margin-bottom:0">
           <label for="auth_expiry">Authorization Expiry</label>
           <input type="date" id="auth_expiry" name="auth_expiry"
                  value="{{ system.auth_expiry.strftime('%Y-%m-%d') if system and system.auth_expiry else '' }}"/>
+          <p class="field-help">When the current ATO expires. Typically 3 years from the authorization date. BLACKSITE will alert you when expiry is approaching.</p>
         </div>
       </div>
     </div>

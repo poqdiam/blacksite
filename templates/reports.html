@@ -1,0 +1,540 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Reports{% endblock %}
+
+{% block head %}
+<style>
+  .reports-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .report-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color 0.15s;
+  }
+  .report-card:hover { border-color: rgba(0,255,204,0.25); }
+
+  .report-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .report-icon {
+    font-size: 1.4em;
+    flex-shrink: 0;
+    line-height: 1;
+    margin-top: 2px;
+  }
+  .report-title {
+    font-size: 0.88em;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .report-subtitle {
+    font-size: 0.72em;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+  }
+
+  .report-desc {
+    font-size: 0.78em;
+    color: var(--muted);
+    line-height: 1.6;
+    flex: 1;
+  }
+
+  .report-meta {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .report-stat {
+    font-size: 0.72em;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .report-stat strong { color: var(--text); font-size: 1.1em; }
+
+  .report-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .report-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.6em;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+  }
+  .rb-agency  { background: rgba(0,255,204,0.1);  color: var(--cyan); }
+  .rb-grc     { background: rgba(255,179,0,0.1);  color: var(--yellow); }
+  .rb-ops     { background: rgba(0,200,83,0.1);   color: var(--green); }
+  .rb-admin   { background: rgba(244,67,54,0.1);  color: var(--red); }
+  .rb-oscal   { background: rgba(136,136,255,0.1);color: #8888ff; }
+
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 28px 0 16px;
+  }
+  .section-divider h2 {
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+    margin: 0;
+  }
+  .section-divider hr {
+    flex: 1;
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0;
+  }
+
+  .stat-banner {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .stat-banner-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 12px;
+    text-align: center;
+  }
+  .stat-banner-value {
+    font-size: 1.7em;
+    font-weight: 900;
+    font-family: var(--mono);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-banner-label {
+    font-size: 0.62em;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Page header ─────────────────────────────────────────────────────────── #}
+<div style="margin-bottom:24px">
+  <h1 style="margin:0">Reports</h1>
+  <p class="text-muted" style="margin-top:4px;font-size:0.88em">
+    Export, view, and share GRC reports for compliance, auditing, and agency reporting.
+    Data is current as of {{ today }}.
+  </p>
+</div>
+
+{# ── Summary stats banner ─────────────────────────────────────────────────── #}
+<div class="stat-banner">
+  <div class="stat-banner-item">
+    <div class="stat-banner-value text-cyan">{{ total_sys }}</div>
+    <div class="stat-banner-label">Systems</div>
+  </div>
+  <div class="stat-banner-item">
+    <div class="stat-banner-value" style="color:{% if auth_counts.get('authorized',0) == total_sys and total_sys > 0 %}var(--green){% else %}var(--yellow){% endif %}">
+      {{ auth_counts.get('authorized', 0) }}
+    </div>
+    <div class="stat-banner-label">Authorized</div>
+  </div>
+  <div class="stat-banner-item">
+    <div class="stat-banner-value" style="color:{% if overdue_poams > 0 %}var(--red){% else %}var(--text){% endif %}">
+      {{ total_poams }}
+    </div>
+    <div class="stat-banner-label">POA&amp;M Items</div>
+  </div>
+  <div class="stat-banner-item">
+    <div class="stat-banner-value" style="color:{% if overdue_poams > 0 %}var(--red){% else %}var(--green){% endif %}">
+      {{ overdue_poams }}
+    </div>
+    <div class="stat-banner-label">Overdue POA&amp;Ms</div>
+  </div>
+  <div class="stat-banner-item">
+    <div class="stat-banner-value" style="color:{% if high_risks > 0 %}#ff6b35{% else %}var(--green){% endif %}">
+      {{ total_risks }}
+    </div>
+    <div class="stat-banner-label">Risks ({{ high_risks }} high)</div>
+  </div>
+  <div class="stat-banner-item">
+    <div class="stat-banner-value text-cyan">{{ total_subs }}</div>
+    <div class="stat-banner-label">Submissions</div>
+  </div>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════════════════
+   SECTION 1 — GRC Operational Reports
+══════════════════════════════════════════════════════════════════════════════ #}
+<div class="section-divider"><h2>GRC Operational Reports</h2><hr></div>
+
+<div class="reports-grid">
+
+  {# POA&M Status Report #}
+  <div class="report-card">
+    <div class="report-card-header">
+      <div class="report-icon">📋</div>
+      <div>
+        <div class="report-title">POA&amp;M Status Report <span class="report-badge rb-grc">GRC</span></div>
+        <div class="report-subtitle">Plan of Action &amp; Milestones</div>
+      </div>
+    </div>
+    <div class="report-desc">
+      Complete listing of all open, in-progress, and closed POA&amp;M items across assigned systems.
+      Includes severity classification, due dates, responsible parties, and remediation notes.
+      Required deliverable for continuous monitoring under NIST SP 800-137.
+    </div>
+    <div class="report-meta">
+      <div class="report-stat"><strong>{{ total_poams }}</strong> total items</div>
+      <div class="report-stat"><strong>{{ open_poams }}</strong> open</div>
+      {% if overdue_poams > 0 %}
+      <div class="report-stat" style="color:var(--red)"><strong>{{ overdue_poams }}</strong> overdue</div>
+      {% endif %}
+    </div>
+    <div class="report-actions">
+      <a href="/poam" class="btn btn-ghost btn-sm">View Online</a>
+      <a href="/poam/export?format=csv" class="btn btn-ghost btn-sm">Export CSV</a>
+      <a href="/poam/export?format=json" class="btn btn-ghost btn-sm">Export JSON</a>
+    </div>
+  </div>
+
+  {# Risk Register #}
+  <div class="report-card">
+    <div class="report-card-header">
+      <div class="report-icon">⚠</div>
+      <div>
+        <div class="report-title">Risk Register <span class="report-badge rb-grc">GRC</span></div>
+        <div class="report-subtitle">Identified risks &amp; residual risk analysis</div>
+      </div>
+    </div>
+    <div class="report-desc">
+      All tracked security risks with likelihood and impact scores, risk ratings, and treatment
+      decisions (accept/mitigate/transfer/avoid). Supports the risk executive function per
+      NIST SP 800-39 and feeds the POA&amp;M process.
+    </div>
+    <div class="report-meta">
+      <div class="report-stat"><strong>{{ total_risks }}</strong> total risks</div>
+      {% if high_risks > 0 %}
+      <div class="report-stat" style="color:#ff6b35"><strong>{{ high_risks }}</strong> high/critical</div>
+      {% endif %}
+    </div>
+    <div class="report-actions">
+      <a href="/risks" class="btn btn-ghost btn-sm">View Online</a>
+      <a href="/risks/export?format=csv" class="btn btn-ghost btn-sm">Export CSV</a>
+      <a href="/risks/export?format=json" class="btn btn-ghost btn-sm">Export JSON</a>
+    </div>
+  </div>
+
+  {# Compliance Posture Dashboard #}
+  <div class="report-card">
+    <div class="report-card-header">
+      <div class="report-icon">📊</div>
+      <div>
+        <div class="report-title">Compliance Posture Dashboard <span class="report-badge rb-grc">GRC</span></div>
+        <div class="report-subtitle">Aggregate security health metrics</div>
+      </div>
+    </div>
+    <div class="report-desc">
+      Executive-level composite compliance score across all systems — control implementation rates,
+      authorization status, POA&amp;M aging, and risk heat map. Ideal for CISO briefings and
+      board-level reporting.
+    </div>
+    <div class="report-actions">
+      <a href="/posture" class="btn btn-ghost btn-sm">View Dashboard</a>
+    </div>
+  </div>
+
+</div>
+
+{# ═══════════════════════════════════════════════════════════════════════════
+   SECTION 2 — ATO Package Reports (Agency-Facing)
+══════════════════════════════════════════════════════════════════════════════ #}
+<div class="section-divider"><h2>ATO Package Reports</h2><hr></div>
+<p class="text-muted" style="font-size:0.82em;margin-bottom:16px;line-height:1.6">
+  These reports are the standard deliverables submitted to an Authorizing Official (AO) or Inspector General (IG) as part of
+  the Authorization to Operate (ATO) package. Navigate to a specific system to download its package.
+</p>
+
+<div class="reports-grid">
+
+  {# System Security Plan (SSP) #}
+  <div class="report-card">
+    <div class="report-card-header">
+      <div class="report-icon">📄</div>
+      <div>
+        <div class="report-title">System Security Plan (SSP) <span class="report-badge rb-agency">Agency</span></div>
+        <div class="report-subtitle">NIST SP 800-18 · per-system</div>
+      </div>
+    </div>
+    <div class="report-desc">
+      The primary ATO document. Describes the system boundary, its purpose, all applicable NIST 800-53
+      controls, and the implementation status of each. The SSP is the "source of truth" reviewed by
+      the Authorizing Official before granting an ATO.
+    </div>
+    <div class="report-actions">
+      <a href="/systems" class="btn btn-ghost btn-sm">Go to Systems →</a>
+      <span style="font-size:0.72em;color:var(--muted);align-self:center">Select system → ⎙ Report</span>
+    </div>
+  </div>
+
+  {# Security Assessment Report (SAR) #}
+  <div class="report-card">
+    <div class="report-card-header">
+      <div class="report-icon">🔍</div>
+      <div>
+        <div class="report-title">Security Assessment Report (SAR) <span class="report-badge rb-agency">Agency</span></div>
+        <div class="report-subtitle">NIST SP 800-53A · per-system</div>
+      </div>
+    </div>
+    <div class="report-desc">
+      Documents the results of the security control assessment (SCA). Produced by an independent
+      Security Control Assessor (SCA), it lists all controls tested, findings, and recommendations.
+      Required before the AO can make an authorization decision. Linked to uploaded assessments.
+    </div>
+    <div class="report-actions">
+      <a href="/submissions" class="btn btn-ghost btn-sm">View Submissions</a>
+      <a href="/systems" class="btn btn-ghost btn-sm">Go to Systems →</a>
+    </div>
+  </div>
+
+  {# ATO Authorization Decision #}
+  <div class="report-card">
+    <div class="report-card-header">
+      <div class="report-icon">✅</div>
+      <div>
+        <div class="report-title">ATO Status Report <span class="report-badge rb-agency">Agency</span></div>
+        <div class="report-subtitle">Authorization decisions &amp; expiry tracker</div>
+      </div>
+    </div>
+    <div class="report-desc">
+      Summary of authorization status across all systems in scope — Authorized, In Progress,
+      Not Authorized, and Expired ATOs. Includes authorization dates and upcoming expirations.
+      Used by compliance teams for continuous authorization monitoring.
+    </div>
+    <div class="report-meta">
+      <div class="report-stat"><strong>{{ auth_counts.get('authorized', 0) }}</strong> authorized</div>
+      <div class="report-stat"><strong>{{ auth_counts.get('expired', 0) }}</strong> expired</div>
+      <div class="report-stat"><strong>{{ auth_counts.get('in_progress', 0) }}</strong> in progress</div>
+    </div>
+    <div class="report-actions">
+      <a href="/systems" class="btn btn-ghost btn-sm">View System Catalog</a>
+    </div>
+  </div>
+
+  {# RMF Lifecycle Summary #}
+  <div class="report-card">
+    <div class="report-card-header">
+      <div class="report-icon">🔄</div>
+      <div>
+        <div class="report-title">RMF Lifecycle Summary <span class="report-badge rb-agency">Agency</span></div>
+        <div class="report-subtitle">NIST SP 800-37 Rev 2 · org-wide</div>
+      </div>
+    </div>
+    <div class="report-desc">
+      Cross-system view of the 7-step RMF lifecycle (Prepare → Categorize → Select → Implement →
+      Assess → Authorize → Monitor). Shows which systems are at each stage, who owns each step,
+      and target completion dates. Required for continuous authorization programs (cATO).
+    </div>
+    <div class="report-meta">
+      <div class="report-stat"><strong>{{ rmf_complete }}</strong> steps complete</div>
+      <div class="report-stat"><strong>{{ rmf_total_records }}</strong> total records</div>
+    </div>
+    <div class="report-actions">
+      <a href="/rmf" class="btn btn-ghost btn-sm">View RMF Tracker</a>
+    </div>
+  </div>
+
+</div>
+
+{# ═══════════════════════════════════════════════════════════════════════════
+   SECTION 3 — Control &amp; Assessment Reports
+══════════════════════════════════════════════════════════════════════════════ #}
+<div class="section-divider"><h2>Control &amp; Assessment Reports</h2><hr></div>
+
+<div class="reports-grid">
+
+  {# Control Coverage Report #}
+  <div class="report-card">
+    <div class="report-card-header">
+      <div class="report-icon">🛡</div>
+      <div>
+        <div class="report-title">Control Coverage Report <span class="report-badge rb-ops">Ops</span></div>
+        <div class="report-subtitle">NIST SP 800-53 Rev 5 · per-system</div>
+      </div>
+    </div>
+    <div class="report-desc">
+      Shows which NIST 800-53 controls are implemented, not implemented, or not applicable
+      for each system. Organized by control family (AC, AU, CA, CM, etc.). Essential for
+      gap analysis and prioritizing security investments.
+    </div>
+    <div class="report-actions">
+      <a href="/controls" class="btn btn-ghost btn-sm">Control Catalog</a>
+      <a href="/systems" class="btn btn-ghost btn-sm">Per-System Plans →</a>
+    </div>
+  </div>
+
+  {# Assessment Results #}
+  <div class="report-card">
+    <div class="report-card-header">
+      <div class="report-icon">📝</div>
+      <div>
+        <div class="report-title">Assessment Results <span class="report-badge rb-ops">Ops</span></div>
+        <div class="report-subtitle">Uploaded SSP/assessment reports</div>
+      </div>
+    </div>
+    <div class="report-desc">
+      All uploaded security assessment reports, candidate submissions, and scored results.
+      Includes AI-scored findings, issue summaries, and admin review notes.
+      Download individual reports in JSON, PDF-print, or original format.
+    </div>
+    <div class="report-actions">
+      <a href="/admin" class="btn btn-ghost btn-sm">Admin Dashboard</a>
+    </div>
+  </div>
+
+  {# OSCAL Export #}
+  <div class="report-card">
+    <div class="report-card-header">
+      <div class="report-icon">⬡</div>
+      <div>
+        <div class="report-title">OSCAL Export <span class="report-badge rb-oscal">OSCAL</span></div>
+        <div class="report-subtitle">NIST OSCAL JSON format · machine-readable</div>
+      </div>
+    </div>
+    <div class="report-desc">
+      Machine-readable SSP export in NIST OSCAL (Open Security Controls Assessment Language) format.
+      Compatible with GovReady, Trestle, and agency OSCAL tooling. Enables automated compliance
+      validation and FedRAMP/FISMA submission pipelines.
+    </div>
+    <div class="report-actions">
+      <a href="/systems" class="btn btn-ghost btn-sm">Go to Systems →</a>
+      <span style="font-size:0.72em;color:var(--muted);align-self:center">Select system → Assessments → OSCAL</span>
+    </div>
+  </div>
+
+</div>
+
+{% if is_admin %}
+{# ═══════════════════════════════════════════════════════════════════════════
+   SECTION 4 — Admin &amp; Audit Reports
+══════════════════════════════════════════════════════════════════════════════ #}
+<div class="section-divider"><h2>Admin &amp; Audit Reports</h2><hr></div>
+
+<div class="reports-grid">
+
+  {# Audit Log Export #}
+  <div class="report-card">
+    <div class="report-card-header">
+      <div class="report-icon">🔏</div>
+      <div>
+        <div class="report-title">Audit Log Export <span class="report-badge rb-admin">Admin</span></div>
+        <div class="report-subtitle">Full BLACKSITE activity audit trail</div>
+      </div>
+    </div>
+    <div class="report-desc">
+      Complete timestamped log of all user actions — system creates/edits, POA&amp;M updates,
+      risk changes, control edits, assignments, and admin actions. Required for IG investigations
+      and continuous monitoring under FISMA.
+    </div>
+    <div class="report-actions">
+      <a href="/admin/audit" class="btn btn-ghost btn-sm">View Log</a>
+      <a href="/admin/audit/export?format=csv&days=90" class="btn btn-ghost btn-sm">CSV (90d)</a>
+      <a href="/admin/audit/export?format=csv&days=365" class="btn btn-ghost btn-sm">CSV (1yr)</a>
+      <a href="/admin/audit/export?format=json&days=90" class="btn btn-ghost btn-sm">JSON</a>
+    </div>
+  </div>
+
+  {# System Inventory #}
+  <div class="report-card">
+    <div class="report-card-header">
+      <div class="report-icon">🗂</div>
+      <div>
+        <div class="report-title">System Inventory <span class="report-badge rb-admin">Admin</span></div>
+        <div class="report-subtitle">Complete system catalog</div>
+      </div>
+    </div>
+    <div class="report-desc">
+      Full inventory of all registered information systems — system name, type, environment,
+      FIPS 199 categorization, owner, and authorization status. Fulfills FISMA §3554(a)(1)
+      inventory requirement and OMB A-130 system catalog documentation.
+    </div>
+    <div class="report-meta">
+      <div class="report-stat"><strong>{{ total_sys }}</strong> total systems</div>
+    </div>
+    <div class="report-actions">
+      <a href="/systems" class="btn btn-ghost btn-sm">View Catalog</a>
+    </div>
+  </div>
+
+  {# User Management Report #}
+  <div class="report-card">
+    <div class="report-card-header">
+      <div class="report-icon">👥</div>
+      <div>
+        <div class="report-title">User &amp; Role Report <span class="report-badge rb-admin">Admin</span></div>
+        <div class="report-subtitle">RBAC role assignments &amp; system access</div>
+      </div>
+    </div>
+    <div class="report-desc">
+      All registered users, their RBAC roles (admin, auditor, BCDR, system owner, employee),
+      and their system assignments. Supports access review requirements under NIST AC-2
+      (Account Management) and least-privilege verification.
+    </div>
+    <div class="report-actions">
+      <a href="/admin/users" class="btn btn-ghost btn-sm">User Management</a>
+    </div>
+  </div>
+
+</div>
+{% endif %}
+
+{# ── Reference section ────────────────────────────────────────────────────── #}
+<div class="card" style="margin-top:8px;padding:18px 20px">
+  <div class="card-title" style="margin-bottom:10px">Regulatory References</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">
+    {% for ref in [
+      ('FISMA 2014', 'Federal Information Security Modernization Act — the law requiring all federal agencies to implement risk-based security programs'),
+      ('NIST SP 800-37 Rev 2', 'Risk Management Framework — the 7-step process for authorizing systems'),
+      ('NIST SP 800-53 Rev 5', 'Security and Privacy Controls — the catalog of controls used in the SSP'),
+      ('NIST SP 800-53A', 'Assessment Procedures — how to test and assess controls (SAR basis)'),
+      ('NIST SP 800-137', 'Continuous Monitoring — requirements for ongoing system oversight'),
+      ('OMB Circular A-130', 'Managing Federal Information Resources — CIO responsibilities'),
+      ('FIPS 199', 'Standards for categorizing information systems by impact level'),
+      ('FIPS 200', 'Minimum security requirements based on FIPS 199 categorization'),
+    ] %}
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:10px">
+      <div style="font-size:0.72em;font-weight:700;color:var(--cyan);margin-bottom:3px;font-family:var(--mono)">{{ ref[0] }}</div>
+      <div style="font-size:0.7em;color:var(--muted);line-height:1.4">{{ ref[1] }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% endblock %}
