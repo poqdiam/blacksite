@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Submit for Authorization{% endblock %}
+
+{% block head %}
+<style>
+  .readiness-meter {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .readiness-bar { height: 10px; background: rgba(255,255,255,0.06); border-radius: 5px; overflow: hidden; margin: 10px 0; }
+  .readiness-fill { height: 100%; border-radius: 5px; transition: width 0.5s; }
+  .blocker-item {
+    display: flex; align-items: center; gap: 8px; padding: 6px 0;
+    border-bottom: 1px solid var(--border); font-size: 0.84em;
+  }
+  .blocker-item:last-child { border-bottom: none; }
+  .blocker-sev {
+    font-size: 0.65em; font-weight: 700; letter-spacing: 1px;
+    padding: 2px 7px; border-radius: 3px; white-space: nowrap;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:6px;font-size:0.82em">
+  <a href="/systems" style="color:var(--muted)">Systems</a>
+  <span style="color:var(--border);margin:0 6px">/</span>
+  <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a>
+  <span style="color:var(--border);margin:0 6px">/</span>
+  <span style="color:var(--text)">Submit for Authorization</span>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:24px;flex-wrap:wrap">
+  <h1 style="margin:0">Authorization Package</h1>
+  <span class="text-muted" style="font-size:0.85em">{{ system.name }}</span>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start">
+
+  {# ── Left: Readiness + Form ── #}
+  <div>
+
+    {# Readiness assessment #}
+    <div class="readiness-meter">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+        <div class="section-header" style="margin:0">Authorization Readiness</div>
+        <div style="font-size:1.4em;font-weight:800;
+                    color:{% if stats.pct >= 80 %}var(--green){% elif stats.pct >= 50 %}var(--yellow){% else %}var(--red){% endif %}">
+          {{ stats.pct }}%
+        </div>
+      </div>
+      <div class="readiness-bar">
+        <div class="readiness-fill" style="
+          width:{{ stats.pct }}%;
+          background:{% if stats.pct >= 80 %}var(--green){% elif stats.pct >= 50 %}var(--yellow){% else %}var(--red){% endif %}">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+        <div style="text-align:center">
+          <div style="font-size:1.3em;font-weight:700;color:var(--green)">{{ stats.implemented }}</div>
+          <div style="font-size:0.62em;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Implemented</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:1.3em;font-weight:700;color:var(--cyan)">{{ stats.inherited }}</div>
+          <div style="font-size:0.62em;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Inherited</div>
+        </div>
+        <div style="font-size:1.3em;font-weight:700;color:var(--muted);text-align:center">
+          <div>{{ stats.not_applicable }}</div>
+          <div style="font-size:0.62em;color:var(--muted);letter-spacing:1px;text-transform:uppercase">N/A</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:1.3em;font-weight:700;color:{% if stats.not_started > 0 %}var(--red){% else %}var(--green){% endif %}">
+            {{ stats.not_started + stats.in_progress }}
+          </div>
+          <div style="font-size:0.62em;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Gaps</div>
+        </div>
+      </div>
+    </div>
+
+    {# Blockers / warnings #}
+    {% set has_blockers = (stats.not_started > 0 or open_poams|length > 0 or open_risks|selectattr('risk_level','in',['Critical','High'])|list|length > 0) %}
+
+    {% if has_blockers %}
+    <div class="card" style="padding:16px;margin-bottom:20px;border-color:rgba(244,67,54,0.3)">
+      <div class="card-title" style="color:var(--red)">⚠ Items Requiring Attention</div>
+
+      {% if stats.not_started > 0 %}
+      <div class="blocker-item">
+        <span class="blocker-sev" style="background:rgba(244,67,54,0.1);color:var(--red)">HIGH</span>
+        <span>{{ stats.not_started }} control{{ 's' if stats.not_started != 1 else '' }} not started — fill or mark N/A before submitting</span>
+        <a href="/systems/{{ system.id }}/controls?status_filter=not_started" style="color:var(--cyan);margin-left:auto;font-size:0.82em">View →</a>
+      </div>
+      {% endif %}
+
+      {% if stats.in_progress > 0 %}
+      <div class="blocker-item">
+        <span class="blocker-sev" style="background:rgba(255,179,0,0.1);color:var(--yellow)">MED</span>
+        <span>{{ stats.in_progress }} control{{ 's' if stats.in_progress != 1 else '' }} in progress</span>
+      </div>
+      {% endif %}
+
+      {% for p in open_poams %}
+      {% if p.severity in ['Critical','High'] %}
+      <div class="blocker-item">
+        <span class="blocker-sev" style="background:rgba(244,67,54,0.1);color:var(--red)">{{ p.severity | upper }}</span>
+        <span>POA&M: {{ p.weakness_name[:60] }}</span>
+        <a href="/poam/{{ p.id }}" style="color:var(--cyan);margin-left:auto;font-size:0.82em">View →</a>
+      </div>
+      {% endif %}
+      {% endfor %}
+
+    </div>
+    {% else %}
+    <div class="card" style="padding:16px;margin-bottom:20px;border-color:rgba(0,200,83,0.3)">
+      <div style="color:var(--green);font-weight:700;font-size:0.88em">✓ No critical blockers — system is ready for submission</div>
+    </div>
+    {% endif %}
+
+    {# Submission form #}
+    <div class="card" style="padding:24px">
+      <div class="section-header">Create Submission Package</div>
+
+      <form method="post" action="/systems/{{ system.id }}/submit">
+        <div style="display:grid;gap:16px">
+
+          <div>
+            <label class="form-label">Submission Type</label>
+            <select name="submission_type" class="form-control">
+              <option value="initial">Initial Authorization</option>
+              <option value="reauthorization">Reauthorization</option>
+              <option value="significant_change">Significant Change</option>
+              <option value="annual_review">Annual Review</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="form-label">Package Notes <span style="color:var(--muted)">(optional)</span></label>
+            <textarea name="package_notes" class="form-control" style="min-height:100px;resize:vertical"
+              placeholder="Notes for the authorizing official — summary of changes, scope, special considerations…"></textarea>
+          </div>
+
+          <div style="background:rgba(255,255,255,0.02);border-radius:6px;padding:14px;font-size:0.82em;color:var(--muted)">
+            <strong style="color:var(--text)">Submitting will:</strong>
+            <ul style="margin:8px 0 0 18px;line-height:1.8">
+              <li>Snapshot the current control plan coverage ({{ stats.pct }}%)</li>
+              <li>Set system status to <strong style="color:var(--yellow)">Under Review</strong></li>
+              <li>Log the package to the audit trail</li>
+              <li>Notify the authorizing official (admin)</li>
+            </ul>
+          </div>
+
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button type="submit" class="btn btn-primary"
+              {% if stats.pct < 20 %}
+              onclick="return confirm('Control coverage is only {{ stats.pct }}%. Submit anyway?')"
+              {% endif %}>
+              Submit Authorization Package →
+            </button>
+            <a href="/systems/{{ system.id }}" class="btn btn-ghost">Cancel</a>
+          </div>
+        </div>
+      </form>
+    </div>
+
+  </div>
+
+  {# ── Right: Past submissions sidebar ── #}
+  <aside>
+    <div class="card" style="padding:18px">
+      <div class="card-title">Submission History</div>
+      {% if past_submissions %}
+      {% for s in past_submissions %}
+      <div style="padding:8px 0;{% if not loop.last %}border-bottom:1px solid var(--border){% endif %}">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:0.82em;font-weight:600">
+            {{ s.submission_type | replace('_',' ') | title }}
+          </span>
+          <span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+                       padding:2px 7px;border-radius:3px;
+                       {% if s.status == 'authorized' %}color:var(--green);background:rgba(0,200,83,0.1)
+                       {% elif s.status == 'denied' %}color:var(--red);background:rgba(244,67,54,0.1)
+                       {% elif s.status == 'under_review' %}color:var(--yellow);background:rgba(255,179,0,0.1)
+                       {% else %}color:var(--muted);background:rgba(255,255,255,0.04){% endif %}">
+            {{ s.status | replace('_',' ') | title }}
+          </span>
+        </div>
+        <div style="font-size:0.72em;color:var(--muted);margin-top:2px">
+          {% if s.submitted_at %}{{ s.submitted_at.strftime('%Y-%m-%d') }}{% else %}Draft{% endif %}
+          · {{ s.controls_impl }}/{{ s.controls_total }} controls
+        </div>
+        <a href="/submissions/{{ s.id }}" style="font-size:0.75em;color:var(--cyan)">View →</a>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div style="color:var(--muted);font-size:0.82em;padding:8px 0">No prior submissions.</div>
+      {% endif %}
+    </div>
+
+    {# POA&M summary #}
+    {% if open_poams %}
+    <div class="card" style="padding:18px;margin-top:14px">
+      <div class="card-title">Open POA&Ms</div>
+      {% for p in open_poams[:5] %}
+      <div style="padding:6px 0;{% if not loop.last %}border-bottom:1px solid var(--border){% endif %}">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:0.62em;font-weight:700;
+                       padding:2px 6px;border-radius:3px;
+                       {% if p.severity == 'Critical' %}color:var(--red);background:rgba(244,67,54,0.1)
+                       {% elif p.severity == 'High' %}color:var(--red);background:rgba(244,67,54,0.08)
+                       {% elif p.severity == 'Moderate' %}color:var(--yellow);background:rgba(255,179,0,0.1)
+                       {% else %}color:var(--muted);background:rgba(255,255,255,0.04){% endif %}">
+            {{ p.severity }}
+          </span>
+          <span style="font-size:0.8em">{{ p.weakness_name[:40] }}</span>
+        </div>
+      </div>
+      {% endfor %}
+      {% if open_poams|length > 5 %}
+      <div style="font-size:0.75em;color:var(--muted);margin-top:6px">+{{ open_poams|length - 5 }} more</div>
+      {% endif %}
+      <a href="/poam?system_id={{ system.id }}" style="font-size:0.75em;color:var(--cyan);margin-top:8px;display:block">View all →</a>
+    </div>
+    {% endif %}
+
+  </aside>
+
+</div>
+{% endblock %}

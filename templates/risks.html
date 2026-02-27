@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Risk Register{% endblock %}
+
+{% block content %}
+{# ── Page header ──────────────────────────────────────────────────────────── #}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+  <div>
+    <h1 style="margin:0">Risk Register</h1>
+    <p class="text-muted" style="margin-top:4px;font-size:0.88em">Organizational risk inventory · Inherent and residual risk tracking</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <a href="/risks/export" class="btn btn-ghost btn-sm">↓ Export</a>
+    <a href="/risks/new" class="btn btn-primary btn-sm">+ New Risk</a>
+  </div>
+</div>
+
+{# ── Risk Heat Matrix ─────────────────────────────────────────────────────── #}
+<div class="card" style="margin-bottom:24px;padding:20px">
+  <div class="card-title" style="margin-bottom:18px">Risk Heat Matrix</div>
+
+  <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+
+    {# Y-axis label — vertical text #}
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0">
+      <div style="font-size:0.62em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;
+                  writing-mode:vertical-rl;transform:rotate(180deg);height:240px;
+                  display:flex;align-items:center;justify-content:center">
+        Likelihood
+      </div>
+    </div>
+
+    {# Matrix grid + X labels #}
+    <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+
+      {# Y-axis number labels + grid rows #}
+      {% for row_idx in range(5) %}
+      {% set likelihood_val = 5 - row_idx %}
+      <div style="display:flex;align-items:center;gap:4px">
+        {# Y tick #}
+        <div style="width:20px;text-align:right;font-size:0.62em;color:var(--muted);flex-shrink:0">
+          {{ likelihood_val }}
+        </div>
+        {# Row of cells #}
+        {% for col_idx in range(5) %}
+        {% set impact_val = col_idx + 1 %}
+        {% set score = likelihood_val * impact_val %}
+        {% set count = matrix[row_idx][col_idx] if matrix else 0 %}
+        {% if score <= 4 %}
+          {% set cell_bg = 'rgba(0,200,83,0.15)' %}
+          {% set cell_border = 'rgba(0,200,83,0.2)' %}
+        {% elif score <= 9 %}
+          {% set cell_bg = 'rgba(255,179,0,0.15)' %}
+          {% set cell_border = 'rgba(255,179,0,0.2)' %}
+        {% elif score <= 14 %}
+          {% set cell_bg = 'rgba(255,107,53,0.15)' %}
+          {% set cell_border = 'rgba(255,107,53,0.2)' %}
+        {% else %}
+          {% set cell_bg = 'rgba(244,67,54,0.15)' %}
+          {% set cell_border = 'rgba(244,67,54,0.2)' %}
+        {% endif %}
+        <div style="width:48px;height:48px;background:{{ cell_bg }};border:1px solid {{ cell_border }};
+                    border-radius:4px;display:flex;align-items:center;justify-content:center;
+                    font-size:{% if count > 0 %}0.95em{% else %}0.7em{% endif %};
+                    font-weight:{% if count > 0 %}900{% else %}400{% endif %};
+                    color:{% if count > 0 %}var(--text){% else %}#2a2a40{% endif %};
+                    transition:transform 0.15s;cursor:default"
+             title="L={{ likelihood_val }} × I={{ impact_val }} = {{ score }}{% if count %} · {{ count }} risk{% if count != 1 %}s{% endif %}{% endif %}">
+          {% if count > 0 %}{{ count }}{% else %}·{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+
+      {# X-axis number labels #}
+      <div style="display:flex;align-items:center;gap:4px;margin-top:2px">
+        <div style="width:20px;flex-shrink:0"></div>
+        {% for i in range(1, 6) %}
+        <div style="width:48px;text-align:center;font-size:0.62em;color:var(--muted)">{{ i }}</div>
+        {% endfor %}
+      </div>
+
+      {# X-axis label #}
+      <div style="display:flex;align-items:center;gap:4px;margin-top:2px">
+        <div style="width:20px;flex-shrink:0"></div>
+        <div style="width:252px;text-align:center;font-size:0.62em;color:var(--muted);
+                    letter-spacing:2px;text-transform:uppercase">Impact</div>
+      </div>
+
+    </div>
+
+    {# Legend #}
+    <div style="display:flex;flex-direction:column;gap:8px;margin-left:8px;flex-shrink:0">
+      <div style="font-size:0.62em;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px">Legend</div>
+      {% for label, bg, border in [
+          ('Low (1–4)',       'rgba(0,200,83,0.15)',   'rgba(0,200,83,0.3)'),
+          ('Moderate (5–9)', 'rgba(255,179,0,0.15)',  'rgba(255,179,0,0.3)'),
+          ('High (10–14)',   'rgba(255,107,53,0.15)', 'rgba(255,107,53,0.3)'),
+          ('Critical (15+)', 'rgba(244,67,54,0.15)',  'rgba(244,67,54,0.3)'),
+      ] %}
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:16px;height:16px;background:{{ bg }};border:1px solid {{ border }};border-radius:3px;flex-shrink:0"></div>
+        <span style="font-size:0.72em;color:var(--muted);white-space:nowrap">{{ label }}</span>
+      </div>
+      {% endfor %}
+      <div style="margin-top:6px;border-top:1px solid var(--border);padding-top:8px">
+        <div style="font-size:0.65em;color:var(--muted)">Y = Likelihood (1–5)</div>
+        <div style="font-size:0.65em;color:var(--muted)">X = Impact (1–5)</div>
+        <div style="font-size:0.65em;color:var(--muted);margin-top:2px">Score = L × I</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Risk table ───────────────────────────────────────────────────────────── #}
+<div class="section-header">All Risks</div>
+<div class="card" style="padding:0;overflow:hidden">
+  {% if risks %}
+  <div style="overflow-x:auto">
+  <table>
+    <thead>
+      <tr>
+        <th>Risk Name</th>
+        <th>System</th>
+        <th style="text-align:center">Likelihood</th>
+        <th style="text-align:center">Impact</th>
+        <th style="text-align:center">Score</th>
+        <th>Level</th>
+        <th>Treatment</th>
+        <th>Status</th>
+        <th>Residual</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for risk in risks %}
+      {% set level = risk.risk_level or 'Low' %}
+      {% if level == 'Critical' %}
+        {% set lev_color = 'var(--red)' %}
+        {% set lev_bg = 'rgba(244,67,54,0.15)' %}
+      {% elif level == 'High' %}
+        {% set lev_color = '#ff6b35' %}
+        {% set lev_bg = 'rgba(255,107,53,0.15)' %}
+      {% elif level == 'Moderate' %}
+        {% set lev_color = 'var(--yellow)' %}
+        {% set lev_bg = 'rgba(255,179,0,0.15)' %}
+      {% else %}
+        {% set lev_color = 'var(--green)' %}
+        {% set lev_bg = 'rgba(0,200,83,0.15)' %}
+      {% endif %}
+      {% set rlevel = risk.residual_level or 'Low' %}
+      {% if rlevel == 'Critical' %}
+        {% set rlev_color = 'var(--red)' %}
+        {% set rlev_bg = 'rgba(244,67,54,0.15)' %}
+      {% elif rlevel == 'High' %}
+        {% set rlev_color = '#ff6b35' %}
+        {% set rlev_bg = 'rgba(255,107,53,0.15)' %}
+      {% elif rlevel == 'Moderate' %}
+        {% set rlev_color = 'var(--yellow)' %}
+        {% set rlev_bg = 'rgba(255,179,0,0.15)' %}
+      {% else %}
+        {% set rlev_color = 'var(--green)' %}
+        {% set rlev_bg = 'rgba(0,200,83,0.15)' %}
+      {% endif %}
+      <tr>
+        <td style="max-width:220px">
+          <a href="/risks/{{ risk.id }}"
+             style="font-weight:600;color:var(--text);display:block;
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+             title="{{ risk.risk_name }}">
+            {{ risk.risk_name }}
+          </a>
+        </td>
+        <td style="font-size:0.82em;color:var(--muted);white-space:nowrap">
+          {% if risk.system_id and risk.system_id in systems_map %}
+            {{ systems_map[risk.system_id].name }}
+          {% elif risk.system_id %}
+            <span class="mono" style="font-size:0.85em">{{ risk.system_id[:8] }}</span>
+          {% else %}
+            <span style="color:#444">—</span>
+          {% endif %}
+        </td>
+        <td style="text-align:center">
+          <span style="font-size:0.88em;font-weight:700;color:var(--text)">{{ risk.likelihood or '—' }}</span>
+        </td>
+        <td style="text-align:center">
+          <span style="font-size:0.88em;font-weight:700;color:var(--text)">{{ risk.impact or '—' }}</span>
+        </td>
+        <td style="text-align:center">
+          <strong style="color:{{ lev_color }}">{{ risk.risk_score or '—' }}</strong>
+        </td>
+        <td>
+          <span class="badge" style="background:{{ lev_bg }};color:{{ lev_color }}">{{ level }}</span>
+        </td>
+        <td style="font-size:0.82em;color:var(--muted)">{{ risk.treatment or '—' }}</td>
+        <td style="font-size:0.82em">
+          {% if risk.status == 'closed' %}
+            <span style="color:var(--green)">Closed</span>
+          {% elif risk.status == 'accepted' %}
+            <span style="color:var(--cyan)">Accepted</span>
+          {% else %}
+            <span style="color:var(--muted)">Open</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if risk.residual_level %}
+          <span class="badge" style="background:{{ rlev_bg }};color:{{ rlev_color }}">{{ rlevel }}</span>
+          {% else %}
+          <span style="color:#444;font-size:0.82em">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div style="padding:60px;text-align:center">
+    <div style="font-size:2em;margin-bottom:12px;color:#1e1e30">[ ]</div>
+    <div class="text-muted" style="margin-bottom:16px;font-size:0.9em">No risks registered yet.</div>
+    <a href="/risks/new" class="btn btn-primary btn-sm">+ New Risk</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

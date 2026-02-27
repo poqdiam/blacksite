@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+{% block title %}
+  {{ app_name }} — {% if system %}Edit: {{ system.name }}{% else %}Register System{% endif %}
+{% endblock %}
+
+{% block head %}
+<style>
+  .form-card {
+    max-width: 760px;
+  }
+
+  .form-section {
+    margin-bottom: 32px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .form-section:last-of-type {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 540px) {
+    .form-row { grid-template-columns: 1fr; }
+  }
+
+  .form-row-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 600px) {
+    .form-row-3 { grid-template-columns: 1fr; }
+  }
+
+  textarea {
+    resize: vertical;
+    min-height: 80px;
+    font-family: var(--sans);
+  }
+
+  .impact-output {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    padding: 8px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.85em;
+  }
+  .impact-output .impact-label {
+    color: var(--muted);
+    font-size: 0.8em;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .impact-output .impact-value {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 0.9em;
+    min-width: 72px;
+  }
+  .impact-low      { color: var(--green); }
+  .impact-moderate { color: var(--yellow); }
+  .impact-high     { color: var(--red); }
+  .impact-unknown  { color: var(--muted); }
+
+  select option { background: var(--surface); }
+
+  .required-star { color: var(--red); margin-left: 2px; }
+
+  .form-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Breadcrumb ──────────────────────────────────────────────────────────── #}
+<div class="breadcrumb">
+  <a href="/systems">System Catalog</a>
+  <span class="sep">/</span>
+  {% if system %}
+  <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+  <span class="sep">/</span>
+  <span>Edit</span>
+  {% else %}
+  <span>Register System</span>
+  {% endif %}
+</div>
+
+{# ── Page header ──────────────────────────────────────────────────────────── #}
+<div style="margin-bottom:24px">
+  <h1 style="margin:0">
+    {% if system %}Edit System: <span class="text-cyan">{{ system.name }}</span>{% else %}Register System{% endif %}
+  </h1>
+  <p class="text-muted" style="margin-top:4px;font-size:0.88em">
+    {% if system %}Update system details and authorization status.{% else %}Add a new information system to the catalog.{% endif %}
+  </p>
+</div>
+
+{# ── Form card ────────────────────────────────────────────────────────────── #}
+<div class="card form-card">
+  <form method="POST" action="{{ action }}" autocomplete="off">
+
+    {# ════════════════════════════════════════════════════════════════════════
+       SECTION 1 — Identity
+    ════════════════════════════════════════════════════════════════════════ #}
+    <div class="form-section">
+      <div class="section-header">Identity</div>
+
+      <div class="form-group">
+        <label for="name">System Name <span class="required-star">*</span></label>
+        <input type="text" id="name" name="name" required
+               placeholder="e.g. Agency Financial Management System"
+               value="{{ system.name or '' if system else '' }}"/>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="abbreviation">Abbreviation</label>
+          <input type="text" id="abbreviation" name="abbreviation"
+                 placeholder="e.g. AFMS"
+                 value="{{ system.abbreviation or '' if system else '' }}"/>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          {# placeholder to keep grid balanced on mobile #}
+        </div>
+      </div>
+
+      <div class="form-row" style="margin-top:0">
+        <div class="form-group" style="margin-bottom:0">
+          <label for="system_type">System Type</label>
+          <select id="system_type" name="system_type">
+            <option value="">— Select type —</option>
+            <option value="major_application"
+              {% if system and system.system_type == 'major_application' %}selected{% endif %}>
+              Major Application
+            </option>
+            <option value="general_support_system"
+              {% if system and system.system_type == 'general_support_system' %}selected{% endif %}>
+              General Support System
+            </option>
+            <option value="minor_application"
+              {% if system and system.system_type == 'minor_application' %}selected{% endif %}>
+              Minor Application
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0">
+          <label for="environment">Environment</label>
+          <select id="environment" name="environment">
+            <option value="">— Select environment —</option>
+            <option value="on_prem"
+              {% if system and system.environment == 'on_prem' %}selected{% endif %}>
+              On-Premises
+            </option>
+            <option value="cloud"
+              {% if system and system.environment == 'cloud' %}selected{% endif %}>
+              Cloud
+            </option>
+            <option value="hybrid"
+              {% if system and system.environment == 'hybrid' %}selected{% endif %}>
+              Hybrid
+            </option>
+            <option value="saas"
+              {% if system and system.environment == 'saas' %}selected{% endif %}>
+              SaaS
+            </option>
+            <option value="paas"
+              {% if system and system.environment == 'paas' %}selected{% endif %}>
+              PaaS
+            </option>
+            <option value="iaas"
+              {% if system and system.environment == 'iaas' %}selected{% endif %}>
+              IaaS
+            </option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    {# ════════════════════════════════════════════════════════════════════════
+       SECTION 2 — Ownership
+    ════════════════════════════════════════════════════════════════════════ #}
+    <div class="form-section">
+      <div class="section-header">Ownership</div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="owner_name">System Owner Name</label>
+          <input type="text" id="owner_name" name="owner_name"
+                 placeholder="e.g. Jane Smith"
+                 value="{{ system.owner_name or '' if system else '' }}"/>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0">
+          <label for="owner_email">System Owner Email</label>
+          <input type="email" id="owner_email" name="owner_email"
+                 placeholder="owner@agency.gov"
+                 value="{{ system.owner_email or '' if system else '' }}"/>
+        </div>
+      </div>
+    </div>
+
+    {# ════════════════════════════════════════════════════════════════════════
+       SECTION 3 — FIPS 199 Categorization
+    ════════════════════════════════════════════════════════════════════════ #}
+    <div class="form-section">
+      <div class="section-header">FIPS 199 Categorization</div>
+      <p class="text-muted" style="font-size:0.8em;margin-bottom:16px">
+        Select the impact level for each security objective. The overall system impact is the highest of the three.
+      </p>
+
+      <div class="form-row-3">
+        <div class="form-group">
+          <label for="confidentiality_impact">Confidentiality</label>
+          <select id="confidentiality_impact" name="confidentiality_impact" onchange="compute_overall()">
+            <option value="">— Select —</option>
+            <option value="low"
+              {% if system and system.confidentiality_impact == 'low' %}selected{% endif %}>
+              Low
+            </option>
+            <option value="moderate"
+              {% if system and system.confidentiality_impact == 'moderate' %}selected{% endif %}>
+              Moderate
+            </option>
+            <option value="high"
+              {% if system and system.confidentiality_impact == 'high' %}selected{% endif %}>
+              High
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="integrity_impact">Integrity</label>
+          <select id="integrity_impact" name="integrity_impact" onchange="compute_overall()">
+            <option value="">— Select —</option>
+            <option value="low"
+              {% if system and system.integrity_impact == 'low' %}selected{% endif %}>
+              Low
+            </option>
+            <option value="moderate"
+              {% if system and system.integrity_impact == 'moderate' %}selected{% endif %}>
+              Moderate
+            </option>
+            <option value="high"
+              {% if system and system.integrity_impact == 'high' %}selected{% endif %}>
+              High
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="availability_impact">Availability</label>
+          <select id="availability_impact" name="availability_impact" onchange="compute_overall()">
+            <option value="">— Select —</option>
+            <option value="low"
+              {% if system and system.availability_impact == 'low' %}selected{% endif %}>
+              Low
+            </option>
+            <option value="moderate"
+              {% if system and system.availability_impact == 'moderate' %}selected{% endif %}>
+              Moderate
+            </option>
+            <option value="high"
+              {% if system and system.availability_impact == 'high' %}selected{% endif %}>
+              High
+            </option>
+          </select>
+        </div>
+      </div>
+
+      {# Overall impact output #}
+      <div class="impact-output">
+        <span class="impact-label">Overall Impact:</span>
+        <span id="overall_impact_display" class="impact-value impact-unknown">—</span>
+      </div>
+    </div>
+
+    {# ════════════════════════════════════════════════════════════════════════
+       SECTION 4 — Description
+    ════════════════════════════════════════════════════════════════════════ #}
+    <div class="form-section">
+      <div class="section-header">Description</div>
+
+      <div class="form-group">
+        <label for="purpose">System Purpose</label>
+        <textarea id="purpose" name="purpose" rows="3"
+                  placeholder="Describe the primary mission or business purpose of this system…">{{ system.purpose or '' if system else '' }}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="boundary">System Boundary</label>
+        <textarea id="boundary" name="boundary" rows="3"
+                  placeholder="Describe the authorization boundary — what components, data, and users are in scope…">{{ system.boundary or '' if system else '' }}</textarea>
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label for="description">Additional Description</label>
+        <textarea id="description" name="description" rows="4"
+                  placeholder="Any additional technical or operational context…">{{ system.description or '' if system else '' }}</textarea>
+      </div>
+    </div>
+
+    {# ════════════════════════════════════════════════════════════════════════
+       SECTION 5 — Authorization
+    ════════════════════════════════════════════════════════════════════════ #}
+    <div class="form-section">
+      <div class="section-header">Authorization</div>
+
+      <div class="form-group">
+        <label for="auth_status">Authorization Status</label>
+        <select id="auth_status" name="auth_status">
+          <option value="">— Select status —</option>
+          <option value="not_authorized"
+            {% if system and system.auth_status == 'not_authorized' %}selected{% endif %}>
+            Not Authorized
+          </option>
+          <option value="in_progress"
+            {% if system and system.auth_status == 'in_progress' %}selected{% endif %}>
+            In Progress
+          </option>
+          <option value="authorized"
+            {% if system and system.auth_status == 'authorized' %}selected{% endif %}>
+            Authorized
+          </option>
+          <option value="expired"
+            {% if system and system.auth_status == 'expired' %}selected{% endif %}>
+            Expired
+          </option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="auth_date">Authorization Date</label>
+          <input type="date" id="auth_date" name="auth_date"
+                 value="{{ system.auth_date.strftime('%Y-%m-%d') if system and system.auth_date else '' }}"/>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0">
+          <label for="auth_expiry">Authorization Expiry</label>
+          <input type="date" id="auth_expiry" name="auth_expiry"
+                 value="{{ system.auth_expiry.strftime('%Y-%m-%d') if system and system.auth_expiry else '' }}"/>
+        </div>
+      </div>
+    </div>
+
+    {# ── Submit / Cancel ────────────────────────────────────────────────── #}
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">
+        {% if system %}Save Changes{% else %}Register System{% endif %}
+      </button>
+      <a href="{% if system %}/systems/{{ system.id }}{% else %}/systems{% endif %}"
+         class="btn btn-ghost">Cancel</a>
+    </div>
+
+  </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var RANK = { 'low': 1, 'moderate': 2, 'high': 3 };
+  var LABEL = { 1: 'Low', 2: 'Moderate', 3: 'High' };
+  var CSS_CLASS = { 1: 'impact-low', 2: 'impact-moderate', 3: 'impact-high' };
+
+  window.compute_overall = function() {
+    var c = document.getElementById('confidentiality_impact').value;
+    var i = document.getElementById('integrity_impact').value;
+    var a = document.getElementById('availability_impact').value;
+    var el = document.getElementById('overall_impact_display');
+
+    var ranks = [c, i, a]
+      .filter(function(v) { return v && RANK[v]; })
+      .map(function(v) { return RANK[v]; });
+
+    if (ranks.length === 0) {
+      el.textContent = '—';
+      el.className = 'impact-value impact-unknown';
+      return;
+    }
+
+    var max = Math.max.apply(null, ranks);
+    el.textContent = LABEL[max];
+    el.className = 'impact-value ' + CSS_CLASS[max];
+  };
+
+  // Compute on page load (handles pre-filled edit form)
+  compute_overall();
+})();
+</script>
+{% endblock %}

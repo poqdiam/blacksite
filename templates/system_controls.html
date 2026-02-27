@@ -1,0 +1,358 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — {{ system.name }} Control Plan{% endblock %}
+
+{% block head %}
+<style>
+  /* ── Stats bar ── */
+  .ctrl-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .ctrl-stat {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    text-align: center;
+  }
+  .ctrl-stat-val { font-size: 1.6em; font-weight: 800; line-height: 1; }
+  .ctrl-stat-lbl { font-size: 0.6em; letter-spacing: 1.5px; text-transform: uppercase;
+                   color: var(--muted); margin-top: 4px; }
+
+  /* ── Progress bar ── */
+  .prog-bar { height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; margin-bottom: 20px; }
+  .prog-fill { height: 100%; background: var(--cyan); border-radius: 3px; transition: width 0.4s; }
+
+  /* ── Filter bar ── */
+  .filter-bar {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px;
+  }
+  .filter-bar select, .filter-bar input {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 0.82em; cursor: pointer;
+  }
+
+  /* ── Control rows ── */
+  .ctrl-plan-row {
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+  }
+  .ctrl-plan-row:hover { background: rgba(255,255,255,0.015); }
+  .ctrl-plan-header {
+    display: grid;
+    grid-template-columns: 90px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    cursor: pointer;
+  }
+  .ctrl-plan-id {
+    font-family: var(--mono); font-size: 0.78em; font-weight: 700; color: var(--cyan);
+  }
+  .ctrl-plan-title { font-size: 0.88em; font-weight: 600; }
+  .status-badge {
+    font-size: 0.65em; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.08);
+    white-space: nowrap;
+  }
+
+  /* ── Edit panel ── */
+  .ctrl-edit { display: none; margin-top: 10px; padding: 14px; background: rgba(255,255,255,0.02);
+               border-radius: 6px; border: 1px solid var(--border); }
+  .ctrl-edit.open { display: block; }
+  .ctrl-edit label { display: block; font-size: 0.72em; letter-spacing: 1px; text-transform: uppercase;
+                     color: var(--cyan); margin-bottom: 4px; margin-top: 12px; }
+  .ctrl-edit label:first-child { margin-top: 0; }
+  .ctrl-edit select, .ctrl-edit input, .ctrl-edit textarea {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 7px 10px; color: var(--text);
+    font-size: 0.84em; font-family: var(--mono); box-sizing: border-box;
+  }
+  .ctrl-edit textarea { min-height: 80px; resize: vertical; font-family: var(--mono); }
+  .ctrl-desc { font-size: 0.78em; color: var(--muted); margin-bottom: 10px; line-height: 1.6;
+               display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .save-btn { margin-top: 10px; }
+
+  /* ── Inherited row ── */
+  .inherited-section { display: none; }
+  .inherited-section.active { display: block; }
+</style>
+{% endblock %}
+
+{% block content %}
+{# breadcrumb #}
+<div style="margin-bottom:6px;font-size:0.82em">
+  <a href="/systems" style="color:var(--muted)">Systems</a>
+  <span style="color:var(--border);margin:0 6px">/</span>
+  <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a>
+  <span style="color:var(--border);margin:0 6px">/</span>
+  <span style="color:var(--text)">Control Plan</span>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+  <div>
+    <h1 style="margin:0">Control Plan</h1>
+    <p class="text-muted" style="margin:4px 0 0;font-size:0.85em">
+      {{ system.name }}
+      {% if system.abbreviation %}<span style="font-family:var(--mono);color:var(--cyan);margin-left:8px">{{ system.abbreviation }}</span>{% endif %}
+      · NIST SP 800-53r5
+    </p>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button onclick="importFromAssessment()" class="btn btn-ghost" style="font-size:0.82em;color:var(--yellow)">
+      ⬇ Import from Assessment
+    </button>
+    <a href="/systems/{{ system.id }}/submit" class="btn btn-primary" style="font-size:0.82em">
+      Submit for ATO →
+    </a>
+  </div>
+</div>
+
+{# ── Stats ── #}
+<div class="ctrl-stats">
+  <div class="ctrl-stat">
+    <div class="ctrl-stat-val">{{ stats.total }}</div>
+    <div class="ctrl-stat-lbl">Total Controls</div>
+  </div>
+  <div class="ctrl-stat">
+    <div class="ctrl-stat-val" style="color:var(--green)">{{ stats.implemented }}</div>
+    <div class="ctrl-stat-lbl">Implemented</div>
+  </div>
+  <div class="ctrl-stat">
+    <div class="ctrl-stat-val" style="color:var(--cyan)">{{ stats.inherited }}</div>
+    <div class="ctrl-stat-lbl">Inherited</div>
+  </div>
+  <div class="ctrl-stat">
+    <div class="ctrl-stat-val" style="color:var(--yellow)">{{ stats.in_progress }}</div>
+    <div class="ctrl-stat-lbl">In Progress</div>
+  </div>
+  <div class="ctrl-stat">
+    <div class="ctrl-stat-val" style="color:var(--muted)">{{ stats.not_applicable }}</div>
+    <div class="ctrl-stat-lbl">N/A</div>
+  </div>
+  <div class="ctrl-stat">
+    <div class="ctrl-stat-val" style="color:#333">{{ stats.not_started }}</div>
+    <div class="ctrl-stat-lbl">Not Started</div>
+  </div>
+  <div class="ctrl-stat">
+    <div class="ctrl-stat-val" style="color:var(--cyan)">{{ stats.pct }}%</div>
+    <div class="ctrl-stat-lbl">Coverage</div>
+  </div>
+</div>
+
+<div class="prog-bar">
+  <div class="prog-fill" style="width:{{ stats.pct }}%"></div>
+</div>
+
+{# ── Filters ── #}
+<form method="get" class="filter-bar" id="filterForm">
+  <input type="hidden" name="family" id="familyInput" value="{{ family }}">
+  <input type="hidden" name="status_filter" id="statusInput" value="{{ status_filter }}">
+
+  <select onchange="document.getElementById('familyInput').value=this.value; document.getElementById('filterForm').submit()">
+    <option value="">All Families</option>
+    {% for fam in families %}
+    <option value="{{ fam }}" {% if family == fam %}selected{% endif %}>{{ fam }}</option>
+    {% endfor %}
+  </select>
+
+  <select onchange="document.getElementById('statusInput').value=this.value; document.getElementById('filterForm').submit()">
+    <option value="">All Statuses</option>
+    <option value="not_started"    {% if status_filter=='not_started'    %}selected{% endif %}>Not Started</option>
+    <option value="in_progress"    {% if status_filter=='in_progress'    %}selected{% endif %}>In Progress</option>
+    <option value="implemented"    {% if status_filter=='implemented'    %}selected{% endif %}>Implemented</option>
+    <option value="not_applicable" {% if status_filter=='not_applicable' %}selected{% endif %}>Not Applicable</option>
+    <option value="inherited"      {% if status_filter=='inherited'      %}selected{% endif %}>Inherited</option>
+    <option value="planned"        {% if status_filter=='planned'        %}selected{% endif %}>Planned</option>
+  </select>
+
+  {% if family or status_filter %}
+  <a href="/systems/{{ system.id }}/controls" class="btn btn-ghost" style="font-size:0.82em;color:var(--muted)">Clear</a>
+  {% endif %}
+
+  <span style="color:var(--muted);font-size:0.82em;margin-left:auto">{{ controls|length }} controls</span>
+</form>
+
+{# ── Control list ── #}
+<div class="card" style="padding:0;overflow:hidden">
+  {% if controls %}
+  {% for c in controls %}
+  <div class="ctrl-plan-row" id="row-{{ c.id }}">
+    <div class="ctrl-plan-header" onclick="toggleEdit('{{ c.id }}')">
+      <div class="ctrl-plan-id">{{ c.id | upper }}</div>
+      <div>
+        <div class="ctrl-plan-title">{{ c.title }}</div>
+        {% if c.sc and c.sc.narrative %}
+        <div style="font-size:0.72em;color:var(--muted);margin-top:2px;
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:420px">
+          {{ c.sc.narrative[:80] }}…
+        </div>
+        {% endif %}
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="status-badge" id="badge-{{ c.id }}" style="color:{{ c.color }};border-color:{{ c.color }}22">
+          {{ c.status | replace('_',' ') | title }}
+        </span>
+        <span style="color:var(--border);font-size:0.8em" id="chevron-{{ c.id }}">▾</span>
+      </div>
+    </div>
+
+    <div class="ctrl-edit" id="edit-{{ c.id }}">
+      {% if c.text %}
+      <div class="ctrl-desc">{{ c.text }}</div>
+      {% endif %}
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;flex-wrap:wrap" class="ctrl-edit-grid">
+        <div>
+          <label>Implementation Status</label>
+          <select id="status-{{ c.id }}">
+            {% for s in ['not_started','in_progress','implemented','planned','not_applicable','inherited'] %}
+            <option value="{{ s }}" {% if c.status == s %}selected{% endif %}>{{ s | replace('_',' ') | title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Implementation Type</label>
+          <select id="itype-{{ c.id }}">
+            {% for t in ['system','hybrid','inherited'] %}
+            <option value="{{ t }}" {% if c.sc and c.sc.implementation_type == t %}selected{% endif %}>{{ t | title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Responsible Role</label>
+          <input type="text" id="role-{{ c.id }}" value="{{ c.sc.responsible_role if c.sc else '' }}" placeholder="e.g. System Owner">
+        </div>
+      </div>
+
+      {# Inherited From (shown when status=inherited) #}
+      <div class="inherited-section {% if c.status == 'inherited' %}active{% endif %}" id="inh-{{ c.id }}">
+        <label>Inherit From (System)</label>
+        <select id="inhsys-{{ c.id }}">
+          <option value="">— Select provider system —</option>
+          {% for os in other_systems %}
+          <option value="{{ os.id }}" {% if c.sc and c.sc.inherited_from == os.id %}selected{% endif %}>
+            {{ os.name }}{% if os.abbreviation %} ({{ os.abbreviation }}){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <label style="margin-top:8px">Provider Narrative</label>
+        <textarea id="inhnarr-{{ c.id }}" placeholder="What the providing system implements for this control…">{{ c.sc.inherited_narrative if c.sc else '' }}</textarea>
+      </div>
+
+      <label>Implementation Narrative</label>
+      <textarea id="narr-{{ c.id }}" placeholder="Describe how this control is implemented…">{{ c.sc.narrative if c.sc else '' }}</textarea>
+
+      <div class="save-btn">
+        <button onclick="saveControl('{{ c.id }}')" class="btn btn-primary" style="font-size:0.82em;padding:7px 18px" id="savebtn-{{ c.id }}">
+          Save
+        </button>
+        {% if c.sc and c.sc.last_updated_by %}
+        <span style="font-size:0.72em;color:var(--muted);margin-left:10px">
+          Last saved by {{ c.sc.last_updated_by }}
+          {% if c.sc.last_updated_at %}· {{ c.sc.last_updated_at.strftime('%Y-%m-%d') }}{% endif %}
+        </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div style="padding:48px;text-align:center;color:var(--muted)">
+    No controls match your filters.
+    <a href="/systems/{{ system.id }}/controls" style="color:var(--cyan)">Clear</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SYSTEM_ID = "{{ system.id }}";
+
+function toggleEdit(ctrlId) {
+  const panel   = document.getElementById('edit-' + ctrlId);
+  const chevron = document.getElementById('chevron-' + ctrlId);
+  const isOpen  = panel.classList.contains('open');
+  panel.classList.toggle('open', !isOpen);
+  chevron.textContent = isOpen ? '▾' : '▴';
+}
+
+function saveControl(ctrlId) {
+  const btn   = document.getElementById('savebtn-' + ctrlId);
+  const badge = document.getElementById('badge-' + ctrlId);
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+
+  const status  = document.getElementById('status-'  + ctrlId).value;
+  const itype   = document.getElementById('itype-'   + ctrlId).value;
+  const role    = document.getElementById('role-'    + ctrlId).value;
+  const narr    = document.getElementById('narr-'    + ctrlId).value;
+  const inhsys  = document.getElementById('inhsys-'  + ctrlId)?.value || '';
+  const inhnarr = document.getElementById('inhnarr-' + ctrlId)?.value || '';
+
+  const body = new URLSearchParams({
+    status, implementation_type: itype, responsible_role: role,
+    narrative: narr, inherited_from: inhsys, inherited_narrative: inhnarr
+  });
+
+  fetch(`/systems/${SYSTEM_ID}/controls/${ctrlId}`, {method:'POST', body})
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        btn.textContent = '✓ Saved';
+        btn.style.background = 'var(--green)';
+        // Update badge
+        const labels = {
+          'not_started':'Not Started','in_progress':'In Progress','implemented':'Implemented',
+          'planned':'Planned','not_applicable':'Not Applicable','inherited':'Inherited'
+        };
+        const colors = {
+          'implemented':'var(--green)','in_progress':'var(--yellow)','planned':'var(--cyan)',
+          'not_applicable':'var(--muted)','inherited':'var(--cyan)','not_started':'#333'
+        };
+        badge.textContent = labels[status] || status;
+        badge.style.color = colors[status] || 'var(--muted)';
+        badge.style.borderColor = (colors[status] || 'var(--muted)') + '33';
+        setTimeout(() => {
+          btn.textContent = 'Save';
+          btn.style.background = '';
+          btn.disabled = false;
+        }, 1800);
+      }
+    })
+    .catch(() => {
+      btn.textContent = '✗ Error';
+      btn.style.background = 'var(--red)';
+      setTimeout(() => { btn.textContent = 'Save'; btn.style.background=''; btn.disabled=false; }, 2000);
+    });
+}
+
+// Show/hide inherited fields based on status
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[id^="status-"]').forEach(sel => {
+    const ctrlId = sel.id.replace('status-', '');
+    sel.addEventListener('change', () => {
+      const section = document.getElementById('inh-' + ctrlId);
+      if (section) section.classList.toggle('active', sel.value === 'inherited');
+    });
+  });
+});
+
+function importFromAssessment() {
+  if (!confirm('Import control statuses from the most recent linked assessment?\nThis will only update controls currently set to "Not Started".')) return;
+  fetch(`/systems/${SYSTEM_ID}/import-controls`, {method:'POST'})
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        alert(`Imported ${d.imported} control records from assessment ${d.assessment_id.substring(0,8)}…\nReloading page.`);
+        window.location.reload();
+      } else {
+        alert('Error: ' + (d.error || 'Unknown error'));
+      }
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Daily Quiz{% endblock %}
+
+{% block content %}
+<div style="max-width:720px;margin:0 auto">
+  <div class="breadcrumb">
+    <a href="/dashboard">Dashboard</a>
+    <span class="sep">/</span>
+    <span>Daily Quiz</span>
+  </div>
+
+  <h1>CISSP Daily Quiz</h1>
+  <p class="text-muted" style="margin-bottom:8px">
+    {{ questions|length }} questions · Pass at {{ threshold }}% · All 8 domains
+  </p>
+  <div style="padding:8px 14px;background:var(--surface);border-radius:4px;
+              border-left:3px solid var(--cyan);font-size:0.8em;color:var(--muted);
+              margin-bottom:28px">
+    Select the best answer for each question. One attempt per day.
+  </div>
+
+  <form method="post" action="/dashboard/quiz/submit" id="quiz-form">
+    <input type="hidden" name="q_ids" value="{{ q_ids }}"/>
+
+    {% for q in questions %}
+    <div class="card" style="margin-bottom:14px;padding:20px" id="q{{ q.id }}">
+      <div style="font-size:0.62em;color:var(--cyan);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">
+        Question {{ loop.index }} of {{ questions|length }}
+        {% if q.domain %}&nbsp;·&nbsp;{{ q.domain }}{% endif %}
+      </div>
+      <div style="font-weight:600;margin-bottom:14px;line-height:1.55">{{ q.question }}</div>
+
+      <div style="display:flex;flex-direction:column;gap:6px">
+        {% for letter, text in q.choices.items() %}
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;
+                      border-radius:5px;border:1px solid var(--border);cursor:pointer;
+                      transition:border-color 0.15s,background 0.15s"
+               class="choice-label" data-qid="{{ q.id }}">
+          <input type="radio" name="q{{ q.id }}" value="{{ letter }}"
+                 style="flex-shrink:0;margin-top:3px;accent-color:var(--cyan)"/>
+          <span>
+            <span style="font-weight:700;color:var(--cyan);margin-right:4px">{{ letter }}.</span>
+            {{ text }}
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-top:8px">
+      <a href="/dashboard" class="btn btn-ghost">← Back</a>
+      <button type="submit" class="btn btn-primary" id="submit-btn" style="padding:12px 32px">
+        Submit Quiz →
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.choice-label:has(input:checked) {
+  border-color: var(--cyan);
+  background: rgba(0,255,204,0.05);
+}
+.choice-label:hover { border-color: rgba(0,255,204,0.4); }
+</style>
+<script>
+document.getElementById('quiz-form').addEventListener('submit', function() {
+  const btn = document.getElementById('submit-btn');
+  btn.textContent = 'Submitting…';
+  btn.disabled = true;
+});
+</script>
+{% endblock %}

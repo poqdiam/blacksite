@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — {% if item %}{{ item.weakness_name }}{% else %}New POA&M Item{% endif %}{% endblock %}
+
+{% block content %}
+{% set title = item.weakness_name if item else "New POA&M Item" %}
+
+{# ── Breadcrumb ──────────────────────────────────────────────────────────── #}
+<div class="breadcrumb">
+  <a href="/poam">POA&amp;M Tracker</a>
+  <span class="sep">/</span>
+  <span>{{ title }}</span>
+</div>
+
+{# ── Page header ──────────────────────────────────────────────────────────── #}
+{% if item %}
+  {# Editing: show rich header with badges #}
+  {% set sev = item.severity or 'Low' %}
+  {% if sev == 'Critical' %}
+    {% set sev_color = 'var(--red)' %}
+    {% set sev_bg = 'rgba(244,67,54,0.15)' %}
+  {% elif sev == 'High' %}
+    {% set sev_color = '#ff6b35' %}
+    {% set sev_bg = 'rgba(255,107,53,0.15)' %}
+  {% elif sev == 'Moderate' %}
+    {% set sev_color = 'var(--yellow)' %}
+    {% set sev_bg = 'rgba(255,179,0,0.15)' %}
+  {% elif sev == 'Low' %}
+    {% set sev_color = 'var(--green)' %}
+    {% set sev_bg = 'rgba(0,200,83,0.15)' %}
+  {% else %}
+    {% set sev_color = 'var(--grey)' %}
+    {% set sev_bg = 'rgba(158,158,158,0.1)' %}
+  {% endif %}
+  {% set st = item.status or 'open' %}
+  {% if st == 'closed' %}
+    {% set st_color = 'var(--green)' %}
+    {% set st_bg = 'rgba(0,200,83,0.15)' %}
+  {% elif st == 'in_progress' %}
+    {% set st_color = 'var(--yellow)' %}
+    {% set st_bg = 'rgba(255,179,0,0.15)' %}
+  {% elif st == 'risk_accepted' %}
+    {% set st_color = 'var(--cyan)' %}
+    {% set st_bg = 'rgba(0,255,204,0.1)' %}
+  {% elif st == 'false_positive' %}
+    {% set st_color = 'var(--muted)' %}
+    {% set st_bg = 'rgba(136,136,136,0.1)' %}
+  {% else %}
+    {% set st_color = 'var(--grey)' %}
+    {% set st_bg = 'rgba(158,158,158,0.1)' %}
+  {% endif %}
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+    <div>
+      <h1 style="margin:0;margin-bottom:8px">{{ item.weakness_name }}</h1>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="badge" style="background:{{ sev_bg }};color:{{ sev_color }}">{{ sev }}</span>
+        <span class="badge" style="background:{{ st_bg }};color:{{ st_color }}">{{ st | replace('_', ' ') }}</span>
+        {% if item.control_id %}
+        <span class="mono" style="font-size:0.78em;color:var(--cyan)">{{ item.control_id }}</span>
+        {% endif %}
+        {% if item.created_at %}
+        <span style="font-size:0.75em;color:var(--muted)">
+          Created {{ item.created_at.strftime('%Y-%m-%d') if item.created_at.strftime is defined else item.created_at }}
+        </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div style="margin-bottom:24px">
+    <h1 style="margin:0">New POA&amp;M Item</h1>
+    <p class="text-muted" style="margin-top:4px;font-size:0.88em">Document a control weakness and remediation plan</p>
+  </div>
+{% endif %}
+
+{# ── Form card ────────────────────────────────────────────────────────────── #}
+<div class="card">
+  <form method="POST" action="{{ action }}">
+
+    {# ── Section: Identification ── #}
+    <div style="margin-bottom:28px">
+      <div class="section-header" style="margin-bottom:18px">Identification</div>
+
+      <div class="form-group">
+        <label for="weakness_name">Weakness Name <span style="color:var(--red)">*</span></label>
+        <input type="text" id="weakness_name" name="weakness_name" required
+               value="{{ item.weakness_name if item else '' }}"
+               placeholder="Brief, descriptive name for the identified weakness">
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label for="system_id">System</label>
+          <select id="system_id" name="system_id">
+            <option value="">— No System —</option>
+            {% for sys in systems %}
+            <option value="{{ sys.id }}"
+              {% if item and item.system_id == sys.id %}selected
+              {% elif linked_system and linked_system.id == sys.id %}selected{% endif %}>
+              {{ sys.name }}{% if sys.abbreviation %} ({{ sys.abbreviation }}){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0">
+          <label for="control_id">Control ID</label>
+          <input type="text" id="control_id" name="control_id"
+                 value="{{ item.control_id if item else (control_id or '') }}"
+                 placeholder="e.g. ac-2, si-3">
+        </div>
+      </div>
+
+      {% if assessment_id %}
+      <input type="hidden" name="assessment_id" value="{{ assessment_id }}">
+      {% else %}
+      <div class="form-group" style="margin-top:16px">
+        <label for="assessment_id">Assessment ID</label>
+        <input type="text" id="assessment_id" name="assessment_id"
+               value="{{ item.assessment_id if item else '' }}"
+               placeholder="Optional — link to source assessment">
+      </div>
+      {% endif %}
+    </div>
+
+    {# ── Section: Weakness Details ── #}
+    <div style="margin-bottom:28px">
+      <div class="section-header" style="margin-bottom:18px">Weakness Details</div>
+
+      <div class="form-group">
+        <label for="weakness_description">Description</label>
+        <textarea id="weakness_description" name="weakness_description"
+                  rows="4" placeholder="Describe the nature and scope of the weakness…">{{ item.weakness_description if item else '' }}</textarea>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label for="detection_source">Detection Source</label>
+          <select id="detection_source" name="detection_source">
+            {% for src in ['assessment', 'scan', 'audit', 'pentest', 'self_report'] %}
+            <option value="{{ src }}"
+              {% if item and item.detection_source == src %}selected{% endif %}>
+              {{ src | replace('_', ' ') | title }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0">
+          <label for="severity">Severity <span style="color:var(--red)">*</span></label>
+          <select id="severity" name="severity" onchange="updateSevColor(this)">
+            {% for sev_opt, sev_col in [
+                ('Critical',     '#f44336'),
+                ('High',         '#ff6b35'),
+                ('Moderate',     '#ffb300'),
+                ('Low',          '#00c853'),
+                ('Informational','#9e9e9e'),
+            ] %}
+            <option value="{{ sev_opt }}" data-color="{{ sev_col }}"
+              {% if item and item.severity == sev_opt %}selected
+              {% elif not item and sev_opt == 'Moderate' %}selected{% endif %}>
+              {{ sev_opt }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    {# ── Section: Remediation ── #}
+    <div style="margin-bottom:28px">
+      <div class="section-header" style="margin-bottom:18px">Remediation</div>
+
+      <div class="form-group">
+        <label for="responsible_party">Responsible Party</label>
+        <input type="text" id="responsible_party" name="responsible_party"
+               value="{{ item.responsible_party if item else '' }}"
+               placeholder="Team or individual accountable for remediation">
+      </div>
+
+      <div class="form-group">
+        <label for="remediation_plan">Remediation Plan</label>
+        <textarea id="remediation_plan" name="remediation_plan"
+                  rows="4" placeholder="Describe specific steps, tools, and procedures to remediate this weakness…">{{ item.remediation_plan if item else '' }}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="resources_required">Resources Required</label>
+        <textarea id="resources_required" name="resources_required"
+                  rows="2" placeholder="Budget, personnel, tools, or other resources needed…">{{ item.resources_required if item else '' }}</textarea>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label for="scheduled_completion">Scheduled Completion</label>
+          <input type="date" id="scheduled_completion" name="scheduled_completion"
+                 value="{{ item.scheduled_completion.strftime('%Y-%m-%d') if item and item.scheduled_completion and item.scheduled_completion.strftime is defined else (item.scheduled_completion if item and item.scheduled_completion else '') }}">
+        </div>
+
+        {% if item %}
+        <div class="form-group" style="margin-bottom:0">
+          <label for="completion_date">Actual Completion Date</label>
+          <input type="date" id="completion_date" name="completion_date"
+                 value="{{ item.completion_date.strftime('%Y-%m-%d') if item.completion_date and item.completion_date.strftime is defined else (item.completion_date if item.completion_date else '') }}">
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# ── Status — edit only ── #}
+    {% if item %}
+    <div style="margin-bottom:28px">
+      <div class="section-header" style="margin-bottom:18px">Status</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label for="status">Current Status</label>
+          <select id="status" name="status">
+            {% for st_opt, st_label in [
+                ('open',           'Open'),
+                ('in_progress',    'In Progress'),
+                ('closed',         'Closed'),
+                ('risk_accepted',  'Risk Accepted'),
+                ('false_positive', 'False Positive'),
+            ] %}
+            <option value="{{ st_opt }}"
+              {% if item.status == st_opt %}selected{% endif %}>
+              {{ st_label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── Comments ── #}
+    <div style="margin-bottom:28px">
+      <div class="section-header" style="margin-bottom:18px">Comments</div>
+      <div class="form-group" style="margin-bottom:0">
+        <label for="comments">Notes &amp; Comments</label>
+        <textarea id="comments" name="comments"
+                  rows="3" placeholder="Additional context, blockers, or notes…">{{ item.comments if item else '' }}</textarea>
+      </div>
+    </div>
+
+    {# ── Form actions ── #}
+    <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)">
+      <a href="/poam" class="btn btn-ghost btn-sm">← Cancel</a>
+      <button type="submit" class="btn btn-primary">
+        {% if item %}Save Changes{% else %}Create POA&amp;M Item{% endif %}
+      </button>
+    </div>
+
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateSevColor(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const color = opt.dataset.color || 'var(--text)';
+  sel.style.color = color;
+  sel.style.borderColor = color + '66';
+}
+// Apply on load
+document.addEventListener('DOMContentLoaded', function() {
+  const sel = document.getElementById('severity');
+  if (sel) updateSevColor(sel);
+});
+</script>
+{% endblock %}

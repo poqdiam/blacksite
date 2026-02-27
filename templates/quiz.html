@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — CISSP Quiz{% endblock %}
+
+{% block content %}
+<div style="max-width:760px;margin:0 auto">
+  <div class="breadcrumb">
+    <a href="/results/{{ assessment_id }}">Results</a>
+    <span class="sep">/</span>
+    <span>Full Quiz</span>
+  </div>
+  <h1>CISSP Assessment Quiz</h1>
+  <p class="text-muted" style="margin-bottom:8px">
+    {{ candidate_name }} — {{ questions|length }} questions covering all 8 CISSP domains.
+  </p>
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:32px">
+    <div style="flex:1;background:var(--surface);border-radius:99px;height:4px;overflow:hidden">
+      <div id="progress-bar" style="height:100%;background:var(--cyan);width:0%;transition:width 0.3s"></div>
+    </div>
+    <span id="progress-text" class="text-muted mono" style="font-size:0.8em;white-space:nowrap">0/{{ questions|length }}</span>
+  </div>
+
+  <form method="post" action="/quiz/{{ assessment_id }}/submit" id="quiz-form">
+    {% for q in questions %}
+    <div class="card" id="q{{ q.id }}" style="{% if not loop.first %}display:none{% endif %}">
+      <div class="card-title">Question {{ loop.index }} of {{ questions|length }}</div>
+      <p style="font-size:1.05em;font-weight:600;margin-bottom:20px;line-height:1.5">
+        {{ q.question }}
+      </p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        {% for letter, text in q.choices.items() %}
+        <label style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;
+                      background:var(--surface);border:1px solid var(--border);
+                      border-radius:6px;cursor:pointer;transition:border-color 0.15s"
+               class="choice-label">
+          <input type="radio" name="q{{ q.id }}" value="{{ letter }}" style="margin-top:3px;accent-color:var(--cyan)"/>
+          <span><strong style="color:var(--cyan)">{{ letter }}.</strong> {{ text }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:24px">
+      <button type="button" class="btn btn-ghost" id="prev-btn" onclick="navigate(-1)" disabled>← Back</button>
+      <button type="button" class="btn btn-primary" id="next-btn" onclick="navigate(1)">Next →</button>
+      <button type="submit"  class="btn btn-primary" id="submit-btn" style="display:none">
+        Submit Quiz →
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const total    = {{ questions|length }};
+let current    = 0;
+const cards    = document.querySelectorAll('.card');
+const progress = document.getElementById('progress-bar');
+const progText = document.getElementById('progress-text');
+
+function updateProgress() {
+  let answered = 0;
+  document.querySelectorAll('input[type=radio]:checked').forEach(() => answered++);
+  const pct = (answered / total * 100).toFixed(0);
+  progress.style.width = pct + '%';
+  progText.textContent = answered + '/' + total;
+}
+
+function navigate(dir) {
+  cards[current].style.display = 'none';
+  current = Math.max(0, Math.min(total - 1, current + dir));
+  cards[current].style.display = 'block';
+  document.getElementById('prev-btn').disabled = (current === 0);
+  const isLast = (current === total - 1);
+  document.getElementById('next-btn').style.display = isLast ? 'none' : 'inline-block';
+  document.getElementById('submit-btn').style.display = isLast ? 'inline-block' : 'none';
+}
+
+document.querySelectorAll('.choice-label').forEach(label => {
+  label.addEventListener('click', () => {
+    const name = label.querySelector('input').name;
+    document.querySelectorAll(`label:has(input[name="${name}"])`).forEach(l => {
+      l.style.borderColor = 'var(--border)';
+    });
+    label.style.borderColor = 'var(--cyan)';
+    updateProgress();
+  });
+});
+
+document.getElementById('quiz-form').addEventListener('submit', () => {
+  document.getElementById('submit-btn').textContent = 'Grading…';
+  document.getElementById('submit-btn').disabled = true;
+});
+
+updateProgress();
+</script>
+{% endblock %}

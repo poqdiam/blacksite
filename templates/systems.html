@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — System Catalog{% endblock %}
+
+{% block head %}
+<style>
+  .system-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+  }
+
+  .sys-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+  .sys-card:hover {
+    border-color: #2a2a40;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+
+  .sys-card-header {
+    margin-bottom: 14px;
+  }
+  .sys-card-name {
+    font-size: 1.05em;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.3;
+    margin-bottom: 3px;
+  }
+  .sys-card-abbrev {
+    font-family: var(--mono);
+    font-size: 0.72em;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .sys-card-badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+
+  .sys-card-meta {
+    font-size: 0.8em;
+    color: var(--muted);
+    margin-bottom: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .sys-card-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sys-card-meta-label {
+    font-size: 0.7em;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #444;
+    min-width: 44px;
+    flex-shrink: 0;
+  }
+
+  .fips-cia {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 0.8em;
+  }
+  .fips-item {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .fips-item .fips-key {
+    color: var(--muted);
+    font-size: 0.85em;
+  }
+  .fips-item .fips-val-low      { color: var(--green);  font-weight: 700; }
+  .fips-item .fips-val-moderate { color: var(--yellow); font-weight: 700; }
+  .fips-item .fips-val-high     { color: var(--red);    font-weight: 700; }
+
+  .sys-card-footer {
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid rgba(30,30,48,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .badge-auth-authorized  { background: rgba(0,200,83,0.15);  color: var(--green);  border: 1px solid rgba(0,200,83,0.25); }
+  .badge-auth-in_progress { background: rgba(255,179,0,0.15); color: var(--yellow); border: 1px solid rgba(255,179,0,0.25); }
+  .badge-auth-expired     { background: rgba(244,67,54,0.15); color: var(--red);    border: 1px solid rgba(244,67,54,0.25); }
+  .badge-auth-not_auth    { background: rgba(158,158,158,0.1);color: var(--grey);   border: 1px solid rgba(158,158,158,0.2); }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 24px;
+    color: var(--muted);
+  }
+  .empty-state-icon {
+    font-size: 2.5em;
+    margin-bottom: 16px;
+    opacity: 0.4;
+    font-family: var(--mono);
+    color: var(--cyan);
+    letter-spacing: 2px;
+  }
+  .empty-state h2 {
+    font-size: 1em;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .empty-state p {
+    font-size: 0.85em;
+    margin-bottom: 20px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Page header ──────────────────────────────────────────────────────────── #}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+  <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap">
+    <h1 style="margin:0">System Catalog</h1>
+    <span class="text-muted" style="font-size:0.85em">FIPS 199 registered information systems</span>
+  </div>
+  {% if is_admin %}
+  <a href="/systems/new" class="btn btn-primary">+ New System</a>
+  {% endif %}
+</div>
+
+{# ── Stat row ─────────────────────────────────────────────────────────────── #}
+<div class="stats" style="margin-bottom:28px">
+  <div class="stat">
+    <div class="stat-value">{{ systems | length }}</div>
+    <div class="stat-label">Total Systems</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--green)">{{ authorized_ct }}</div>
+    <div class="stat-label">Authorized</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--yellow)">{{ in_progress_ct }}</div>
+    <div class="stat-label">In Progress</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--red)">{{ expired_ct }}</div>
+    <div class="stat-label">Expired</div>
+  </div>
+</div>
+
+{# ── Empty state ──────────────────────────────────────────────────────────── #}
+{% if not systems %}
+<div class="card" style="padding:0">
+  <div class="empty-state">
+    <div class="empty-state-icon">[ ]</div>
+    <h2>No systems registered yet</h2>
+    <p>Add your first information system to begin tracking authorization status, FIPS 199 impact levels, and assessments.</p>
+    {% if is_admin %}
+    <a href="/systems/new" class="btn btn-primary">+ Register System</a>
+    {% else %}
+    <p class="text-muted" style="font-size:0.8em;margin:0">Contact your administrator to register systems.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% else %}
+
+{# ── System card grid ─────────────────────────────────────────────────────── #}
+<div class="system-grid">
+  {% for sys in systems %}
+  <div class="sys-card">
+
+    {# Name + abbreviation #}
+    <div class="sys-card-header">
+      <div class="sys-card-name">{{ sys.name }}</div>
+      {% if sys.abbreviation %}
+      <div class="sys-card-abbrev">{{ sys.abbreviation }}</div>
+      {% endif %}
+    </div>
+
+    {# Type + environment badges #}
+    <div class="sys-card-badges">
+      {% if sys.system_type %}
+      <span class="badge badge-processing">
+        {% if sys.system_type == 'major_application' %}Major Application
+        {% elif sys.system_type == 'general_support_system' %}General Support
+        {% elif sys.system_type == 'minor_application' %}Minor Application
+        {% else %}{{ sys.system_type }}{% endif %}
+      </span>
+      {% endif %}
+      {% if sys.environment %}
+      <span class="badge badge-not_found">
+        {% if sys.environment == 'on_prem' %}On-Prem
+        {% elif sys.environment == 'cloud' %}Cloud
+        {% elif sys.environment == 'hybrid' %}Hybrid
+        {% elif sys.environment == 'saas' %}SaaS
+        {% elif sys.environment == 'paas' %}PaaS
+        {% elif sys.environment == 'iaas' %}IaaS
+        {% else %}{{ sys.environment }}{% endif %}
+      </span>
+      {% endif %}
+    </div>
+
+    {# Owner + FIPS 199 CIA #}
+    <div class="sys-card-meta">
+      {% if sys.owner_name %}
+      <div class="sys-card-meta-row">
+        <span class="sys-card-meta-label">Owner</span>
+        <span style="color:var(--text)">{{ sys.owner_name }}</span>
+      </div>
+      {% endif %}
+
+      <div class="sys-card-meta-row">
+        <span class="sys-card-meta-label">FIPS 199</span>
+        <div class="fips-cia">
+          {% for key, val in [('C', sys.confidentiality_impact), ('I', sys.integrity_impact), ('A', sys.availability_impact)] %}
+          <div class="fips-item">
+            <span class="fips-key">{{ key }}:</span>
+            {% set v = (val or 'low') | lower %}
+            {% if v == 'low' %}
+              <span class="fips-val-low">L</span>
+            {% elif v == 'moderate' %}
+              <span class="fips-val-moderate">M</span>
+            {% elif v == 'high' %}
+              <span class="fips-val-high">H</span>
+            {% else %}
+              <span style="color:var(--muted)">—</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {# Footer: auth status + actions #}
+    <div class="sys-card-footer">
+
+      {# Auth status badge #}
+      {% if sys.auth_status == 'authorized' %}
+        <span class="badge badge-auth-authorized">Authorized</span>
+      {% elif sys.auth_status == 'in_progress' %}
+        <span class="badge badge-auth-in_progress">In Progress</span>
+      {% elif sys.auth_status == 'expired' %}
+        <span class="badge badge-auth-expired">Expired</span>
+      {% else %}
+        <span class="badge badge-auth-not_auth">Not Authorized</span>
+      {% endif %}
+
+      {# Action links #}
+      <div style="display:flex;align-items:center;gap:8px">
+        {% if is_admin %}
+        <a href="/systems/{{ sys.id }}/edit"
+           class="btn btn-ghost btn-sm"
+           style="font-size:0.72em;padding:3px 10px">Edit</a>
+        {% endif %}
+        <a href="/systems/{{ sys.id }}"
+           style="font-size:0.8em;color:var(--cyan);white-space:nowrap">View Details →</a>
+      </div>
+
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

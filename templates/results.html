@@ -1,0 +1,727 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — {{ candidate_name }}{% endblock %}
+
+{% block head %}
+<style>
+.ctrl-edit-panel summary { user-select: none; }
+.ctrl-edit-panel summary:hover { color: var(--cyan) !important; }
+.ctrl-edit-panel[open] summary { color: var(--cyan) !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+{# ── Breadcrumb ──────────────────────────────────────────────────────────── #}
+<div class="breadcrumb">
+  {% if is_admin %}
+  <a href="/admin">Dashboard</a>
+  {% else %}
+  <a href="/dashboard">Dashboard</a>
+  {% endif %}
+  <span class="sep">/</span>
+  <span>{{ candidate_name }}</span>
+</div>
+
+{# ── Header ──────────────────────────────────────────────────────────────── #}
+<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:6px">
+  <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap">
+    <h1 style="margin:0">{{ candidate_name }}</h1>
+    {% if assessment.is_allstar %}
+    <span style="background:var(--gold);color:#000;padding:3px 12px;border-radius:20px;
+                 font-size:0.75em;font-weight:900;letter-spacing:1px">★ ALL STAR</span>
+    {% endif %}
+  </div>
+  {% if is_admin %}
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <a href="/admin/download/{{ assessment_id }}/json" class="btn btn-ghost btn-sm">↓ JSON</a>
+    <a href="/admin/download/{{ assessment_id }}/original" class="btn btn-ghost btn-sm">↓ File</a>
+    <a href="/admin/download/{{ assessment_id }}/print" target="_blank" class="btn btn-ghost btn-sm">Print</a>
+    <a href="/ssp/{{ assessment_id }}" target="_blank" class="btn btn-ghost btn-sm">SSP Doc</a>
+    <a href="/ssp/{{ assessment_id }}/oscal" class="btn btn-ghost btn-sm">↓ OSCAL</a>
+  </div>
+  {% endif %}
+</div>
+<p class="text-muted mono" style="font-size:0.8em;margin-bottom:8px">
+  {{ assessment.filename }}
+  &nbsp;·&nbsp;
+  {{ assessment.uploaded_at.strftime('%Y-%m-%d %H:%M UTC') if assessment.uploaded_at else '' }}
+  &nbsp;·&nbsp;
+  {{ controls|length }} controls evaluated
+  &nbsp;·&nbsp;
+  <a href="/quiz/{{ assessment_id }}" style="color:var(--cyan)">Take full quiz →</a>
+</p>
+
+{# ── System linkage ───────────────────────────────────────────────────────── #}
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:24px;flex-wrap:wrap">
+  {% if linked_system %}
+  <span class="text-muted" style="font-size:0.82em">Linked system:</span>
+  <a href="/systems/{{ linked_system.id }}" style="font-size:0.82em;font-weight:600">
+    {{ linked_system.name }}
+    {% if linked_system.abbreviation %}({{ linked_system.abbreviation }}){% endif %}
+  </a>
+  {% else %}
+  <span class="text-muted" style="font-size:0.78em">No system linked</span>
+  {% endif %}
+  {% if is_admin and all_systems %}
+  <div style="display:inline-flex;align-items:center;gap:6px" id="link-sys-wrap">
+    <select id="link-sys-sel" style="background:var(--surface);border:1px solid var(--border);
+            border-radius:4px;color:var(--muted);padding:4px 8px;font-size:0.78em;cursor:pointer">
+      <option value="">— Link to System…</option>
+      {% for s in all_systems %}
+      <option value="{{ s.id }}" {% if linked_system and s.id == linked_system.id %}selected{% endif %}>
+        {{ s.name }}{% if s.abbreviation %} ({{ s.abbreviation }}){% endif %}
+      </option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-ghost btn-sm" onclick="linkSystem()" style="font-size:0.75em">Save</button>
+    <span id="link-sys-msg" style="font-size:0.78em;color:var(--muted)"></span>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Score overview with donut charts ────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:28px">
+
+  {% set score_panels = [
+    ("SSP Score",      assessment.ssp_score,      "chartSSP",     "#00ffcc"),
+    ("Quiz Score",     assessment.quiz_score,      "chartQuiz",    "#00ffcc"),
+    ("Combined",       assessment.combined_score,  "chartCombined","#ffd700"),
+  ] %}
+  {% for label, val, cid, color in score_panels %}
+  <div class="card" style="padding:20px;text-align:center">
+    <canvas id="{{ cid }}" width="120" height="120" style="max-width:120px;margin:0 auto 10px"></canvas>
+    <div style="font-size:1.8em;font-weight:900;color:{{ color }}">{{ val|round(1) }}</div>
+    <div style="font-size:0.72em;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">{{ label }}</div>
+  </div>
+  {% endfor %}
+
+  {# Count cards #}
+  {% set count_panels = [
+    (assessment.controls_complete,     "Complete",     "#00c853"),
+    (assessment.controls_partial,      "Partial",      "#ffb300"),
+    (assessment.controls_insufficient, "Insufficient", "#f44336"),
+    (assessment.controls_not_found,    "Not Found",    "#555"),
+  ] %}
+  {% for val, label, color in count_panels %}
+  <div class="card" style="padding:20px;text-align:center;cursor:pointer"
+       onclick="filterGrade('{{ label.upper().replace(' ','_') }}')">
+    <div style="font-size:2.2em;font-weight:900;color:{{ color }};line-height:1">{{ val }}</div>
+    <div style="font-size:0.72em;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-top:4px">{{ label }}</div>
+  </div>
+  {% endfor %}
+
+</div>
+
+{# ── Charts row ──────────────────────────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-bottom:28px">
+
+  <div class="card" style="padding:20px">
+    <div style="font-size:0.75em;letter-spacing:1.5px;text-transform:uppercase;
+                color:var(--muted);margin-bottom:14px">Grade Distribution</div>
+    <canvas id="chartGrades" height="200"></canvas>
+  </div>
+
+  <div class="card" style="padding:20px">
+    <div style="font-size:0.75em;letter-spacing:1.5px;text-transform:uppercase;
+                color:var(--muted);margin-bottom:14px">Coverage by Family</div>
+    <div style="max-height:260px;overflow-y:auto">
+      <canvas id="chartFamilies"></canvas>
+    </div>
+  </div>
+
+</div>
+
+{# ── Controls section ────────────────────────────────────────────────────── #}
+<div class="card" style="padding:20px;margin-bottom:28px">
+  <div style="display:flex;align-items:center;justify-content:space-between;
+              flex-wrap:wrap;gap:10px;margin-bottom:16px">
+    <div style="font-size:0.85em;font-weight:700;letter-spacing:1px;text-transform:uppercase">
+      Control Assessment
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:0.75em">
+      <button class="filter-btn active" onclick="filterGrade('ALL')">All</button>
+      <button class="filter-btn" onclick="filterGrade('INSUFFICIENT')" style="--fc:var(--red)">Insufficient</button>
+      <button class="filter-btn" onclick="filterGrade('PARTIAL')"      style="--fc:var(--yellow)">Partial</button>
+      <button class="filter-btn" onclick="filterGrade('COMPLETE')"     style="--fc:var(--green)">Complete</button>
+      <button class="filter-btn" onclick="filterGrade('NOT_FOUND')"    style="--fc:#555">Not Found</button>
+      <button class="filter-btn" onclick="filterGrade('NA')"           style="--fc:#444">N/A</button>
+    </div>
+  </div>
+
+  {# Group by family #}
+  {% set ns = namespace(last_family='') %}
+  {% for c in controls | sort(attribute='control_family') %}
+    {% if c.control_family != ns.last_family %}
+      {% if ns.last_family != '' %}</div>{% endif %}
+      {% set ns.last_family = c.control_family %}
+      {% set fam_stats = family_stats.get(c.control_family|upper, {}) %}
+      {% set fam_total = fam_stats.get('total', 0) %}
+      {% set fam_complete = fam_stats.get('COMPLETE', 0) %}
+      {% set fam_pct = ((fam_complete / fam_total * 100)|round|int) if fam_total > 0 else 0 %}
+      <details class="family-group" data-family="{{ c.control_family }}" open>
+        <summary style="padding:10px 14px;cursor:pointer;user-select:none;
+                        background:#0a0a12;border-radius:6px;margin-bottom:4px;
+                        display:flex;align-items:center;gap:10px;list-style:none">
+          <span style="font-size:0.8em;font-weight:900;letter-spacing:2px;color:var(--cyan)">
+            {{ c.control_family|upper }}
+          </span>
+          <span style="flex:1;font-size:0.72em;color:var(--muted)"></span>
+          <span style="font-size:0.72em;color:var(--muted)">
+            {{ fam_complete }}/{{ fam_total }} complete
+          </span>
+          <div style="width:80px;height:4px;background:#1e1e30;border-radius:2px;overflow:hidden">
+            <div style="width:{{ fam_pct }}%;height:100%;
+                        background:{% if fam_pct >= 80 %}var(--green){% elif fam_pct >= 50 %}var(--yellow){% else %}var(--red){% endif %};
+                        transition:width 0.3s"></div>
+          </div>
+        </summary>
+        <div class="family-controls">
+    {% endif %}
+
+    {# ── Control card ──────────────────────────────────────────────────── #}
+    <details class="ctrl-card"
+             data-grade="{{ c.ai_grade }}"
+             data-family="{{ c.control_family }}"
+             {% if c.ai_grade in ('INSUFFICIENT', 'PARTIAL') %}open{% endif %}
+             style="
+               margin-bottom:3px;
+               border:1px solid {% if c.ai_grade == 'NOT_FOUND' %}rgba(255,50,50,0.35){% elif c.ai_grade == 'NA' %}#1a1a2a{% else %}#1e1e30{% endif %};
+               border-radius:6px;
+               {% if c.ai_grade == 'NA' %}opacity:0.55{% endif %}
+             ">
+
+      <summary style="padding:9px 14px;cursor:pointer;user-select:none;
+                      display:flex;align-items:center;gap:10px;list-style:none;
+                      background:{% if c.ai_grade == 'INSUFFICIENT' %}rgba(244,67,54,0.06)
+                        {% elif c.ai_grade == 'PARTIAL' %}rgba(255,179,0,0.05)
+                        {% elif c.ai_grade == 'COMPLETE' %}rgba(0,200,83,0.04)
+                        {% else %}transparent{% endif %}">
+
+        <span class="mono" style="font-size:0.8em;color:var(--cyan);white-space:nowrap;min-width:68px">
+          {{ c.control_id|upper }}
+        </span>
+        <span style="flex:1;font-size:0.8em;color:var(--text);overflow:hidden;
+                     text-overflow:ellipsis;white-space:nowrap">
+          {{ c.control_title }}
+        </span>
+        <span class="badge badge-{{ c.ai_grade|lower }}" style="flex-shrink:0">
+          {{ c.ai_grade }}
+        </span>
+
+        {# Score bar #}
+        {% if c.ai_grade not in ('NOT_FOUND', 'NA') %}
+        <div style="width:50px;height:4px;background:#1e1e30;border-radius:2px;
+                    overflow:hidden;flex-shrink:0">
+          <div style="width:{{ (c.ai_score / 5 * 100)|int }}%;height:100%;
+                      background:{% if c.ai_score >= 4 %}var(--green){% elif c.ai_score >= 2 %}var(--yellow){% else %}var(--red){% endif %}">
+          </div>
+        </div>
+        <span style="font-size:0.72em;color:var(--muted);flex-shrink:0;min-width:24px">
+          {{ c.ai_score }}/5
+        </span>
+        {% endif %}
+
+      </summary>
+
+      {# ── Expanded body ──────────────────────────────────────────────── #}
+      <div style="padding:14px 16px;border-top:1px solid #1a1a28">
+
+        {# Narrative excerpt #}
+        {% if c.narrative_excerpt %}
+        <details style="margin-bottom:14px">
+          <summary style="font-size:0.75em;color:var(--cyan);cursor:pointer;
+                          letter-spacing:1px;text-transform:uppercase;list-style:none">
+            ▶ Narrative Excerpt
+          </summary>
+          <div style="margin-top:8px;padding:10px 12px;background:var(--bg);
+                      border-radius:4px;font-family:var(--mono);font-size:0.8em;
+                      color:var(--muted);white-space:pre-wrap;line-height:1.6;
+                      max-height:160px;overflow-y:auto;border:1px solid #1a1a28">{{ c.narrative_excerpt }}</div>
+        </details>
+        {% endif %}
+
+        {# Issues + Remediation #}
+        {% set rem = remediation.get(c.control_id, {}) %}
+        {% if c.ai_issues or rem %}
+        <details open>
+          <summary style="font-size:0.75em;color:var(--red);cursor:pointer;
+                          letter-spacing:1px;text-transform:uppercase;list-style:none;
+                          margin-bottom:8px">
+            ▶ Issues &amp; Remediation
+          </summary>
+
+          {# Issue list #}
+          {% if c.ai_issues %}
+          <div style="margin-bottom:12px">
+            {% for issue in c.ai_issues.split('|') %}
+            {% if issue %}
+            <div style="font-size:0.8em;color:var(--red);padding:3px 0;
+                        display:flex;align-items:baseline;gap:6px">
+              <span>⚠</span><span>{{ issue }}</span>
+            </div>
+            {% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {# Suggestion #}
+          {% if rem.suggestion %}
+          <div style="font-size:0.8em;color:var(--muted);padding:8px 10px;
+                      background:var(--bg);border-left:3px solid var(--cyan);
+                      border-radius:0 4px 4px 0;margin-bottom:12px;line-height:1.6">
+            {{ rem.suggestion }}
+          </div>
+          {% endif %}
+
+          {# Required artifacts #}
+          {% if rem.artifacts %}
+          <div style="margin-bottom:12px">
+            <div style="font-size:0.72em;letter-spacing:1px;text-transform:uppercase;
+                        color:var(--muted);margin-bottom:6px">Required Artifacts</div>
+            {% for art in rem.artifacts %}
+            <div style="font-size:0.78em;color:#aaa;padding:2px 0;
+                        display:flex;align-items:baseline;gap:6px">
+              <span style="color:var(--cyan)">▸</span><span>{{ art }}</span>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {# Commands #}
+          {% if rem.commands %}
+          <details>
+            <summary style="font-size:0.72em;letter-spacing:1px;text-transform:uppercase;
+                            color:var(--muted);cursor:pointer;list-style:none;margin-bottom:8px">
+              ▶ Remediation Commands
+            </summary>
+            {% for cmd in rem.commands %}
+            <pre style="background:var(--bg);border:1px solid #1a1a28;border-radius:4px;
+                        padding:8px 12px;font-size:0.78em;color:#ccc;
+                        white-space:pre-wrap;word-break:break-all;
+                        margin-bottom:6px;overflow-x:auto">{{ cmd }}</pre>
+            {% endfor %}
+          </details>
+          {% endif %}
+
+        </details>
+        {% endif %}
+
+        {# Implementation status + Role #}
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:10px;
+                    font-size:0.75em;color:var(--muted)">
+          {% if c.implementation_status %}
+          <span>Status: <span style="color:var(--text)">{{ c.implementation_status }}</span></span>
+          {% endif %}
+          {% if c.responsible_role %}
+          <span>Role: <span style="color:var(--text)">{{ c.responsible_role }}</span></span>
+          {% endif %}
+          {% if c.ai_elements_covered and c.ai_elements_covered != '0/0' %}
+          <span>Elements: <span style="color:var(--text)">{{ c.ai_elements_covered }}</span></span>
+          {% endif %}
+        </div>
+
+        {# Inline control statement editor #}
+        {% if is_admin or can_edit %}
+        <details class="ctrl-edit-panel">
+          <summary style="cursor:pointer;font-size:0.75em;color:var(--muted);padding:4px 0">✏ Edit Control Statement</summary>
+          <div style="padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:4px;margin-top:6px">
+            <!-- Implementation Status -->
+            <div style="margin-bottom:10px">
+              <label style="font-size:0.65em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Implementation Status</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <select id="status-{{ c.control_id }}" style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:6px 8px;font-size:0.85em">
+                  {% for opt in ['Implemented','Partially Implemented','Planned','Alternative Implementation','Not Applicable'] %}
+                  <option {% if c.implementation_status == opt %}selected{% endif %}>{{ opt }}</option>
+                  {% endfor %}
+                </select>
+                <button onclick="saveControlField('{{ assessment_id }}','{{ c.control_id }}','implementation_status',document.getElementById('status-{{ c.control_id }}').value,this)"
+                        class="btn btn-sm btn-ghost" style="white-space:nowrap">Save</button>
+              </div>
+            </div>
+            <!-- Responsible Role -->
+            <div style="margin-bottom:10px">
+              <label style="font-size:0.65em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Responsible Role</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="text" id="role-{{ c.control_id }}" value="{{ c.responsible_role or '' }}"
+                       style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:6px 8px;font-size:0.85em">
+                <button onclick="saveControlField('{{ assessment_id }}','{{ c.control_id }}','responsible_role',document.getElementById('role-{{ c.control_id }}').value,this)"
+                        class="btn btn-sm btn-ghost" style="white-space:nowrap">Save</button>
+              </div>
+            </div>
+            <!-- Narrative / Program Control Statement -->
+            <div>
+              <label style="font-size:0.65em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Program Control Statement</label>
+              <textarea id="narr-{{ c.control_id }}" rows="4"
+                        style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:8px;font-family:var(--mono);font-size:0.8em;resize:vertical">{{ c.narrative_excerpt or '' }}</textarea>
+              <button onclick="saveControlField('{{ assessment_id }}','{{ c.control_id }}','narrative_excerpt',document.getElementById('narr-{{ c.control_id }}').value,this)"
+                      class="btn btn-sm btn-ghost" style="margin-top:6px">Save Statement</button>
+            </div>
+          </div>
+        </details>
+        {% endif %}
+
+        {# POA&M quick-create button for failing controls #}
+        {% if is_admin and c.ai_grade in ('INSUFFICIENT', 'NOT_FOUND') %}
+        <div style="margin-top:10px">
+          <a href="/poam/new?assessment_id={{ assessment_id }}&control_id={{ c.control_id }}"
+             class="btn btn-sm"
+             style="background:rgba(244,67,54,0.08);color:var(--red);border:1px solid rgba(244,67,54,0.3);
+                    font-size:0.72em;padding:4px 10px">
+            + POA&amp;M
+          </a>
+        </div>
+        {% endif %}
+
+        {# Proctor form #}
+        <details style="margin-top:12px">
+          <summary style="font-size:0.72em;letter-spacing:1px;text-transform:uppercase;
+                          color:var(--muted);cursor:pointer;list-style:none">
+            ▶ Proctor Override
+          </summary>
+          <form onsubmit="saveProctor(event,'{{ c.control_id }}')"
+                style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+            <textarea name="proctor_assessment" rows="2"
+              style="font-size:0.8em;padding:7px;resize:vertical"
+              placeholder="Proctor notes…">{{ c.proctor_assessment or '' }}</textarea>
+            <input type="hidden" name="control_id" value="{{ c.control_id }}"/>
+            <div style="display:flex;align-items:center;gap:8px">
+              <select name="proctor_score"
+                      style="font-size:0.8em;padding:5px;background:var(--surface);
+                             border:1px solid #1e1e30;color:var(--text);border-radius:4px">
+                <option value="">— Override score —</option>
+                {% for i in range(6) %}
+                <option value="{{ i }}" {% if c.proctor_score == i %}selected{% endif %}>{{ i }}/5</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-ghost"
+                      style="padding:5px 12px;font-size:0.75em">Save</button>
+              <span class="save-indicator"
+                    style="font-size:0.75em;color:var(--green);display:none">✓ Saved</span>
+            </div>
+          </form>
+        </details>
+
+      </div>
+    </details>
+
+  {% endfor %}
+  {# Close last family group #}
+  {% if ns.last_family != '' %}</div></details>{% endif %}
+
+</div>
+
+{# ── Methodology provenance ───────────────────────────────────────────────── #}
+<details class="card" style="padding:20px;margin-bottom:20px">
+  <summary style="font-size:0.85em;font-weight:700;letter-spacing:1px;
+                  text-transform:uppercase;cursor:pointer;list-style:none;
+                  display:flex;align-items:center;gap:8px">
+    <span style="color:var(--muted)">▶</span>
+    <span>Assessment Methodology &amp; Provenance</span>
+  </summary>
+  <style>
+    details.prov-open > summary span:first-child { content: '▼'; }
+    .prov-tree { font-family: var(--mono); font-size: 0.82em; line-height: 1.9; margin-top: 16px; }
+    .prov-section { margin-bottom: 14px; }
+    .prov-heading { font-size: 0.7em; letter-spacing: 2px; text-transform: uppercase;
+                    color: var(--cyan); font-weight: 700; margin-bottom: 4px; }
+    .prov-row { color: var(--muted); }
+    .prov-row span { color: var(--text); }
+    .prov-links { margin-top: 14px; display: flex; gap: 14px; flex-wrap: wrap; }
+    .prov-links a { font-size: 0.8em; color: var(--cyan); }
+  </style>
+  <div class="prov-tree" style="margin-top:16px">
+
+    <div class="prov-section">
+      <div class="prov-heading">Control Catalog</div>
+      <div class="prov-row">├── Source: <span>NIST SP 800-53 Rev 5 (OSCAL JSON)</span></div>
+      <div class="prov-row">├── Publisher: <span>usnistgov/oscal-content (GitHub)</span></div>
+      <div class="prov-row">├── SHA:
+        <span class="mono">{% if catalog_meta and catalog_meta.git_sha %}{{ catalog_meta.git_sha[:12] }}{% else %}see controls/meta.json{% endif %}</span>
+      </div>
+      <div class="prov-row">└── Controls:
+        <span>{% if catalog_meta %}{{ catalog_meta.total_controls }}{% else %}{{ controls|length }} evaluated{% endif %}</span>
+      </div>
+    </div>
+
+    <div class="prov-section">
+      <div class="prov-heading">Assessment Framework Alignment</div>
+      <div class="prov-row">├── OpenSCAP — same XCCDF rule evaluation model</div>
+      <div class="prov-row" style="padding-left:2em;color:#555">│&nbsp;&nbsp;&nbsp;&nbsp;PASS=COMPLETE &nbsp;|&nbsp; FAIL=INSUFFICIENT &nbsp;|&nbsp; PARTIAL=PARTIAL</div>
+      <div class="prov-row" style="padding-left:2em;color:#555">│&nbsp;&nbsp;&nbsp;&nbsp;NOTCHECKED=NOT_FOUND &nbsp;|&nbsp; notapplicable=NA</div>
+      <div class="prov-row">├── NIST OSCAL — control IDs follow OSCAL naming <span>(ac-1, ir-7, si-3)</span></div>
+      <div class="prov-row">├── SCAP 1.3 — catalog structure and check logic compatible</div>
+      <div class="prov-row">└── Scoring — <span>0–5 per control; {{ (scoring_ssp * 100)|int if scoring_ssp is defined else 70 }}% SSP + {{ (scoring_quiz * 100)|int if scoring_quiz is defined else 30 }}% quiz (configurable)</span></div>
+    </div>
+
+    <div class="prov-section">
+      <div class="prov-heading">Limitations</div>
+      <div style="font-size:0.82em;color:var(--muted);line-height:1.7;max-width:640px">
+        This is an AI-assisted baseline assessment, not a formal ATO evaluation,
+        penetration test, or accredited 3PAO assessment. Results reflect AI analysis
+        of the submitted SSP document and should be reviewed by a qualified assessor.
+      </div>
+    </div>
+
+  </div>
+  <div class="prov-links">
+    <a href="https://www.open-scap.org/" target="_blank" rel="noopener">OpenSCAP project ↗</a>
+    <a href="https://pages.nist.gov/OSCAL/" target="_blank" rel="noopener">NIST OSCAL ↗</a>
+    <a href="https://github.com/usnistgov/oscal-content" target="_blank" rel="noopener">oscal-content ↗</a>
+  </div>
+</details>
+
+{# ── Quiz results ────────────────────────────────────────────────────────── #}
+<details class="card" style="padding:20px;margin-bottom:28px">
+  <summary style="font-size:0.85em;font-weight:700;letter-spacing:1px;
+                  text-transform:uppercase;cursor:pointer;list-style:none">
+    Quiz Results
+    {% if assessment.quiz_score %}
+    — <span style="color:var(--cyan)">{{ assessment.quiz_score|round(1) }}%</span>
+    {% else %}
+    — <a href="/quiz/{{ assessment_id }}" style="color:var(--cyan);font-weight:400">
+        Take quiz →</a>
+    {% endif %}
+  </summary>
+  {% if quiz_detail and quiz_detail[0].selected %}
+  <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
+    {% for q in quiz_detail %}
+    <div style="padding:12px;border-radius:6px;background:var(--surface);
+                border-left:3px solid {% if q.is_correct %}var(--green){% else %}var(--red){% endif %}">
+      <div style="font-size:0.85em;font-weight:600;margin-bottom:6px">
+        {{ loop.index }}. {{ q.question }}
+      </div>
+      <div style="font-size:0.8em">
+        {% for letter, text in q.choices.items() %}
+        <div style="padding:2px 0;
+          {% if letter == q.correct %}color:var(--green);font-weight:700
+          {% elif letter == q.selected and not q.is_correct %}color:var(--red)
+          {% else %}color:var(--muted){% endif %}">
+          {% if letter == q.selected %}▶ {% else %}&nbsp;&nbsp;{% endif %}
+          {{ letter }}. {{ text }}
+        </div>
+        {% endfor %}
+        <div style="margin-top:6px;font-size:0.82em;color:#555;font-style:italic">
+          {{ q.explanation }}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:var(--muted);margin-top:12px">
+    Quiz not yet taken. <a href="/quiz/{{ assessment_id }}" style="color:var(--cyan)">Take the assessment quiz →</a>
+  </p>
+  {% endif %}
+</details>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Control field inline save ──────────────────────────────────────────────
+async function saveControlField(assessmentId, controlId, field, value, btn) {
+    const fd = new FormData();
+    fd.append('field', field);
+    fd.append('value', value);
+    btn.textContent = 'Saving…';
+    btn.disabled = true;
+    const r = await fetch(`/results/${assessmentId}/controls/${controlId}/edit`, {
+        method: 'POST', body: fd
+    });
+    const d = await r.json();
+    if (d.status === 'saved') {
+        btn.textContent = '✓ Saved';
+        btn.style.color = 'var(--green)';
+        setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false; btn.style.color = ''; }, 2000);
+    } else {
+        btn.textContent = 'Error';
+        btn.disabled = false;
+    }
+}
+
+// ── Chart data from server ─────────────────────────────────────────────────
+const gradeData = {
+  complete:     {{ assessment.controls_complete }},
+  partial:      {{ assessment.controls_partial }},
+  insufficient: {{ assessment.controls_insufficient }},
+  not_found:    {{ assessment.controls_not_found }},
+};
+const familyData = {{ family_stats | tojson }};
+
+// ── Score donuts ───────────────────────────────────────────────────────────
+function makeDonut(id, value, color) {
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      datasets: [{
+        data: [value, 100 - value],
+        backgroundColor: [color, '#1a1a2e'],
+        borderWidth: 0,
+        hoverOffset: 0,
+      }]
+    },
+    options: {
+      cutout: '72%',
+      responsive: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      animation: { animateRotate: true, duration: 800 },
+    }
+  });
+}
+makeDonut('chartSSP',      {{ assessment.ssp_score|round(1) }},      '#00ffcc');
+makeDonut('chartQuiz',     {{ assessment.quiz_score|round(1) }},      '#00ffcc');
+makeDonut('chartCombined', {{ assessment.combined_score|round(1) }}, '#ffd700');
+
+// ── Grade distribution pie ─────────────────────────────────────────────────
+(function() {
+  const ctx = document.getElementById('chartGrades');
+  if (!ctx) return;
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Complete', 'Partial', 'Insufficient', 'Not Found'],
+      datasets: [{
+        data: [gradeData.complete, gradeData.partial, gradeData.insufficient, gradeData.not_found],
+        backgroundColor: ['#00c853', '#ffb300', '#f44336', '#333'],
+        borderWidth: 0,
+        hoverOffset: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#888', font: { size: 11 }, padding: 10, boxWidth: 12 }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.label}: ${ctx.raw}`
+          }
+        }
+      }
+    }
+  });
+})();
+
+// ── Family coverage bar chart ──────────────────────────────────────────────
+(function() {
+  const ctx = document.getElementById('chartFamilies');
+  if (!ctx) return;
+  const fams    = Object.keys(familyData).sort();
+  const totals  = fams.map(f => familyData[f].total  || 0);
+  const completes = fams.map(f => familyData[f].COMPLETE || 0);
+  const partials  = fams.map(f => familyData[f].PARTIAL  || 0);
+  const insuffs   = fams.map(f => familyData[f].INSUFFICIENT || 0);
+
+  ctx.parentElement.style.height = Math.max(180, fams.length * 22) + 'px';
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: fams,
+      datasets: [
+        { label: 'Complete',     data: completes, backgroundColor: '#00c853', stack: 's' },
+        { label: 'Partial',      data: partials,  backgroundColor: '#ffb300', stack: 's' },
+        { label: 'Insufficient', data: insuffs,   backgroundColor: '#f44336', stack: 's' },
+        { label: 'Not Found',    data: fams.map((f,i) =>
+            Math.max(0, totals[i] - completes[i] - partials[i] - insuffs[i])),
+          backgroundColor: '#333', stack: 's' },
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, ticks: { color: '#555', font: { size: 10 } }, grid: { color: '#1a1a28' } },
+        y: { stacked: true, ticks: { color: '#aaa', font: { size: 10, family: 'monospace' } }, grid: { display: false } },
+      },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#888', font: { size: 10 }, padding: 8, boxWidth: 10 }
+        }
+      }
+    }
+  });
+})();
+
+// ── Filter controls by grade ───────────────────────────────────────────────
+function filterGrade(grade) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  if (grade === 'ALL') {
+    document.querySelector('.filter-btn').classList.add('active');
+    document.querySelectorAll('.ctrl-card').forEach(el => el.closest('details.ctrl-card').style.display = '');
+    document.querySelectorAll('.family-group').forEach(fg => fg.style.display = '');
+  } else {
+    document.querySelectorAll('.ctrl-card').forEach(el => {
+      el.style.display = el.dataset.grade === grade ? '' : 'none';
+    });
+    // Show/hide family groups based on whether they have visible children
+    document.querySelectorAll('.family-group').forEach(fg => {
+      const visible = fg.querySelectorAll(`.ctrl-card[data-grade="${grade}"]`);
+      fg.style.display = visible.length ? '' : 'none';
+    });
+  }
+}
+
+// ── Link assessment to system ──────────────────────────────────────────────
+async function linkSystem() {
+  const sel = document.getElementById('link-sys-sel');
+  const msg = document.getElementById('link-sys-msg');
+  if (!sel) return;
+  const fd = new FormData();
+  fd.append('system_id', sel.value);
+  try {
+    const r = await fetch('/results/{{ assessment_id }}/link-system', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.ok) {
+      msg.textContent = '✓ Saved';
+      msg.style.color = 'var(--green)';
+      setTimeout(() => { msg.textContent = ''; }, 2000);
+    }
+  } catch(e) {
+    msg.textContent = '✗ Failed';
+    msg.style.color = 'var(--red)';
+  }
+}
+
+// ── Proctor save ───────────────────────────────────────────────────────────
+async function saveProctor(e, controlId) {
+  e.preventDefault();
+  const form = e.target;
+  const data = new FormData(form);
+  const resp = await fetch('/results/{{ assessment_id }}/proctor', {
+    method: 'POST', body: data
+  });
+  if (resp.ok) {
+    const ind = form.querySelector('.save-indicator');
+    ind.style.display = 'inline';
+    setTimeout(() => { ind.style.display = 'none'; }, 2000);
+  }
+}
+</script>
+
+<style>
+.filter-btn {
+  background: transparent;
+  color: var(--fc, var(--cyan));
+  border: 1px solid var(--fc, var(--cyan));
+  padding: 4px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.75em;
+  letter-spacing: 0.5px;
+  transition: background 0.15s;
+  opacity: 0.6;
+}
+.filter-btn:hover, .filter-btn.active { opacity: 1; background: rgba(255,255,255,0.04); }
+.family-group > summary::-webkit-details-marker { display:none; }
+.family-group > summary::before { content: '▶'; color: var(--muted); font-size:0.7em; transition:transform 0.2s; }
+.family-group[open] > summary::before { transform: rotate(90deg); }
+.ctrl-card > summary::-webkit-details-marker { display:none; }
+</style>
+{% endblock %}

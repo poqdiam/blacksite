@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Submissions{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+  <div>
+    <h1 style="margin:0">Authorization Submissions</h1>
+    <p class="text-muted" style="margin:4px 0 0;font-size:0.85em">ATO packages — all systems</p>
+  </div>
+  <a href="/systems" class="btn btn-ghost" style="font-size:0.82em">System Catalog →</a>
+</div>
+
+{% set status_colors = {
+  'draft':        'var(--muted)',
+  'submitted':    'var(--cyan)',
+  'under_review': 'var(--yellow)',
+  'authorized':   'var(--green)',
+  'denied':       'var(--red)',
+  'withdrawn':    'var(--muted)',
+} %}
+
+<div class="card" style="padding:0;overflow:hidden">
+  {% if submissions %}
+  <table>
+    <thead>
+      <tr>
+        <th>System</th>
+        <th>Type</th>
+        <th>Submitted</th>
+        <th>Coverage</th>
+        <th>Reviewer</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in submissions %}
+      {% set sys = sys_map.get(s.system_id) %}
+      <tr>
+        <td style="font-weight:600">
+          {% if sys %}<a href="/systems/{{ sys.id }}" style="color:var(--text)">{{ sys.name }}</a>
+          {% else %}{{ s.system_id[:8] }}{% endif %}
+        </td>
+        <td class="text-muted" style="font-size:0.82em">{{ s.submission_type | replace('_',' ') | title }}</td>
+        <td class="text-muted" style="font-size:0.8em;white-space:nowrap">
+          {{ s.submitted_at.strftime('%Y-%m-%d') if s.submitted_at else '—' }}
+        </td>
+        <td>
+          {% if s.controls_total > 0 %}
+          {% set pct = ((s.controls_impl + s.controls_na) / s.controls_total * 100) | int %}
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="height:4px;width:60px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden">
+              <div style="height:100%;width:{{ pct }}%;background:{% if pct >= 80 %}var(--green){% elif pct >= 50 %}var(--yellow){% else %}var(--red){% endif %};border-radius:2px"></div>
+            </div>
+            <span style="font-size:0.8em;color:var(--muted)">{{ pct }}%</span>
+          </div>
+          {% else %}—{% endif %}
+        </td>
+        <td style="font-size:0.82em;color:var(--muted)">{{ s.reviewer or '—' }}</td>
+        <td>
+          <span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+                       padding:3px 8px;border-radius:3px;border:1px solid {{ status_colors.get(s.status,'var(--muted)') }}22;
+                       color:{{ status_colors.get(s.status,'var(--muted)') }}">
+            {{ s.status | replace('_',' ') | title }}
+          </span>
+        </td>
+        <td><a href="/submissions/{{ s.id }}" class="btn btn-ghost btn-sm">View →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:48px;text-align:center;color:var(--muted)">
+    No submissions yet.
+    <a href="/systems" style="color:var(--cyan)">Go to System Catalog →</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

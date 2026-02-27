@@ -1,0 +1,711 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — {{ system.name }}{% endblock %}
+
+{% block head %}
+<style>
+  /* ── FIPS 199 impact tiles ───────────────────────────────────────────────── */
+  .fips-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 640px) { .fips-row { grid-template-columns: repeat(2, 1fr); } }
+  .fips-tile {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 14px;
+    text-align: center;
+  }
+  .fips-tile-label {
+    font-size: 0.6em;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .fips-tile-value {
+    font-size: 1.4em;
+    font-weight: 900;
+    letter-spacing: 1px;
+  }
+  .fips-low      { color: var(--green);  border-top: 2px solid var(--green);  }
+  .fips-moderate { color: var(--yellow); border-top: 2px solid var(--yellow); }
+  .fips-high     { color: var(--red);    border-top: 2px solid var(--red);    }
+  .fips-overall  { border-top: 2px solid var(--cyan); }
+  .fips-overall .fips-tile-value { color: var(--cyan); }
+
+  /* ── Info grid ────────────────────────────────────────────────────────────── */
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 32px;
+  }
+  @media (max-width: 640px) { .info-grid { grid-template-columns: 1fr; } }
+  .info-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(30,30,48,0.6);
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-label {
+    font-size: 0.62em;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .info-value {
+    font-size: 0.88em;
+    color: var(--text);
+  }
+
+  /* ── Collapsible sections ─────────────────────────────────────────────────── */
+  .collapse-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .collapse-section summary {
+    padding: 12px 16px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8em;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    transition: color 0.15s;
+  }
+  .collapse-section summary::-webkit-details-marker { display: none; }
+  .collapse-section summary::before {
+    content: '▶';
+    font-size: 0.7em;
+    color: var(--muted);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .collapse-section[open] summary::before { transform: rotate(90deg); }
+  .collapse-section[open] summary { color: var(--text); }
+  .collapse-body {
+    padding: 14px 16px 16px;
+    border-top: 1px solid var(--border);
+    font-size: 0.88em;
+    color: var(--muted);
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* ── CSS tabs ─────────────────────────────────────────────────────────────── */
+  .tab-nav {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tab-nav::-webkit-scrollbar { display: none; }
+  .tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    font-size: 0.76em;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+    margin-bottom: -1px;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+  .tab-count {
+    font-size: 0.85em;
+    background: rgba(255,255,255,0.08);
+    border-radius: 3px;
+    padding: 1px 5px;
+    min-width: 18px;
+    text-align: center;
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Severity / status badge helpers ─────────────────────────────────────── */
+  .sev-critical { background: rgba(244,67,54,0.15);  color: var(--red);    }
+  .sev-high     { background: rgba(255,107,53,0.15); color: #ff6b35;       }
+  .sev-moderate { background: rgba(255,179,0,0.15);  color: var(--yellow); }
+  .sev-low      { background: rgba(0,200,83,0.15);   color: var(--green);  }
+  .sev-info     { background: rgba(158,158,158,0.1); color: var(--grey);   }
+
+  .st-open          { background: rgba(158,158,158,0.1); color: var(--grey);   }
+  .st-in_progress   { background: rgba(255,179,0,0.15);  color: var(--yellow); }
+  .st-closed        { background: rgba(0,200,83,0.15);   color: var(--green);  }
+  .st-risk_accepted { background: rgba(0,255,204,0.1);   color: var(--cyan);   }
+  .st-false_positive{ background: rgba(136,136,136,0.1); color: var(--muted);  }
+
+  .risk-low      { color: var(--green);  }
+  .risk-moderate { color: var(--yellow); }
+  .risk-high     { color: #ff6b35;       }
+  .risk-critical { color: var(--red);    }
+
+  /* ── Auth status badges ───────────────────────────────────────────────────── */
+  .badge-auth-authorized  { background: rgba(0,200,83,0.15);  color: var(--green);  border: 1px solid rgba(0,200,83,0.25); }
+  .badge-auth-in_progress { background: rgba(255,179,0,0.15); color: var(--yellow); border: 1px solid rgba(255,179,0,0.25); }
+  .badge-auth-expired     { background: rgba(244,67,54,0.15); color: var(--red);    border: 1px solid rgba(244,67,54,0.25); }
+  .badge-auth-not_auth    { background: rgba(158,158,158,0.1);color: var(--grey);   border: 1px solid rgba(158,158,158,0.2); }
+
+  /* ── Delete modal ─────────────────────────────────────────────────────────── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 32px;
+    max-width: 440px;
+    width: 90%;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+  }
+  .modal-box h2 { color: var(--red); margin-bottom: 10px; font-size: 1.1em; }
+  .modal-box p  { font-size: 0.88em; color: var(--muted); margin-bottom: 24px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Breadcrumb ──────────────────────────────────────────────────────────── #}
+<div class="breadcrumb">
+  <a href="/systems">System Catalog</a>
+  <span class="sep">/</span>
+  <span>{{ system.name }}</span>
+</div>
+
+{# ── Page header ─────────────────────────────────────────────────────────── #}
+<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-bottom:22px">
+  <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+    <h1 style="margin:0">{{ system.name }}</h1>
+    {% if system.abbreviation %}
+    <span class="mono" style="font-size:0.8em;color:var(--muted);letter-spacing:2px">{{ system.abbreviation }}</span>
+    {% endif %}
+    {# Auth status badge #}
+    {% if system.auth_status == 'authorized' %}
+      <span class="badge badge-auth-authorized">Authorized</span>
+    {% elif system.auth_status == 'in_progress' %}
+      <span class="badge badge-auth-in_progress">In Progress</span>
+    {% elif system.auth_status == 'expired' %}
+      <span class="badge badge-auth-expired">Expired ATO</span>
+    {% else %}
+      <span class="badge badge-auth-not_auth">Not Authorized</span>
+    {% endif %}
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/systems/{{ system.id }}/controls" class="btn btn-primary btn-sm">Control Plan</a>
+    <a href="/systems/{{ system.id }}/submit" class="btn btn-ghost btn-sm" style="color:var(--gold);border-color:var(--gold)">Submit for ATO</a>
+    {% if is_admin %}
+    <a href="/systems/{{ system.id }}/edit" class="btn btn-ghost btn-sm">Edit</a>
+    <button class="btn btn-danger btn-sm" onclick="document.getElementById('deleteModal').classList.add('open')">Delete</button>
+    {% endif %}
+  </div>
+</div>
+
+{# ── FIPS 199 categorization row ─────────────────────────────────────────── #}
+<div class="fips-row">
+  {% for label, val in [
+      ('Confidentiality', system.confidentiality_impact),
+      ('Integrity',       system.integrity_impact),
+      ('Availability',    system.availability_impact),
+  ] %}
+  {% set v = (val or 'Low') | lower %}
+  <div class="fips-tile fips-{{ v }}">
+    <div class="fips-tile-label">{{ label }}</div>
+    <div class="fips-tile-value">{{ val or 'Low' }}</div>
+  </div>
+  {% endfor %}
+  {% set ov = (system.overall_impact or 'Low') | lower %}
+  <div class="fips-tile fips-overall">
+    <div class="fips-tile-label">Overall</div>
+    <div class="fips-tile-value" style="color:{% if ov == 'high' %}var(--red){% elif ov == 'moderate' %}var(--yellow){% else %}var(--cyan){% endif %}">
+      {{ system.overall_impact or 'Low' }}
+    </div>
+  </div>
+</div>
+
+{# ── System info card ────────────────────────────────────────────────────── #}
+<div class="card" style="margin-bottom:16px">
+  <div class="card-title">System Information</div>
+  <div class="info-grid">
+    <div>
+      <div class="info-row">
+        <span class="info-label">System Type</span>
+        <span class="info-value">
+          {% if system.system_type == 'major_application' %}Major Application
+          {% elif system.system_type == 'general_support_system' %}General Support System
+          {% elif system.system_type == 'minor_application' %}Minor Application
+          {% else %}{{ system.system_type or '—' }}{% endif %}
+        </span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Environment</span>
+        <span class="info-value">
+          {% if system.environment == 'on_prem' %}On-Premises
+          {% elif system.environment == 'cloud' %}Cloud
+          {% elif system.environment == 'hybrid' %}Hybrid
+          {% elif system.environment == 'saas' %}SaaS
+          {% elif system.environment == 'paas' %}PaaS
+          {% elif system.environment == 'iaas' %}IaaS
+          {% else %}{{ system.environment or '—' }}{% endif %}
+        </span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">System Owner</span>
+        <span class="info-value">{{ system.owner_name or '—' }}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Owner Email</span>
+        <span class="info-value">
+          {% if system.owner_email %}
+            <a href="mailto:{{ system.owner_email }}" style="color:var(--cyan)">{{ system.owner_email }}</a>
+          {% else %}—{% endif %}
+        </span>
+      </div>
+    </div>
+    <div>
+      <div class="info-row">
+        <span class="info-label">Auth Date</span>
+        <span class="info-value mono" style="font-size:0.85em">{{ system.auth_date or '—' }}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Auth Expiry</span>
+        <span class="info-value mono" style="font-size:0.85em;color:{% if system.auth_status == 'expired' %}var(--red){% else %}var(--text){% endif %}">
+          {{ system.auth_expiry or '—' }}
+        </span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Created By</span>
+        <span class="info-value">{{ system.created_by or '—' }}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Purpose</span>
+        <span class="info-value" title="{{ system.purpose or '' }}">
+          {% if system.purpose %}
+            {{ system.purpose[:180] }}{% if system.purpose | length > 180 %}…{% endif %}
+          {% else %}—{% endif %}
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Collapsible description + boundary ──────────────────────────────────── #}
+{% if system.description %}
+<details class="collapse-section" style="margin-bottom:10px">
+  <summary>System Description</summary>
+  <div class="collapse-body">{{ system.description }}</div>
+</details>
+{% endif %}
+{% if system.boundary %}
+<details class="collapse-section" style="margin-bottom:20px">
+  <summary>System Boundary</summary>
+  <div class="collapse-body">{{ system.boundary }}</div>
+</details>
+{% endif %}
+
+{# ── Stats row ───────────────────────────────────────────────────────────── #}
+<div class="stats" style="margin-bottom:24px">
+  <div class="stat">
+    <div class="stat-value">{{ assessments | length }}</div>
+    <div class="stat-label">Assessments</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:{% if poam_overdue > 0 %}var(--red){% else %}var(--cyan){% endif %}">
+      {{ poam_open_ct }}
+    </div>
+    <div class="stat-label">
+      Open POA&amp;Ms
+      {% if poam_overdue > 0 %}
+        <span style="display:block;color:var(--red);font-size:0.85em">({{ poam_overdue }} overdue)</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--yellow)">{{ poam_due_week }}</div>
+    <div class="stat-label">Due This Week</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{{ risks | length }}</div>
+    <div class="stat-label">Risks</div>
+  </div>
+</div>
+
+{# ── Access Control — Assigned Users ─────────────────────────────────────── #}
+<div class="card" style="margin-bottom:16px">
+  <div class="card-title">Access Control — Assigned Users</div>
+  {% if is_admin %}
+    {# Admin: full assignment management #}
+    {% if assignments %}
+    <table style="margin-bottom:14px">
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Assigned By</th>
+          <th>Assigned At</th>
+          <th>Note</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in assignments %}
+        <tr>
+          <td style="font-weight:600;font-size:0.88em;font-family:var(--mono)">{{ a.remote_user }}</td>
+          <td style="font-size:0.82em;color:var(--muted)">{{ a.assigned_by or '—' }}</td>
+          <td class="mono" style="font-size:0.78em;color:var(--muted);white-space:nowrap">
+            {{ a.assigned_at.strftime('%Y-%m-%d %H:%M') if a.assigned_at else '—' }}
+          </td>
+          <td style="font-size:0.82em;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="{{ a.note or '' }}">{{ a.note or '—' }}</td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-danger btn-sm"
+                    onclick="removeUser({{ system.id }}, '{{ a.remote_user }}')">Remove</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="font-size:0.85em;color:var(--muted);margin-bottom:14px">No users assigned to this system.</div>
+    {% endif %}
+    {# Assign user form #}
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--border)">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:0.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Username</label>
+        <input id="assign-username" type="text" placeholder="e.g. alice"
+               style="background:var(--surface);border:1px solid var(--border);border-radius:5px;
+                      padding:7px 10px;font-size:0.88em;color:var(--text);font-family:var(--mono);width:180px">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:0.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Note (optional)</label>
+        <input id="assign-note" type="text" placeholder="e.g. primary reviewer"
+               style="background:var(--surface);border:1px solid var(--border);border-radius:5px;
+                      padding:7px 10px;font-size:0.88em;color:var(--text);width:220px">
+      </div>
+      <button class="btn btn-primary btn-sm"
+              onclick="assignUser({{ system.id }})"
+              style="align-self:flex-end">Assign User</button>
+    </div>
+  {% else %}
+    {# Non-admin: show own assignment status only #}
+    {% if current_user_assignment %}
+    <div style="display:flex;align-items:center;gap:10px;font-size:0.88em">
+      <span style="color:var(--green);font-weight:700">&#10003; You are assigned to this system</span>
+      <span class="mono" style="font-size:0.85em;color:var(--muted)">
+        since {{ current_user_assignment.assigned_at.strftime('%Y-%m-%d') if current_user_assignment.assigned_at else 'unknown' }}
+      </span>
+    </div>
+    {% else %}
+    <div style="font-size:0.88em;color:var(--muted)">You are not assigned to this system.</div>
+    {% endif %}
+  {% endif %}
+</div>
+
+{# ── Tabbed section ──────────────────────────────────────────────────────── #}
+<div class="card" style="padding:0;overflow:hidden">
+
+  <div class="tab-nav" role="tablist">
+    <button class="tab-btn active" role="tab" onclick="switchTab(event,'tab-assessments')">
+      Assessments <span class="tab-count">{{ assessments | length }}</span>
+    </button>
+    <button class="tab-btn" role="tab" onclick="switchTab(event,'tab-poam')">
+      POA&amp;M <span class="tab-count" style="{% if poam_overdue > 0 %}background:rgba(244,67,54,0.2);color:var(--red){% endif %}">{{ poam_items | length }}</span>
+    </button>
+    <button class="tab-btn" role="tab" onclick="switchTab(event,'tab-risks')">
+      Risks <span class="tab-count">{{ risks | length }}</span>
+    </button>
+    <button class="tab-btn" role="tab" onclick="switchTab(event,'tab-audit')">
+      Audit History <span class="tab-count">{{ audit_entries | length }}</span>
+    </button>
+  </div>
+
+  {# ── Tab 1: Assessments ────────────────────────────────────────────────── #}
+  <div id="tab-assessments" class="tab-panel active" style="overflow-x:auto">
+    {% if assessments %}
+    <table>
+      <thead>
+        <tr>
+          <th>Candidate</th>
+          <th>File</th>
+          <th>SSP Score</th>
+          <th>Combined</th>
+          <th>Date</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in assessments %}
+        {% set a = row.assessment %}
+        {% set c = row.candidate %}
+        <tr>
+          <td style="font-weight:600;font-size:0.88em">{{ c.name if c else '—' }}</td>
+          <td class="mono" style="font-size:0.75em;color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="{{ a.filename }}">{{ a.filename }}</td>
+          <td>
+            <span style="font-weight:700;color:{% if a.ssp_score >= 80 %}var(--green){% elif a.ssp_score >= 60 %}var(--yellow){% else %}var(--red){% endif %}">
+              {{ a.ssp_score | round(1) }}
+            </span>
+          </td>
+          <td>
+            <span style="font-weight:700;color:{% if a.combined_score >= 80 %}var(--green){% elif a.combined_score >= 60 %}var(--yellow){% else %}var(--red){% endif %}">
+              {{ a.combined_score | round(1) }}
+            </span>
+          </td>
+          <td class="mono" style="font-size:0.8em;color:var(--muted);white-space:nowrap">
+            {{ a.uploaded_at.strftime('%Y-%m-%d') if a.uploaded_at else '—' }}
+          </td>
+          <td style="white-space:nowrap">
+            <a href="/results/{{ a.id }}" class="btn btn-ghost btn-sm">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="padding:48px;text-align:center">
+      <div style="color:#1e1e30;font-size:1.8em;margin-bottom:10px;font-family:var(--mono)">[ ]</div>
+      <div class="text-muted" style="font-size:0.88em">No assessments linked to this system.</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Tab 2: POA&M ──────────────────────────────────────────────────────── #}
+  <div id="tab-poam" class="tab-panel" style="overflow-x:auto">
+    {% if poam_items %}
+    <table>
+      <thead>
+        <tr>
+          <th>Control</th>
+          <th>Weakness</th>
+          <th>Severity</th>
+          <th>Responsible</th>
+          <th>Due Date</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in poam_items %}
+        {% set sev = item.severity or 'Moderate' %}
+        {% set sev_key = sev | lower %}
+        {% set st = item.status or 'open' %}
+        <tr>
+          <td class="mono" style="font-size:0.8em;color:var(--cyan);white-space:nowrap">
+            {{ item.control_id or '—' }}
+          </td>
+          <td style="max-width:220px">
+            <a href="/poam/{{ item.id }}"
+               style="font-size:0.88em;font-weight:600;color:var(--text);
+                      display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+               title="{{ item.weakness_name }}">{{ item.weakness_name }}</a>
+          </td>
+          <td>
+            <span class="badge sev-{{ sev_key if sev_key in ['critical','high','moderate','low'] else 'info' }}">{{ sev }}</span>
+          </td>
+          <td style="font-size:0.82em;color:var(--muted);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            {{ item.responsible_party or '—' }}
+          </td>
+          <td class="mono" style="font-size:0.8em;white-space:nowrap;color:{% if item in poam_items and item.scheduled_completion %}var(--muted){% else %}var(--muted){% endif %}">
+            {{ item.scheduled_completion or '—' }}
+          </td>
+          <td>
+            <span class="badge st-{{ st | replace(' ','_') }}">{{ st | replace('_', ' ') }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="padding:48px;text-align:center">
+      <div style="color:var(--green);font-size:1.8em;margin-bottom:10px;font-family:var(--mono)">[OK]</div>
+      <div class="text-muted" style="font-size:0.88em">No open POA&amp;M items for this system.</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Tab 3: Risks ──────────────────────────────────────────────────────── #}
+  <div id="tab-risks" class="tab-panel" style="overflow-x:auto">
+    {% if risks %}
+    <table>
+      <thead>
+        <tr>
+          <th>Risk Name</th>
+          <th>Likelihood</th>
+          <th>Impact</th>
+          <th>Score</th>
+          <th>Level</th>
+          <th>Treatment</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for risk in risks %}
+        {% set rl = (risk.risk_level or 'Moderate') | lower %}
+        <tr>
+          <td style="max-width:220px">
+            <a href="/risks/{{ risk.id }}"
+               style="font-size:0.88em;font-weight:600;color:var(--text);
+                      display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+               title="{{ risk.risk_name }}">{{ risk.risk_name }}</a>
+          </td>
+          <td style="text-align:center;font-weight:700;color:var(--text)">{{ risk.likelihood }}</td>
+          <td style="text-align:center;font-weight:700;color:var(--text)">{{ risk.impact }}</td>
+          <td style="text-align:center;font-weight:900;font-size:1.1em;
+              color:{% if risk.risk_score >= 16 %}var(--red){% elif risk.risk_score >= 9 %}var(--yellow){% else %}var(--green){% endif %}">
+            {{ risk.risk_score }}
+          </td>
+          <td>
+            <span class="risk-{{ rl }}" style="font-size:0.8em;font-weight:700;letter-spacing:0.5px">
+              {{ risk.risk_level or 'Moderate' }}
+            </span>
+          </td>
+          <td style="font-size:0.82em;color:var(--muted)">{{ risk.treatment or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="padding:48px;text-align:center">
+      <div style="color:var(--green);font-size:1.8em;margin-bottom:10px;font-family:var(--mono)">[OK]</div>
+      <div class="text-muted" style="font-size:0.88em">No risks logged for this system.</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Tab 4: Audit History ──────────────────────────────────────────────── #}
+  <div id="tab-audit" class="tab-panel" style="overflow-x:auto">
+    {% if audit_entries %}
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>User</th>
+          <th>Action</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in audit_entries %}
+        {% set act = entry.action | upper %}
+        <tr>
+          <td class="mono" style="font-size:0.78em;color:var(--muted);white-space:nowrap">
+            {{ entry.timestamp.strftime('%Y-%m-%d %H:%M') if entry.timestamp else '—' }}
+          </td>
+          <td style="font-size:0.82em">{{ entry.remote_user or '—' }}</td>
+          <td>
+            <span class="badge"
+              style="
+                {% if act == 'CREATE' %}background:rgba(0,200,83,0.15);color:var(--green)
+                {% elif act == 'DELETE' %}background:rgba(244,67,54,0.15);color:var(--red)
+                {% elif act == 'UPDATE' %}background:rgba(255,179,0,0.15);color:var(--yellow)
+                {% elif act == 'EXPORT' %}background:rgba(0,255,204,0.1);color:var(--cyan)
+                {% elif act == 'LOGIN' %}background:rgba(255,215,0,0.12);color:var(--gold)
+                {% else %}background:rgba(136,136,136,0.1);color:var(--muted){% endif %}
+              ">{{ act }}</span>
+          </td>
+          <td style="font-size:0.8em;color:var(--muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="{{ entry.details or '' }}">
+            {{ (entry.details or '') [:120] }}{% if entry.details and entry.details | length > 120 %}…{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="padding:48px;text-align:center">
+      <div class="text-muted" style="font-size:0.88em">No audit events recorded for this system.</div>
+    </div>
+    {% endif %}
+  </div>
+
+</div>{# /card #}
+
+{# ── Delete confirmation modal ───────────────────────────────────────────── #}
+{% if is_admin %}
+<div id="deleteModal" class="modal-overlay" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal-box">
+    <h2>Delete System</h2>
+    <p>
+      Are you sure you want to delete <strong style="color:var(--text)">{{ system.name }}</strong>?
+      This will unlink all associated assessments, POA&amp;M items, and risks.
+      This action cannot be undone.
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('deleteModal').classList.remove('open')">
+        Cancel
+      </button>
+      <form method="POST" action="/systems/{{ system.id }}/delete" style="display:inline">
+        <button type="submit" class="btn btn-danger btn-sm">Delete System</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchTab(e, panelId) {
+  // Deactivate all tabs and panels
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  // Activate clicked
+  e.currentTarget.classList.add('active');
+  document.getElementById(panelId).classList.add('active');
+}
+
+async function assignUser(systemId) {
+    const username = document.getElementById('assign-username').value.trim();
+    const note = document.getElementById('assign-note').value.trim();
+    if (!username) return;
+    const fd = new FormData();
+    fd.append('username', username);
+    fd.append('note', note);
+    const r = await fetch(`/systems/${systemId}/assign`, {method:'POST', body:fd});
+    const d = await r.json();
+    if (d.status === 'assigned') location.reload();
+    else alert(d.status);
+}
+
+async function removeUser(systemId, username) {
+    if (!confirm(`Remove ${username} from this system?`)) return;
+    const fd = new FormData();
+    fd.append('username', username);
+    const r = await fetch(`/systems/${systemId}/unassign`, {method:'POST', body:fd});
+    const d = await r.json();
+    if (d.status === 'removed') location.reload();
+}
+</script>
+{% endblock %}

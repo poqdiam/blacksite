@@ -1,0 +1,30 @@
+# Runtime
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Database & uploads (contain real data)
+*.db
+*.db-wal
+*.db-shm
+uploads/
+results/
+
+# NIST catalog cache (large, re-downloadable)
+controls/nist_800_53r5.json
+controls/meta.json
+
+# Secrets / env
+*.secrets.env
+.env
+email.conf
+
+# Logs
+*.log
+/tmp/
+
+# Editor
+.idea/
+.vscode/
+*.swp

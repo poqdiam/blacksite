@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Submission {{ sub.id[:8] }}{% endblock %}
+
+{% block head %}
+<style>
+  .sub-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .sub-meta-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+  }
+  .sub-meta-label {
+    font-size: 0.6em; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 4px;
+  }
+  .sub-meta-val { font-size: 0.95em; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:6px;font-size:0.82em">
+  <a href="/submissions" style="color:var(--muted)">Submissions</a>
+  <span style="color:var(--border);margin:0 6px">/</span>
+  {% if system %}<a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a>
+  <span style="color:var(--border);margin:0 6px">/</span>{% endif %}
+  <span style="color:var(--text);font-family:var(--mono)">{{ sub.id[:8] }}…</span>
+</div>
+
+{# Header #}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+  <div>
+    <h1 style="margin:0">
+      {{ sub.submission_type | replace('_',' ') | title }}
+      {% if system %}<span style="font-size:0.6em;color:var(--muted);font-weight:400"> — {{ system.name }}</span>{% endif %}
+    </h1>
+    <p class="text-muted" style="margin:4px 0 0;font-size:0.82em;font-family:var(--mono)">ID: {{ sub.id }}</p>
+  </div>
+  {% set sc = {
+    'draft':'var(--muted)','submitted':'var(--cyan)','under_review':'var(--yellow)',
+    'authorized':'var(--green)','denied':'var(--red)','withdrawn':'var(--muted)'
+  } %}
+  <span style="font-size:0.8em;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+               padding:6px 14px;border-radius:4px;
+               color:{{ sc.get(sub.status,'var(--muted)') }};
+               border:1px solid {{ sc.get(sub.status,'var(--muted)') }}44;
+               background:{{ sc.get(sub.status,'var(--muted)') }}11">
+    {{ sub.status | replace('_',' ') | title }}
+  </span>
+</div>
+
+{# Metadata grid #}
+<div class="sub-meta">
+  <div class="sub-meta-item">
+    <div class="sub-meta-label">Submitted By</div>
+    <div class="sub-meta-val">{{ sub.submitted_by or '—' }}</div>
+  </div>
+  <div class="sub-meta-item">
+    <div class="sub-meta-label">Submitted At</div>
+    <div class="sub-meta-val">{{ sub.submitted_at.strftime('%Y-%m-%d') if sub.submitted_at else 'Draft' }}</div>
+  </div>
+  <div class="sub-meta-item">
+    <div class="sub-meta-label">Reviewer</div>
+    <div class="sub-meta-val">{{ sub.reviewer or 'Unassigned' }}</div>
+  </div>
+  <div class="sub-meta-item">
+    <div class="sub-meta-label">Decision</div>
+    <div class="sub-meta-val" style="color:{% if sub.decision == 'authorized' %}var(--green){% elif sub.decision == 'denied' %}var(--red){% else %}var(--muted){% endif %}">
+      {{ sub.decision | title if sub.decision else 'Pending' }}
+    </div>
+  </div>
+  <div class="sub-meta-item">
+    <div class="sub-meta-label">ATO Expiry</div>
+    <div class="sub-meta-val">{{ sub.ato_expiry or '—' }}</div>
+  </div>
+  <div class="sub-meta-item">
+    <div class="sub-meta-label">Control Coverage</div>
+    {% if sub.controls_total > 0 %}
+    {% set pct = ((sub.controls_impl + sub.controls_na) / sub.controls_total * 100) | int %}
+    <div class="sub-meta-val" style="color:{% if pct>=80 %}var(--green){% elif pct>=50 %}var(--yellow){% else %}var(--red){% endif %}">
+      {{ pct }}% ({{ sub.controls_impl }}/{{ sub.controls_total }})
+    </div>
+    {% else %}
+    <div class="sub-meta-val">—</div>
+    {% endif %}
+  </div>
+</div>
+
+{# Package notes #}
+{% if sub.package_notes %}
+<div class="card" style="padding:18px;margin-bottom:20px">
+  <div class="card-title">Package Notes</div>
+  <p style="margin:0;font-size:0.88em;line-height:1.7;color:var(--text)">{{ sub.package_notes }}</p>
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start">
+
+  <div>
+    {# Open POA&Ms #}
+    {% if open_poams %}
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
+        <span class="card-title" style="margin:0">Open POA&M Items at Submission</span>
+        <span style="font-size:0.75em;color:var(--yellow);margin-left:8px">{{ open_poams|length }} open</span>
+      </div>
+      <table>
+        <thead><tr><th>Weakness</th><th>Severity</th><th>Due Date</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for p in open_poams %}
+          <tr>
+            <td style="font-size:0.84em"><a href="/poam/{{ p.id }}" style="color:var(--text)">{{ p.weakness_name[:50] }}</a></td>
+            <td><span style="font-size:0.7em;font-weight:700;
+                              color:{% if p.severity in ['Critical','High'] %}var(--red){% elif p.severity=='Moderate' %}var(--yellow){% else %}var(--muted){% endif %}">
+              {{ p.severity }}
+            </span></td>
+            <td class="text-muted" style="font-size:0.8em">{{ p.scheduled_completion or '—' }}</td>
+            <td class="text-muted" style="font-size:0.8em">{{ p.status | replace('_',' ') | title }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {# Risks #}
+    {% if risks %}
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
+        <span class="card-title" style="margin:0">Risk Register at Submission</span>
+        <span style="font-size:0.75em;color:var(--muted);margin-left:8px">{{ risks|length }}</span>
+      </div>
+      <table>
+        <thead><tr><th>Risk</th><th>Level</th><th>Treatment</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for r in risks %}
+          {% set rl_color = {'Critical':'var(--red)','High':'var(--red)','Moderate':'var(--yellow)','Low':'var(--green)'}.get(r.risk_level,'var(--muted)') %}
+          <tr>
+            <td style="font-size:0.84em"><a href="/risks/{{ r.id }}" style="color:var(--text)">{{ r.risk_name[:50] }}</a></td>
+            <td><span style="font-size:0.7em;font-weight:700;color:{{ rl_color }}">{{ r.risk_level }}</span></td>
+            <td class="text-muted" style="font-size:0.8em">{{ r.treatment }}</td>
+            <td class="text-muted" style="font-size:0.8em">{{ r.status | title }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+  {# Admin decision panel #}
+  {% if is_admin %}
+  <div class="card" style="padding:20px">
+    <div class="card-title">Authorizing Official</div>
+    <form method="post" action="/submissions/{{ sub.id }}/update">
+      <div style="display:grid;gap:12px">
+
+        <div>
+          <label class="form-label" style="font-size:0.7em">Status</label>
+          <select name="status" class="form-control">
+            {% for s in ['submitted','under_review','authorized','denied','withdrawn'] %}
+            <option value="{{ s }}" {% if sub.status == s %}selected{% endif %}>{{ s | replace('_',' ') | title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="form-label" style="font-size:0.7em">Reviewer</label>
+          <input type="text" name="reviewer" class="form-control" value="{{ sub.reviewer or '' }}" placeholder="AO username">
+        </div>
+
+        <div>
+          <label class="form-label" style="font-size:0.7em">Decision</label>
+          <select name="decision" class="form-control">
+            <option value="">Pending</option>
+            <option value="authorized" {% if sub.decision == 'authorized' %}selected{% endif %}>Authorized</option>
+            <option value="denied"     {% if sub.decision == 'denied'     %}selected{% endif %}>Denied</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="form-label" style="font-size:0.7em">Decision Date</label>
+          <input type="date" name="decision_date" class="form-control" value="{{ sub.decision_date or '' }}">
+        </div>
+
+        <div>
+          <label class="form-label" style="font-size:0.7em">ATO Expiry</label>
+          <input type="date" name="ato_expiry" class="form-control" value="{{ sub.ato_expiry or '' }}">
+        </div>
+
+        <div>
+          <label class="form-label" style="font-size:0.7em">Notes</label>
+          <textarea name="package_notes" class="form-control" style="min-height:70px;resize:vertical">{{ sub.package_notes or '' }}</textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width:100%">Save Decision</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,474 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — {% if risk %}{{ risk.risk_name }}{% else %}New Risk{% endif %}{% endblock %}
+
+{% block head %}
+<style>
+  .form-section {
+    margin-bottom: 32px;
+  }
+  .form-section:last-of-type {
+    margin-bottom: 0;
+  }
+  .slider-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--border);
+    outline: none;
+    padding: 0;
+    border: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--cyan);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 6px rgba(0,255,204,0.4);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--cyan);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 6px rgba(0,255,204,0.4);
+  }
+  .slider-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.62em;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+    padding: 0 2px;
+  }
+  .score-badge-large {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 64px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 1.4em;
+    font-weight: 900;
+    line-height: 1;
+    transition: background 0.2s, color 0.2s;
+  }
+  .slider-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 600px) {
+    .slider-row { grid-template-columns: 1fr; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set title = risk.risk_name if risk else "New Risk" %}
+
+{# ── Breadcrumb ──────────────────────────────────────────────────────────── #}
+<div class="breadcrumb">
+  <a href="/risks">Risk Register</a>
+  <span class="sep">/</span>
+  <span>{{ title }}</span>
+</div>
+
+{# ── Page header ──────────────────────────────────────────────────────────── #}
+{% if risk %}
+  {% set level = risk.risk_level or 'Low' %}
+  {% if level == 'Critical' %}
+    {% set lev_color = 'var(--red)' %}
+    {% set lev_bg = 'rgba(244,67,54,0.15)' %}
+  {% elif level == 'High' %}
+    {% set lev_color = '#ff6b35' %}
+    {% set lev_bg = 'rgba(255,107,53,0.15)' %}
+  {% elif level == 'Moderate' %}
+    {% set lev_color = 'var(--yellow)' %}
+    {% set lev_bg = 'rgba(255,179,0,0.15)' %}
+  {% else %}
+    {% set lev_color = 'var(--green)' %}
+    {% set lev_bg = 'rgba(0,200,83,0.15)' %}
+  {% endif %}
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+    <div>
+      <h1 style="margin:0;margin-bottom:8px">{{ risk.risk_name }}</h1>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="badge" style="background:{{ lev_bg }};color:{{ lev_color }}">{{ level }}</span>
+        {% if risk.status %}
+        <span class="badge"
+              style="background:{% if risk.status == 'closed' %}rgba(0,200,83,0.15){% elif risk.status == 'accepted' %}rgba(0,255,204,0.1){% else %}rgba(158,158,158,0.1){% endif %};
+                     color:{% if risk.status == 'closed' %}var(--green){% elif risk.status == 'accepted' %}var(--cyan){% else %}var(--grey){% endif %}">
+          {{ risk.status | title }}
+        </span>
+        {% endif %}
+        {% if risk.created_at %}
+        <span style="font-size:0.75em;color:var(--muted)">
+          Created {{ risk.created_at.strftime('%Y-%m-%d') if risk.created_at.strftime is defined else risk.created_at }}
+        </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div style="margin-bottom:24px">
+    <h1 style="margin:0">New Risk</h1>
+    <p class="text-muted" style="margin-top:4px;font-size:0.88em">Register an organizational risk and define treatment strategy</p>
+  </div>
+{% endif %}
+
+{# ── Form card ────────────────────────────────────────────────────────────── #}
+<div class="card">
+  <form method="POST" action="{{ action }}">
+
+    {# ══════════════════════════════════════════════════
+       SECTION 1: Risk Identification
+    ══════════════════════════════════════════════════ #}
+    <div class="form-section">
+      <div class="section-header" style="margin-bottom:18px">Risk Identification</div>
+
+      <div class="form-group">
+        <label for="risk_name">Risk Name <span style="color:var(--red)">*</span></label>
+        <input type="text" id="risk_name" name="risk_name" required
+               value="{{ risk.risk_name if risk else '' }}"
+               placeholder="Brief, descriptive risk name">
+      </div>
+
+      <div class="form-group">
+        <label for="risk_description">Risk Description</label>
+        <textarea id="risk_description" name="risk_description"
+                  rows="4" placeholder="Describe the risk scenario, potential consequences, and affected assets…">{{ risk.risk_description if risk else '' }}</textarea>
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label for="system_id">Associated System</label>
+        <select id="system_id" name="system_id">
+          <option value="">— No System —</option>
+          {% for sys in systems %}
+          <option value="{{ sys.id }}"
+            {% if risk and risk.system_id == sys.id %}selected
+            {% elif linked_system and linked_system.id == sys.id %}selected{% endif %}>
+            {{ sys.name }}{% if sys.abbreviation %} ({{ sys.abbreviation }}){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    {# ══════════════════════════════════════════════════
+       SECTION 2: Threat Characterization
+    ══════════════════════════════════════════════════ #}
+    <div class="form-section" style="border-top:1px solid var(--border);padding-top:28px">
+      <div class="section-header" style="margin-bottom:18px">Threat Characterization</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label for="threat_source">Threat Source</label>
+          <select id="threat_source" name="threat_source">
+            {% for src, label in [('human','Human'), ('environmental','Environmental'), ('technical','Technical')] %}
+            <option value="{{ src }}"
+              {% if risk and risk.threat_source == src %}selected{% endif %}>
+              {{ label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0">
+          <label for="threat_event">Threat Event</label>
+          <input type="text" id="threat_event" name="threat_event"
+                 value="{{ risk.threat_event if risk else '' }}"
+                 placeholder="e.g. Unauthorized access, Data exfiltration">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top:16px;margin-bottom:0">
+        <label for="vulnerability">Vulnerability / Predisposing Condition</label>
+        <textarea id="vulnerability" name="vulnerability"
+                  rows="3" placeholder="Describe the system weakness or condition that could be exploited…">{{ risk.vulnerability if risk else '' }}</textarea>
+      </div>
+    </div>
+
+    {# ══════════════════════════════════════════════════
+       SECTION 3: Likelihood × Impact
+    ══════════════════════════════════════════════════ #}
+    <div class="form-section" style="border-top:1px solid var(--border);padding-top:28px">
+      <div class="section-header" style="margin-bottom:18px">Likelihood &times; Impact</div>
+
+      <div class="slider-row" style="margin-bottom:20px">
+        {# Likelihood slider #}
+        <div class="slider-wrap">
+          <label for="likelihood">
+            Likelihood:
+            <span id="likelihood-label" style="color:var(--cyan);font-weight:700">
+              {{ risk.likelihood if risk and risk.likelihood else '3' }}
+            </span>
+            <span id="likelihood-text" style="color:var(--muted);font-size:0.85em;margin-left:4px"></span>
+          </label>
+          <input type="range" id="likelihood" name="likelihood"
+                 min="1" max="5" step="1"
+                 value="{{ risk.likelihood if risk and risk.likelihood else 3 }}"
+                 oninput="updateRiskScore()">
+          <div class="slider-labels">
+            <span>1 Very Low</span>
+            <span>2 Low</span>
+            <span>3 Moderate</span>
+            <span>4 High</span>
+            <span>5 Very High</span>
+          </div>
+        </div>
+
+        {# Impact slider #}
+        <div class="slider-wrap">
+          <label for="impact">
+            Impact:
+            <span id="impact-label" style="color:var(--cyan);font-weight:700">
+              {{ risk.impact if risk and risk.impact else '3' }}
+            </span>
+            <span id="impact-text" style="color:var(--muted);font-size:0.85em;margin-left:4px"></span>
+          </label>
+          <input type="range" id="impact" name="impact"
+                 min="1" max="5" step="1"
+                 value="{{ risk.impact if risk and risk.impact else 3 }}"
+                 oninput="updateRiskScore()">
+          <div class="slider-labels">
+            <span>1 Very Low</span>
+            <span>2 Low</span>
+            <span>3 Moderate</span>
+            <span>4 High</span>
+            <span>5 Very High</span>
+          </div>
+        </div>
+      </div>
+
+      {# Computed risk score display #}
+      <div style="display:flex;align-items:center;gap:16px;padding:16px;
+                  background:var(--surface);border:1px solid var(--border);border-radius:6px">
+        <div>
+          <div style="font-size:0.65em;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px">
+            Inherent Risk Score
+          </div>
+          <span id="risk-score-badge" class="score-badge-large">—</span>
+        </div>
+        <div style="font-size:0.82em;color:var(--muted)">
+          Score = Likelihood &times; Impact<br>
+          <span id="risk-score-formula" style="color:var(--text);font-family:var(--mono);font-size:0.9em"></span>
+        </div>
+      </div>
+    </div>
+
+    {# ══════════════════════════════════════════════════
+       SECTION 4: Treatment
+    ══════════════════════════════════════════════════ #}
+    <div class="form-section" style="border-top:1px solid var(--border);padding-top:28px">
+      <div class="section-header" style="margin-bottom:18px">Treatment</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label for="treatment">Treatment Strategy</label>
+          <select id="treatment" name="treatment">
+            {% for t in ['Accept', 'Mitigate', 'Transfer', 'Avoid'] %}
+            <option value="{{ t }}"
+              {% if risk and risk.treatment == t %}selected{% endif %}>
+              {{ t }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0">
+          <label for="owner">Risk Owner</label>
+          <input type="text" id="owner" name="owner"
+                 value="{{ risk.owner if risk else '' }}"
+                 placeholder="Person or team accountable for this risk">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top:16px">
+        <label for="treatment_plan">Treatment Plan</label>
+        <textarea id="treatment_plan" name="treatment_plan"
+                  rows="4" placeholder="Describe specific actions, controls, or measures to treat this risk…">{{ risk.treatment_plan if risk else '' }}</textarea>
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label for="review_date">Review Date</label>
+        <input type="date" id="review_date" name="review_date"
+               value="{{ risk.review_date.strftime('%Y-%m-%d') if risk and risk.review_date and risk.review_date.strftime is defined else (risk.review_date if risk and risk.review_date else '') }}"
+               style="max-width:200px">
+      </div>
+    </div>
+
+    {# ══════════════════════════════════════════════════
+       SECTION 5: Residual Risk
+    ══════════════════════════════════════════════════ #}
+    <div class="form-section" style="border-top:1px solid var(--border);padding-top:28px">
+      <div class="section-header" style="margin-bottom:4px">Residual Risk</div>
+      <p class="text-muted" style="font-size:0.82em;margin-bottom:18px">Risk level remaining after treatment controls are applied</p>
+
+      <div class="slider-row" style="margin-bottom:20px">
+        {# Residual likelihood #}
+        <div class="slider-wrap">
+          <label for="residual_likelihood">
+            Residual Likelihood:
+            <span id="res-likelihood-label" style="color:var(--cyan);font-weight:700">
+              {{ risk.residual_likelihood if risk and risk.residual_likelihood else '2' }}
+            </span>
+          </label>
+          <input type="range" id="residual_likelihood" name="residual_likelihood"
+                 min="1" max="5" step="1"
+                 value="{{ risk.residual_likelihood if risk and risk.residual_likelihood else 2 }}"
+                 oninput="updateResidualScore()">
+          <div class="slider-labels">
+            <span>1 Very Low</span>
+            <span>2 Low</span>
+            <span>3 Moderate</span>
+            <span>4 High</span>
+            <span>5 Very High</span>
+          </div>
+        </div>
+
+        {# Residual impact #}
+        <div class="slider-wrap">
+          <label for="residual_impact">
+            Residual Impact:
+            <span id="res-impact-label" style="color:var(--cyan);font-weight:700">
+              {{ risk.residual_impact if risk and risk.residual_impact else '2' }}
+            </span>
+          </label>
+          <input type="range" id="residual_impact" name="residual_impact"
+                 min="1" max="5" step="1"
+                 value="{{ risk.residual_impact if risk and risk.residual_impact else 2 }}"
+                 oninput="updateResidualScore()">
+          <div class="slider-labels">
+            <span>1 Very Low</span>
+            <span>2 Low</span>
+            <span>3 Moderate</span>
+            <span>4 High</span>
+            <span>5 Very High</span>
+          </div>
+        </div>
+      </div>
+
+      {# Computed residual score display #}
+      <div style="display:flex;align-items:center;gap:16px;padding:16px;
+                  background:var(--surface);border:1px solid var(--border);border-radius:6px">
+        <div>
+          <div style="font-size:0.65em;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px">
+            Residual Risk Score
+          </div>
+          <span id="residual-score-badge" class="score-badge-large">—</span>
+        </div>
+        <div style="font-size:0.82em;color:var(--muted)">
+          Score = Residual Likelihood &times; Residual Impact<br>
+          <span id="residual-score-formula" style="color:var(--text);font-family:var(--mono);font-size:0.9em"></span>
+        </div>
+      </div>
+    </div>
+
+    {# ── Status — edit only ── #}
+    {% if risk %}
+    <div class="form-section" style="border-top:1px solid var(--border);padding-top:28px">
+      <div class="section-header" style="margin-bottom:18px">Status</div>
+      <div style="max-width:240px">
+        <div class="form-group" style="margin-bottom:0">
+          <label for="status">Current Status</label>
+          <select id="status" name="status">
+            {% for st_val, st_label in [('open','Open'), ('closed','Closed'), ('accepted','Accepted')] %}
+            <option value="{{ st_val }}"
+              {% if risk.status == st_val %}selected{% endif %}>
+              {{ st_label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── Form actions ── #}
+    <div style="display:flex;align-items:center;justify-content:space-between;
+                padding-top:20px;border-top:1px solid var(--border);margin-top:8px">
+      <a href="/risks" class="btn btn-ghost btn-sm">← Cancel</a>
+      <button type="submit" class="btn btn-primary">
+        {% if risk %}Save Changes{% else %}Create Risk{% endif %}
+      </button>
+    </div>
+
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const LEVEL_LABELS = {1: 'Very Low', 2: 'Low', 3: 'Moderate', 4: 'High', 5: 'Very High'};
+
+function scoreToLevel(score) {
+  if (score >= 15) return {label: 'Critical', color: '#f44336', bg: 'rgba(244,67,54,0.15)'};
+  if (score >= 10) return {label: 'High',     color: '#ff6b35', bg: 'rgba(255,107,53,0.15)'};
+  if (score >= 5)  return {label: 'Moderate', color: '#ffb300', bg: 'rgba(255,179,0,0.15)'};
+  return               {label: 'Low',      color: '#00c853', bg: 'rgba(0,200,83,0.15)'};
+}
+
+function updateRiskScore() {
+  const l = parseInt(document.getElementById('likelihood').value, 10);
+  const i = parseInt(document.getElementById('impact').value, 10);
+  const score = l * i;
+  const lvl = scoreToLevel(score);
+
+  // Update live labels
+  document.getElementById('likelihood-label').textContent = l;
+  document.getElementById('likelihood-text').textContent = LEVEL_LABELS[l] || '';
+  document.getElementById('impact-label').textContent = i;
+  document.getElementById('impact-text').textContent = LEVEL_LABELS[i] || '';
+
+  // Update score badge
+  const badge = document.getElementById('risk-score-badge');
+  badge.textContent = score + ' — ' + lvl.label;
+  badge.style.color = lvl.color;
+  badge.style.background = lvl.bg;
+  badge.style.border = '1px solid ' + lvl.color + '44';
+
+  // Formula line
+  document.getElementById('risk-score-formula').textContent =
+    l + ' × ' + i + ' = ' + score;
+}
+
+function updateResidualScore() {
+  const l = parseInt(document.getElementById('residual_likelihood').value, 10);
+  const i = parseInt(document.getElementById('residual_impact').value, 10);
+  const score = l * i;
+  const lvl = scoreToLevel(score);
+
+  document.getElementById('res-likelihood-label').textContent = l;
+  document.getElementById('res-impact-label').textContent = i;
+
+  const badge = document.getElementById('residual-score-badge');
+  badge.textContent = score + ' — ' + lvl.label;
+  badge.style.color = lvl.color;
+  badge.style.background = lvl.bg;
+  badge.style.border = '1px solid ' + lvl.color + '44';
+
+  document.getElementById('residual-score-formula').textContent =
+    l + ' × ' + i + ' = ' + score;
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+  updateRiskScore();
+  updateResidualScore();
+});
+</script>
+{% endblock %}

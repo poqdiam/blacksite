@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — POA&M Tracker{% endblock %}
+
+{% block content %}
+{# ── Page header ──────────────────────────────────────────────────────────── #}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+  <div>
+    <h1 style="margin:0">POA&amp;M Tracker</h1>
+    <p class="text-muted" style="margin-top:4px;font-size:0.88em">Plan of Action &amp; Milestones · All open items and remediation status</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <a href="/poam/export" class="btn btn-ghost btn-sm">↓ Export</a>
+    <a href="/poam/new" class="btn btn-primary btn-sm">+ New Item</a>
+  </div>
+</div>
+
+{# ── Stat row ─────────────────────────────────────────────────────────────── #}
+<div class="stats" style="margin-bottom:24px">
+  <div class="stat">
+    <div class="stat-value">{{ open_items|length }}</div>
+    <div class="stat-label">Open Items</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--red)">{{ crit_high|length }}</div>
+    <div class="stat-label">Critical + High</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--red)">{{ overdue|length }}</div>
+    <div class="stat-label">Overdue</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--yellow)">{{ due_soon|length }}</div>
+    <div class="stat-label">Due This Week</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--green)">{{ closed_month|length }}</div>
+    <div class="stat-label">Closed This Month</div>
+  </div>
+</div>
+
+{# ── Two-column: Aging + Severity ──────────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px">
+
+  {# Aging chart #}
+  <div class="card" style="padding:20px;margin-bottom:0">
+    <div class="card-title" style="margin-bottom:16px">Aging (Open Items)</div>
+    {% set aging_vals = [
+        (aging.get('0_30', 0),   '0–30 days',  '#00c853'),
+        (aging.get('31_60', 0),  '31–60 days', '#ffb300'),
+        (aging.get('61_90', 0),  '61–90 days', '#ff6b35'),
+        (aging.get('90_plus', 0),'90+ days',   '#f44336'),
+    ] %}
+    {% set aging_max = [aging.get('0_30',0), aging.get('31_60',0), aging.get('61_90',0), aging.get('90_plus',0), 1] | max %}
+    <div style="display:flex;align-items:flex-end;gap:8px;height:96px;margin-bottom:10px">
+      {% for val, label, color in aging_vals %}
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div style="font-size:1.05em;font-weight:900;color:{{ color }}">{{ val }}</div>
+        <div style="width:100%;background:{{ color }};opacity:0.85;border-radius:3px 3px 0 0;
+                    min-height:4px;height:{{ [val / aging_max * 60 | int, 4] | max }}px;transition:height 0.3s"></div>
+      </div>
+      {% endfor %}
+    </div>
+    <div style="display:flex;gap:8px">
+      {% for val, label, color in aging_vals %}
+      <div style="flex:1;text-align:center;font-size:0.6em;color:var(--muted);letter-spacing:0.5px;white-space:nowrap">{{ label }}</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# Severity breakdown #}
+  <div class="card" style="padding:20px;margin-bottom:0">
+    <div class="card-title" style="margin-bottom:16px">Severity Breakdown</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      {% for level, color, bg in [
+          ('Critical',     '#f44336', 'rgba(244,67,54,0.1)'),
+          ('High',         '#ff6b35', 'rgba(255,107,53,0.1)'),
+          ('Moderate',     '#ffb300', 'rgba(255,179,0,0.1)'),
+          ('Low',          '#00c853', 'rgba(0,200,83,0.1)'),
+      ] %}
+      <div style="background:{{ bg }};border:1px solid {{ color }}44;border-radius:6px;
+                  padding:14px;text-align:center">
+        <div style="font-size:1.9em;font-weight:900;color:{{ color }};line-height:1">
+          {{ sev_counts.get(level, 0) }}
+        </div>
+        <div style="font-size:0.6em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:5px">
+          {{ level }}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+{# ── Items table ───────────────────────────────────────────────────────────── #}
+<div class="section-header">All POA&amp;M Items</div>
+<div class="card" style="padding:0;overflow:hidden">
+  {% if all_items %}
+  <div style="overflow-x:auto">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>System</th>
+        <th>Control</th>
+        <th>Weakness</th>
+        <th>Severity</th>
+        <th>Responsible Party</th>
+        <th>Due Date</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in all_items %}
+      {% set sev = item.severity or 'Low' %}
+      {% if sev == 'Critical' %}
+        {% set sev_color = 'var(--red)' %}
+        {% set sev_bg = 'rgba(244,67,54,0.15)' %}
+      {% elif sev == 'High' %}
+        {% set sev_color = '#ff6b35' %}
+        {% set sev_bg = 'rgba(255,107,53,0.15)' %}
+      {% elif sev == 'Moderate' %}
+        {% set sev_color = 'var(--yellow)' %}
+        {% set sev_bg = 'rgba(255,179,0,0.15)' %}
+      {% elif sev == 'Low' %}
+        {% set sev_color = 'var(--green)' %}
+        {% set sev_bg = 'rgba(0,200,83,0.15)' %}
+      {% else %}
+        {% set sev_color = 'var(--grey)' %}
+        {% set sev_bg = 'rgba(158,158,158,0.1)' %}
+      {% endif %}
+      {% set st = item.status or 'open' %}
+      {% if st == 'closed' %}
+        {% set st_color = 'var(--green)' %}
+        {% set st_bg = 'rgba(0,200,83,0.15)' %}
+      {% elif st == 'in_progress' %}
+        {% set st_color = 'var(--yellow)' %}
+        {% set st_bg = 'rgba(255,179,0,0.15)' %}
+      {% elif st == 'risk_accepted' %}
+        {% set st_color = 'var(--cyan)' %}
+        {% set st_bg = 'rgba(0,255,204,0.1)' %}
+      {% elif st == 'false_positive' %}
+        {% set st_color = 'var(--muted)' %}
+        {% set st_bg = 'rgba(136,136,136,0.1)' %}
+      {% else %}
+        {% set st_color = 'var(--grey)' %}
+        {% set st_bg = 'rgba(158,158,158,0.1)' %}
+      {% endif %}
+      <tr>
+        <td class="mono" style="font-size:0.75em;color:var(--muted);white-space:nowrap">
+          {{ item.id[:6] }}
+        </td>
+        <td style="font-size:0.82em;color:var(--muted);white-space:nowrap">
+          {% if item.system_id and item.system_id in systems_map %}
+            {{ systems_map[item.system_id].name }}
+          {% elif item.system_id %}
+            <span class="mono" style="font-size:0.85em">{{ item.system_id[:8] }}</span>
+          {% else %}
+            <span style="color:#444">—</span>
+          {% endif %}
+        </td>
+        <td class="mono" style="font-size:0.8em;color:var(--cyan);white-space:nowrap">
+          {{ item.control_id or '—' }}
+        </td>
+        <td style="max-width:240px">
+          <a href="/poam/{{ item.id }}"
+             style="font-size:0.88em;font-weight:600;color:var(--text);
+                    overflow:hidden;text-overflow:ellipsis;display:block;white-space:nowrap"
+             title="{{ item.weakness_name }}">
+            {{ item.weakness_name }}
+          </a>
+        </td>
+        <td>
+          <span class="badge" style="background:{{ sev_bg }};color:{{ sev_color }}">{{ sev }}</span>
+        </td>
+        <td style="font-size:0.82em;color:var(--muted);white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis">
+          {{ item.responsible_party or '—' }}
+        </td>
+        <td style="font-size:0.8em;white-space:nowrap">
+          {% if item.scheduled_completion %}
+            {% set due = item.scheduled_completion %}
+            <span style="color:{% if item in overdue %}var(--red){% elif item in due_soon %}var(--yellow){% else %}var(--muted){% endif %}">
+              {{ due.strftime('%Y-%m-%d') if due and due.strftime is defined else due }}
+            </span>
+          {% else %}
+            <span style="color:#444">—</span>
+          {% endif %}
+        </td>
+        <td>
+          <span class="badge" style="background:{{ st_bg }};color:{{ st_color }}">
+            {{ st | replace('_', ' ') }}
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div style="padding:60px;text-align:center">
+    <div style="font-size:2em;margin-bottom:12px;color:#1e1e30">[ ]</div>
+    <div class="text-muted" style="margin-bottom:16px;font-size:0.9em">No POA&amp;M items created yet.</div>
+    <a href="/poam/new" class="btn btn-primary btn-sm">+ New Item</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

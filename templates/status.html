@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Processing{% endblock %}
+
+{% block content %}
+<div style="max-width:520px;margin:60px auto;text-align:center">
+  <div id="spinner" style="margin-bottom:24px">
+    <div style="width:48px;height:48px;border:3px solid var(--border);
+                border-top-color:var(--cyan);border-radius:50%;
+                animation:spin 0.8s linear infinite;margin:0 auto 16px"></div>
+  </div>
+
+  <h2 id="status-title">Analyzing SSP…</h2>
+  <p class="text-muted" id="status-sub">
+    Parsing document and checking controls against NIST 800-53r5.
+    This usually takes 10–30 seconds.
+  </p>
+  <p style="margin-top:24px;font-size:0.8em;color:var(--muted)">
+    <span class="mono">{{ filename }}</span>
+    &nbsp;·&nbsp; {{ candidate_name }}
+  </p>
+
+  {% if status == "error" %}
+  <div style="margin-top:32px;padding:16px;background:rgba(244,67,54,0.08);
+              border:1px solid var(--red);border-radius:6px;color:var(--red)">
+    Processing failed. <a href="/upload">Try uploading again →</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const id = "{{ assessment_id }}";
+const poll = setInterval(async () => {
+  try {
+    const r = await fetch('/api/status/' + id);
+    const d = await r.json();
+    if (d.status === 'complete') {
+      clearInterval(poll);
+      document.getElementById('status-title').textContent = 'Analysis complete!';
+      document.getElementById('status-sub').innerHTML =
+        'SSP Score: <strong style="color:var(--cyan)">' + d.ssp_score.toFixed(1) + '</strong>. Redirecting to quiz…';
+      setTimeout(() => { window.location = '/quiz/' + id; }, 1200);
+    } else if (d.status === 'error') {
+      clearInterval(poll);
+      document.getElementById('status-title').textContent = 'Processing failed';
+      document.getElementById('status-sub').innerHTML =
+        d.error || 'An error occurred. <a href="/">Try again →</a>';
+      document.getElementById('spinner').style.display = 'none';
+    }
+  } catch(e) { /* network hiccup — keep polling */ }
+}, 2000);
+</script>
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}

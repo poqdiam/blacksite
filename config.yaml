@@ -1,0 +1,62 @@
+# BLACKSITE — Configuration
+# Edit this file before first run.
+
+app:
+  name: BLACKSITE
+  brand: TheKramerica
+  tagline: "Security Assessment Platform"
+  host: 0.0.0.0
+  port: 8100
+  secret_key: "CHANGE_ME_RANDOM_32_CHAR_STRING"   # used for session signing — rotate via creds page
+  base_url: "https://blacksite.borisov.network"
+  authelia_logout_url: "https://auth.borisov.network/logout?rd=https://blacksite.borisov.network"
+  admin_users:           # Authelia usernames with admin dashboard access
+    - dan
+
+employees:               # Known employees (non-admin Authelia users)
+  - username: ""         # Authelia Remote-User value
+    name: ""
+    email: ""
+
+quiz:
+  daily: true
+  question_count: 15     # questions shown per daily quiz attempt
+  pass_threshold: 75     # minimum percentage to pass (0–100)
+
+db:
+  path: "blacksite.db"
+
+storage:
+  uploads_dir: "uploads"
+  results_dir: "results"
+  controls_dir: "controls"
+
+nist:
+  catalog_url: "https://raw.githubusercontent.com/usnistgov/oscal-content/main/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_catalog.json"
+  github_api_url: "https://api.github.com/repos/usnistgov/oscal-content/commits?path=nist.gov%2FSP800-53%2Frev5%2Fjson%2FNIST_SP-800-53_rev5_catalog.json&per_page=1"
+  local_path: "controls/nist_800_53r5.json"
+  local_meta: "controls/meta.json"
+  # NIST does not publish at a fixed daily time — update nightly at midnight
+  update_cron: "0 0 * * *"
+
+email:
+  enabled: true
+  # Credentials are in /etc/blacksite/email.conf (root:root, 600) — not here.
+  # Run: sudo bash /home/graycat/scripts/setup-blacksite-email.sh <gmail> <app-password>
+  from_address: "BLACKSITE <daniel@thekramerica.com>"
+  to_address: "daniel@thekramerica.com"
+
+scoring:
+  # Weight for SSP vs quiz in combined score
+  ssp_weight: 0.70
+  quiz_weight: 0.30
+  # Thresholds for All Star designation
+  allstar_combined_min: 80
+  allstar_quiz_min: 80
+
+ai:
+  enabled: false
+  provider: "claude"               # claude | openai
+  api_key: ""                      # leave blank to use rule-based only
+  model: "claude-haiku-4-5-20251001"  # cheapest model for classification tasks
+  review_on_complete: false        # auto-trigger AI review when assessment completes

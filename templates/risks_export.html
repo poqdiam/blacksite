@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Risk Register — {{ export_date }}</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 10pt; }
+    body {
+      background: #fff;
+      color: #111;
+      font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+      line-height: 1.5;
+    }
+
+    /* ── Page wrap ────────────────────────────────────────────────────────── */
+    .page-wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 36px 56px;
+    }
+
+    /* ── Back link (screen only) ──────────────────────────────────────────── */
+    .back-link {
+      display: inline-block;
+      margin-bottom: 18px;
+      font-size: 0.85em;
+      color: #1a6fa8;
+      text-decoration: none;
+    }
+    .back-link:hover { text-decoration: underline; }
+
+    /* ── Document header ──────────────────────────────────────────────────── */
+    .doc-header {
+      border-bottom: 3px solid #1a1a2e;
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }
+    .doc-org {
+      font-size: 0.72em;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #666;
+      margin-bottom: 6px;
+      border-left: 3px solid #1a6fa8;
+      padding-left: 10px;
+    }
+    .doc-title {
+      font-size: 1.7em;
+      font-weight: 900;
+      color: #1a1a2e;
+      line-height: 1.2;
+      margin-bottom: 4px;
+    }
+    .doc-subtitle {
+      font-size: 0.82em;
+      color: #555;
+    }
+    .doc-meta {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+      font-size: 0.78em;
+      color: #666;
+    }
+    .doc-meta span { display: flex; gap: 5px; }
+    .doc-meta strong { color: #333; }
+
+    /* ── Summary tiles ────────────────────────────────────────────────────── */
+    .summary-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .summary-tile {
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 14px 12px;
+      text-align: center;
+      background: #f9f9f9;
+    }
+    .summary-tile-value { font-size: 1.8em; font-weight: 900; line-height: 1; margin-bottom: 4px; }
+    .summary-tile-label { font-size: 0.65em; letter-spacing: 1px; text-transform: uppercase; color: #777; }
+    .tile-critical { color: #c0392b; }
+    .tile-high     { color: #e67e22; }
+    .tile-moderate { color: #b8860b; }
+    .tile-low      { color: #1b7a30; }
+    .tile-default  { color: #1a1a2e; }
+
+    /* ── Section title ────────────────────────────────────────────────────── */
+    .section-title {
+      font-size: 0.72em;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #555;
+      border-left: 3px solid #1a6fa8;
+      padding-left: 10px;
+      margin-bottom: 12px;
+    }
+
+    /* ── Risk table ───────────────────────────────────────────────────────── */
+    .risk-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.81em;
+      margin-bottom: 24px;
+    }
+    .risk-table th {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 7px 8px;
+      text-align: left;
+      font-size: 0.8em;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      vertical-align: bottom;
+    }
+    .risk-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #e8e8e8;
+      vertical-align: top;
+    }
+    .risk-table tr:last-child td { border-bottom: 2px solid #1a1a2e; }
+    .risk-table tr:nth-child(even) td { background: #fafafa; }
+    .risk-table tr:hover td { background: #f0f4ff; }
+
+    /* ── Risk level text colors ───────────────────────────────────────────── */
+    .rl-critical { color: #c0392b; font-weight: 700; }
+    .rl-high     { color: #e67e22; font-weight: 700; }
+    .rl-moderate { color: #7d6608; font-weight: 700; }
+    .rl-low      { color: #1b7a30; font-weight: 700; }
+
+    /* ── Risk score chip ──────────────────────────────────────────────────── */
+    .score-chip {
+      display: inline-block;
+      min-width: 28px;
+      text-align: center;
+      font-weight: 900;
+      font-size: 0.95em;
+      border-radius: 3px;
+      padding: 1px 5px;
+    }
+    .score-critical { background: rgba(192,57,43,0.12);  color: #c0392b; }
+    .score-high     { background: rgba(230,126,34,0.12); color: #e67e22; }
+    .score-moderate { background: rgba(184,134,11,0.1);  color: #7d6608; }
+    .score-low      { background: rgba(27,122,48,0.1);   color: #1b7a30; }
+
+    /* ── Likelihood / impact scale indicators ─────────────────────────────── */
+    .scale-cell { text-align: center; font-weight: 700; font-size: 0.95em; }
+
+    /* ── Mono font ────────────────────────────────────────────────────────── */
+    .mono { font-family: 'Courier New', Courier, monospace; }
+
+    /* ── Empty state ──────────────────────────────────────────────────────── */
+    .empty-box {
+      border: 1px solid #a8d5b5;
+      border-radius: 4px;
+      background: #f0fff4;
+      padding: 20px 24px;
+      color: #1b5e20;
+      font-size: 0.88em;
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    /* ── Scoring legend ───────────────────────────────────────────────────── */
+    .legend {
+      font-size: 0.72em;
+      color: #666;
+      margin-bottom: 14px;
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+
+    /* ── Footer ───────────────────────────────────────────────────────────── */
+    .doc-footer {
+      margin-top: 40px;
+      padding-top: 12px;
+      border-top: 1px solid #ddd;
+      font-size: 0.68em;
+      color: #aaa;
+      text-align: center;
+    }
+
+    /* ── Print rules ──────────────────────────────────────────────────────── */
+    @media print {
+      body { font-size: 8pt; background: #fff; color: #000; }
+      .no-print { display: none !important; }
+      .page-wrap { padding: 0; max-width: 100%; }
+      .risk-table th {
+        background: #1a1a2e !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .risk-table tr:nth-child(even) td {
+        background: #f5f5f5 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      a { color: #000; text-decoration: none; }
+      .summary-tile { border: 1px solid #ccc !important; }
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  {# ── Back link (no-print) ─────────────────────────────────────────────── #}
+  <a href="/risks" class="back-link no-print">← Back to Risk Register</a>
+
+  {# ── Document header ──────────────────────────────────────────────────── #}
+  <div class="doc-header">
+    <div class="doc-org">BLACKSITE GRC Platform &middot; Risk Management</div>
+    <div class="doc-title">Risk Register</div>
+    <div class="doc-subtitle">Organizational Risk Inventory &middot; NIST SP 800-30 Rev 1</div>
+    <div class="doc-meta">
+      <span><strong>Export Date:</strong> {{ export_date }}</span>
+      <span><strong>Framework:</strong> NIST SP 800-30 Rev 1</span>
+      <span><strong>Total Risks:</strong> {{ risks | length }}</span>
+    </div>
+  </div>
+
+  {# ── Summary tiles ────────────────────────────────────────────────────── #}
+  {% set ns = namespace(critical=0, high=0, moderate=0, low=0, open=0) %}
+  {% for risk in risks %}
+    {% set rl = (risk.risk_level or '') | lower %}
+    {% if rl == 'critical' %}{% set ns.critical = ns.critical + 1 %}
+    {% elif rl == 'high' %}{% set ns.high = ns.high + 1 %}
+    {% elif rl == 'moderate' %}{% set ns.moderate = ns.moderate + 1 %}
+    {% elif rl == 'low' %}{% set ns.low = ns.low + 1 %}
+    {% endif %}
+    {% if (risk.status or 'open') == 'open' %}{% set ns.open = ns.open + 1 %}{% endif %}
+  {% endfor %}
+  <div class="summary-row">
+    <div class="summary-tile">
+      <div class="summary-tile-value tile-default">{{ risks | length }}</div>
+      <div class="summary-tile-label">Total</div>
+    </div>
+    <div class="summary-tile">
+      <div class="summary-tile-value tile-critical">{{ ns.critical }}</div>
+      <div class="summary-tile-label">Critical</div>
+    </div>
+    <div class="summary-tile">
+      <div class="summary-tile-value tile-high">{{ ns.high }}</div>
+      <div class="summary-tile-label">High</div>
+    </div>
+    <div class="summary-tile">
+      <div class="summary-tile-value tile-moderate">{{ ns.moderate }}</div>
+      <div class="summary-tile-label">Moderate</div>
+    </div>
+    <div class="summary-tile">
+      <div class="summary-tile-value tile-low">{{ ns.low }}</div>
+      <div class="summary-tile-label">Low</div>
+    </div>
+    <div class="summary-tile">
+      <div class="summary-tile-value" style="color:#e67e22">{{ ns.open }}</div>
+      <div class="summary-tile-label">Open</div>
+    </div>
+  </div>
+
+  {# ── Section title + legend ───────────────────────────────────────────── #}
+  <div class="section-title">Risk Inventory</div>
+
+  <div class="legend no-print">
+    <span style="font-weight:700;color:#333">Risk Score = Likelihood &times; Impact</span>
+    <span class="legend-item"><span class="score-chip score-critical">16–25</span> Critical</span>
+    <span class="legend-item"><span class="score-chip score-high">9–15</span> High</span>
+    <span class="legend-item"><span class="score-chip score-moderate">4–8</span> Moderate</span>
+    <span class="legend-item"><span class="score-chip score-low">1–3</span> Low</span>
+  </div>
+
+  {# ── Risk table ───────────────────────────────────────────────────────── #}
+  {% if risks %}
+  <div style="overflow-x:auto">
+    <table class="risk-table">
+      <thead>
+        <tr>
+          <th>Risk Name</th>
+          <th>System</th>
+          <th>Threat Source</th>
+          <th style="text-align:center">Likelihood</th>
+          <th style="text-align:center">Impact</th>
+          <th style="text-align:center">Score</th>
+          <th>Risk Level</th>
+          <th>Treatment</th>
+          <th>Owner</th>
+          <th>Review Date</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for risk in risks %}
+        {% set rl = (risk.risk_level or 'Moderate') | lower %}
+        {% set rl_cls = rl if rl in ['critical','high','moderate','low'] else 'moderate' %}
+
+        {# Score chip class #}
+        {% set sc = risk.risk_score or 0 %}
+        {% if sc >= 16 %}{% set sc_cls = 'score-critical' %}
+        {% elif sc >= 9 %}{% set sc_cls = 'score-high' %}
+        {% elif sc >= 4 %}{% set sc_cls = 'score-moderate' %}
+        {% else %}{% set sc_cls = 'score-low' %}{% endif %}
+
+        <tr>
+          <td style="max-width:180px;font-weight:600">{{ risk.risk_name }}</td>
+          <td style="max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            {% if risk.system_id and risk.system_id in systems_map %}
+              {{ systems_map[risk.system_id].name }}
+            {% elif risk.system_id %}
+              <span class="mono" style="font-size:0.85em;color:#777">{{ risk.system_id[:8] }}</span>
+            {% else %}
+              <span style="color:#bbb">—</span>
+            {% endif %}
+          </td>
+          <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                     font-size:0.9em;color:#555;text-transform:capitalize">
+            {{ risk.threat_source or '—' }}
+          </td>
+          <td class="scale-cell">{{ risk.likelihood }}</td>
+          <td class="scale-cell">{{ risk.impact }}</td>
+          <td style="text-align:center">
+            <span class="score-chip {{ sc_cls }}">{{ sc }}</span>
+          </td>
+          <td class="rl-{{ rl_cls }}">{{ risk.risk_level or 'Moderate' }}</td>
+          <td style="font-size:0.9em;white-space:nowrap">{{ risk.treatment or 'Mitigate' }}</td>
+          <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                     font-size:0.88em;color:#444">
+            {{ risk.owner or '—' }}
+          </td>
+          <td class="mono" style="font-size:0.88em;white-space:nowrap;color:#555">
+            {{ risk.review_date or '—' }}
+          </td>
+          <td style="text-transform:capitalize;white-space:nowrap;font-size:0.9em">
+            {{ risk.status or 'open' }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-box">
+    No risks in the register. Add risks via the Risk Register to begin tracking.
+  </div>
+  {% endif %}
+
+  {# ── Methodology note ─────────────────────────────────────────────────── #}
+  <div style="font-size:0.72em;color:#888;margin-top:8px;padding:10px 12px;
+              border:1px solid #eee;border-radius:4px;background:#fafafa">
+    <strong>Methodology:</strong> Risk scores are calculated as Likelihood &times; Impact
+    (1–5 scale per NIST SP 800-30 Rev 1, Table H-3 &amp; H-5). Critical: 16–25, High: 9–15,
+    Moderate: 4–8, Low: 1–3. Treatment options: Mitigate, Accept, Transfer, Avoid.
+  </div>
+
+  {# ── Footer ───────────────────────────────────────────────────────────── #}
+  <div class="doc-footer">
+    Generated by BLACKSITE GRC Platform &middot; {{ export_date }}
+    &middot; NIST SP 800-30 Rev 1 &middot; NIST SP 800-53 Rev 5 RA-3
+  </div>
+
+</div>{# /page-wrap #}
+</body>
+</html>

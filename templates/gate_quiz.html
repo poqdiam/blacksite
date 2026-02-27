@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}BLACKSITE — Access Verification{% endblock %}
+
+{% block content %}
+<div style="max-width:680px;margin:0 auto">
+
+{% if result and result.submitted %}
+  {# ── Result screen ───────────────────────────────────────────────────── #}
+  <div style="text-align:center;padding:32px 0 24px">
+    <div style="font-size:3.5em;font-weight:900;
+                color:{% if result.passed %}var(--cyan){% else %}var(--red){% endif %}">
+      {{ result.score }}%
+    </div>
+    <div style="font-size:1.1em;font-weight:700;margin-top:8px;
+                color:{% if result.passed %}var(--cyan){% else %}var(--red){% endif %}">
+      {% if result.passed %}ACCESS GRANTED{% else %}ACCESS DENIED{% endif %}
+    </div>
+    <div style="color:var(--muted);font-size:0.85em;margin-top:6px">
+      {{ result.correct }} / {{ result.total }} correct &nbsp;·&nbsp;
+      {{ threshold }}% required
+    </div>
+  </div>
+
+  {% if not result.passed %}
+  <div style="background:var(--surface);border:1px solid #1e1e30;border-radius:8px;
+              padding:20px;margin-bottom:24px">
+    <div style="font-size:0.8em;color:var(--muted);margin-bottom:16px">
+      Review the questions below, then retry.
+    </div>
+    {% for q in result.details %}
+    <div style="padding:12px;border-radius:6px;margin-bottom:10px;
+                background:#0a0a12;border-left:3px solid
+                {% if q.is_correct %}var(--green){% else %}var(--red){% endif %}">
+      <div style="font-size:0.85em;font-weight:600;margin-bottom:8px;color:var(--text)">
+        {{ loop.index }}. {{ q.question }}
+      </div>
+      {% for letter, text in q.choices.items() %}
+      <div style="font-size:0.8em;padding:2px 0;
+        {% if letter == q.correct %}color:var(--green);font-weight:700
+        {% elif letter == q.selected and not q.is_correct %}color:var(--red)
+        {% else %}color:var(--muted){% endif %}">
+        {% if letter == q.selected %}▶ {% else %}&nbsp;&nbsp;{% endif %}
+        {{ letter }}. {{ text }}
+      </div>
+      {% endfor %}
+      <div style="margin-top:8px;font-size:0.78em;color:#555;font-style:italic">
+        {{ q.explanation }}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <form method="get" action="/gate">
+    <input type="hidden" name="next" value="{{ next }}"/>
+    <button type="submit" class="btn btn-primary" style="width:100%">
+      Retry — New Questions
+    </button>
+  </form>
+  {% endif %}
+
+{% else %}
+  {# ── Quiz screen ─────────────────────────────────────────────────────── #}
+  <div style="text-align:center;padding:24px 0 20px">
+    <div style="font-size:0.75em;letter-spacing:3px;color:var(--muted);margin-bottom:8px">
+      ACCESS VERIFICATION
+    </div>
+    <h1 style="font-size:1.4em;margin-bottom:6px">IT Security Quiz</h1>
+    <p style="color:var(--muted);font-size:0.83em">
+      {{ questions|length }} questions &nbsp;·&nbsp;
+      {{ threshold }}% required to continue &nbsp;·&nbsp;
+      Score resets at midnight
+    </p>
+  </div>
+
+  <form method="post" action="/gate/submit" id="gate-form">
+    <input type="hidden" name="next"  value="{{ next }}"/>
+    <input type="hidden" name="q_ids" value="{{ q_ids }}"/>
+
+    {% for q in questions %}
+    <div class="card" style="padding:18px 20px;margin-bottom:12px" id="gq-{{ q.id }}">
+      <div style="font-size:0.85em;font-weight:600;margin-bottom:12px;color:var(--text)">
+        {{ loop.index }}. {{ q.question }}
+      </div>
+      {% for letter, text in q.choices.items() %}
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:7px 10px;
+                    border-radius:4px;cursor:pointer;margin-bottom:4px;
+                    border:1px solid transparent;transition:border-color 0.15s"
+             class="choice-label" data-q="{{ q.id }}">
+        <input type="radio" name="q{{ q.id }}" value="{{ letter }}"
+               style="margin-top:2px;flex-shrink:0" required/>
+        <span style="font-size:0.82em">
+          <span style="color:var(--cyan);font-family:var(--mono)">{{ letter }}.</span>
+          {{ text }}
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+    {% endfor %}
+
+    <button type="submit" class="btn btn-primary"
+            style="width:100%;margin-top:8px;padding:14px;font-size:0.9em">
+      Submit &amp; Continue
+    </button>
+  </form>
+{% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Highlight selected choice
+document.querySelectorAll('.choice-label').forEach(label => {
+  const inp = label.querySelector('input[type=radio]');
+  inp.addEventListener('change', () => {
+    const qId = label.dataset.q;
+    document.querySelectorAll(`[data-q="${qId}"]`).forEach(l => {
+      l.style.borderColor = 'transparent';
+      l.style.background  = 'transparent';
+    });
+    label.style.borderColor = 'var(--cyan)';
+    label.style.background  = 'rgba(0,255,204,0.05)';
+  });
+});
+</script>
+{% endblock %}

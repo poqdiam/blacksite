@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SSP — {% if linked_system %}{{ linked_system.name }}{% else %}{{ candidate.name }}{% endif %}</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 11pt; }
+    body {
+      background: #fff;
+      color: #111;
+      font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+      line-height: 1.55;
+    }
+    a { color: #1a6fa8; }
+
+    /* ── Page structure ───────────────────────────────────────────────────── */
+    .page-wrap {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 32px 40px 60px;
+    }
+
+    /* ── Back link (screen only) ──────────────────────────────────────────── */
+    .back-link {
+      display: inline-block;
+      margin-bottom: 20px;
+      font-size: 0.85em;
+      color: #1a6fa8;
+    }
+
+    /* ── Cover page ───────────────────────────────────────────────────────── */
+    .cover {
+      min-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 40px 0 60px;
+      border-bottom: 3px solid #1a1a2e;
+      page-break-after: always;
+    }
+    .cover-org {
+      font-size: 0.78em;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #555;
+      margin-bottom: 32px;
+      border-left: 3px solid #1a6fa8;
+      padding-left: 12px;
+    }
+    .cover-title {
+      font-size: 2.4em;
+      font-weight: 900;
+      color: #111;
+      line-height: 1.15;
+      margin-bottom: 8px;
+    }
+    .cover-subtitle {
+      font-size: 1.05em;
+      color: #555;
+      margin-bottom: 32px;
+    }
+    .cover-meta {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 20px;
+      font-size: 0.85em;
+      color: #444;
+      margin-bottom: 36px;
+    }
+    .cover-meta-label { font-weight: 700; color: #222; }
+    .cui-box {
+      border: 2px solid #c0392b;
+      border-radius: 4px;
+      padding: 10px 18px;
+      display: inline-block;
+      font-size: 0.78em;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #c0392b;
+    }
+
+    /* ── Table of Contents ────────────────────────────────────────────────── */
+    .toc {
+      page-break-after: always;
+      padding: 40px 0;
+    }
+    .toc h2 { font-size: 1.3em; margin-bottom: 20px; color: #111; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
+    .toc ol  { padding-left: 24px; }
+    .toc li  { margin-bottom: 7px; font-size: 0.92em; color: #333; }
+
+    /* ── Section headers ──────────────────────────────────────────────────── */
+    .ssp-section {
+      padding-top: 32px;
+      margin-bottom: 24px;
+    }
+    .ssp-section-title {
+      font-size: 1.1em;
+      font-weight: 900;
+      color: #1a1a2e;
+      border-left: 4px solid #1a6fa8;
+      padding-left: 10px;
+      margin-bottom: 16px;
+    }
+    .ssp-section-num {
+      color: #1a6fa8;
+      margin-right: 6px;
+    }
+    .section-break { page-break-before: always; }
+
+    /* ── Info table (2-col key/value) ─────────────────────────────────────── */
+    .info-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88em;
+      margin-bottom: 16px;
+    }
+    .info-table td {
+      padding: 7px 10px;
+      border: 1px solid #ddd;
+      vertical-align: top;
+    }
+    .info-table td:first-child {
+      font-weight: 700;
+      background: #f5f5f5;
+      color: #333;
+      width: 34%;
+      white-space: nowrap;
+    }
+
+    /* ── FIPS 199 categorization table ───────────────────────────────────── */
+    .fips-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88em;
+      margin-bottom: 16px;
+    }
+    .fips-table th {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 8px 12px;
+      text-align: left;
+      font-size: 0.85em;
+      letter-spacing: 0.5px;
+    }
+    .fips-table td {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+    }
+    .impact-low      { color: #1b7a30; font-weight: 700; }
+    .impact-moderate { color: #b8860b; font-weight: 700; }
+    .impact-high     { color: #c0392b; font-weight: 700; }
+
+    /* ── Control implementation table ─────────────────────────────────────── */
+    .ctrl-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78em;
+      margin-bottom: 16px;
+    }
+    .ctrl-table th {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 6px 8px;
+      text-align: left;
+      font-size: 0.82em;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+    .ctrl-table td {
+      padding: 5px 8px;
+      border-bottom: 1px solid #eee;
+      vertical-align: top;
+    }
+    .ctrl-table tr:nth-child(even) td { background: #fafafa; }
+    .ctrl-table tr:hover td { background: #f0f4ff; }
+    .grade-complete     { color: #1b7a30; font-weight: 700; }
+    .grade-partial      { color: #b8860b; font-weight: 700; }
+    .grade-insufficient { color: #c0392b; font-weight: 700; }
+    .grade-not_found    { color: #777;    font-weight: 700; }
+    .grade-na           { color: #aaa;    font-style: italic; }
+    .ctrl-id { font-family: 'Courier New', Courier, monospace; font-size: 0.95em; }
+
+    /* ── POA&M table ──────────────────────────────────────────────────────── */
+    .poam-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82em;
+      margin-bottom: 16px;
+    }
+    .poam-table th {
+      background: #2c3e50;
+      color: #fff;
+      padding: 7px 10px;
+      text-align: left;
+      font-size: 0.82em;
+    }
+    .poam-table td {
+      padding: 6px 10px;
+      border-bottom: 1px solid #eee;
+      vertical-align: top;
+    }
+    .poam-table tr:nth-child(even) td { background: #fafafa; }
+    .sev-critical { color: #c0392b; font-weight: 700; }
+    .sev-high     { color: #e67e22; font-weight: 700; }
+    .sev-moderate { color: #b8860b; }
+    .sev-low      { color: #1b7a30; }
+
+    /* ── Roles section ────────────────────────────────────────────────────── */
+    .role-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .role-card {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 14px 16px;
+      background: #f9f9f9;
+    }
+    .role-title { font-size: 0.72em; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #555; margin-bottom: 6px; }
+    .role-name  { font-size: 1em; font-weight: 700; color: #111; }
+    .role-email { font-size: 0.82em; color: #1a6fa8; margin-top: 3px; }
+
+    /* ── Footer ───────────────────────────────────────────────────────────── */
+    .doc-footer {
+      margin-top: 60px;
+      padding-top: 14px;
+      border-top: 1px solid #ddd;
+      font-size: 0.72em;
+      color: #999;
+      text-align: center;
+    }
+
+    /* ── Body text ────────────────────────────────────────────────────────── */
+    .prose { font-size: 0.9em; color: #333; line-height: 1.7; }
+    .prose p { margin-bottom: 10px; }
+    .note-box {
+      background: #f0f4ff;
+      border-left: 4px solid #1a6fa8;
+      padding: 10px 14px;
+      font-size: 0.85em;
+      color: #333;
+      border-radius: 0 4px 4px 0;
+      margin-bottom: 14px;
+    }
+
+    /* ── Print rules ──────────────────────────────────────────────────────── */
+    @media print {
+      body { background: #fff; color: #000; font-size: 10pt; }
+      .no-print { display: none !important; }
+      .cover { page-break-after: always; min-height: auto; padding: 20px 0 40px; }
+      .toc   { page-break-after: always; }
+      .section-break { page-break-before: always; }
+      a { color: #000; text-decoration: none; }
+      .page-wrap { padding: 0; max-width: 100%; }
+      .ctrl-table { font-size: 7.5pt; }
+      .ctrl-table th, .ctrl-table td { padding: 3px 5px; }
+      .poam-table { font-size: 8pt; }
+      .role-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  {# ── Back link (no-print) ─────────────────────────────────────────────── #}
+  <a href="/results/{{ assessment_id }}" class="back-link no-print">← Back to Assessment</a>
+
+  {# ══════════════════════════════════════════════════════════════════════════
+     COVER PAGE
+  ═══════════════════════════════════════════════════════════════════════════ #}
+  <div class="cover">
+    <div class="cover-org">{{ brand }} · Governance, Risk &amp; Compliance</div>
+    <div class="cover-title">
+      {% if linked_system %}{{ linked_system.name }}{% else %}{{ candidate.name }}{% endif %}
+    </div>
+    <div class="cover-subtitle">System Security Plan (SSP)</div>
+
+    <div class="cover-meta">
+      <span class="cover-meta-label">Organization</span>
+      <span>{{ brand }}</span>
+
+      <span class="cover-meta-label">Version</span>
+      <span>1.0</span>
+
+      <span class="cover-meta-label">Document Date</span>
+      <span>{{ generated_at }}</span>
+
+      <span class="cover-meta-label">Prepared For</span>
+      <span>{{ candidate.name }}{% if candidate.email %} &lt;{{ candidate.email }}&gt;{% endif %}</span>
+
+      {% if linked_system %}
+      <span class="cover-meta-label">System</span>
+      <span>{{ linked_system.name }}{% if linked_system.abbreviation %} ({{ linked_system.abbreviation }}){% endif %}</span>
+
+      <span class="cover-meta-label">Owner</span>
+      <span>{{ linked_system.owner_name or 'Not specified' }}</span>
+      {% endif %}
+
+      <span class="cover-meta-label">Framework</span>
+      <span>NIST SP 800-53 Rev 5</span>
+
+      <span class="cover-meta-label">Reference</span>
+      <span>NIST SP 800-18 (Guide for Developing SSPs)</span>
+    </div>
+
+    <div class="cui-box">Controlled Unclassified Information (CUI)</div>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════════════════
+     TABLE OF CONTENTS
+  ═══════════════════════════════════════════════════════════════════════════ #}
+  <div class="toc">
+    <h2>Table of Contents</h2>
+    <ol>
+      <li>System Identification</li>
+      <li>Security Categorization (FIPS 199)</li>
+      <li>System Overview</li>
+      <li>Operational Environment</li>
+      <li>System Boundary</li>
+      <li>Roles &amp; Responsibilities</li>
+      <li>Information Types</li>
+      <li>Control Implementation</li>
+      <li>Plan of Action &amp; Milestones (POA&amp;M)</li>
+      <li>Interconnections</li>
+    </ol>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════════════════
+     SECTION 1 — SYSTEM IDENTIFICATION
+  ═══════════════════════════════════════════════════════════════════════════ #}
+  <div class="ssp-section section-break">
+    <div class="ssp-section-title">
+      <span class="ssp-section-num">1.</span> System Identification
+    </div>
+    <table class="info-table">
+      <tr>
+        <td>System Name</td>
+        <td>{% if linked_system %}{{ linked_system.name }}{% else %}Not specified{% endif %}</td>
+      </tr>
+      <tr>
+        <td>Abbreviation</td>
+        <td>{% if linked_system and linked_system.abbreviation %}{{ linked_system.abbreviation }}{% else %}—{% endif %}</td>
+      </tr>
+      <tr>
+        <td>System Type</td>
+        <td>
+          {% if linked_system and linked_system.system_type %}
+            {% if linked_system.system_type == 'major_application' %}Major Application
+            {% elif linked_system.system_type == 'general_support_system' %}General Support System
+            {% elif linked_system.system_type == 'minor_application' %}Minor Application
+            {% else %}{{ linked_system.system_type }}{% endif %}
+          {% else %}Not specified{% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>Operational Environment</td>
+        <td>
+          {% if linked_system and linked_system.environment %}
+            {% if linked_system.environment == 'on_prem' %}On-Premises
+            {% elif linked_system.environment == 'cloud' %}Cloud
+            {% elif linked_system.environment == 'hybrid' %}Hybrid
+            {% else %}{{ linked_system.environment }}{% endif %}
+          {% else %}Not specified{% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>System Owner</td>
+        <td>{% if linked_system and linked_system.owner_name %}{{ linked_system.owner_name }}{% else %}Not specified{% endif %}</td>
+      </tr>
+      <tr>
+        <td>Owner Email</td>
+        <td>{% if linked_system and linked_system.owner_email %}{{ linked_system.owner_email }}{% else %}Not specified{% endif %}</td>
+      </tr>
+      <tr>
+        <td>Authorization Status</td>
+        <td>
+          {% if linked_system %}
+            {% if linked_system.auth_status == 'authorized' %}Authorized to Operate (ATO)
+            {% elif linked_system.auth_status == 'in_progress' %}Authorization In Progress
+            {% elif linked_system.auth_status == 'expired' %}ATO Expired
+            {% else %}Not Authorized{% endif %}
+          {% else %}Not specified{% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>Authorization Date</td>
+        <td>{% if linked_system and linked_system.auth_date %}{{ linked_system.auth_date }}{% else %}—{% endif %}</td>
+      </tr>
+      <tr>
+        <td>Authorization Expiry</td>
+        <td>{% if linked_system and linked_system.auth_expiry %}{{ linked_system.auth_expiry }}{% else %}—{% endif %}</td>
+      </tr>
+      <tr>
+        <td>Assessment Filename</td>
+        <td style="font-family:'Courier New',monospace;font-size:0.9em">{{ assessment.filename }}</td>
+      </tr>
+      <tr>
+        <td>Assessment Date</td>
+        <td>{{ assessment.uploaded_at.strftime('%Y-%m-%d %H:%M UTC') if assessment.uploaded_at else generated_at }}</td>
+      </tr>
+    </table>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════════════════
+     SECTION 2 — SECURITY CATEGORIZATION (FIPS 199)
+  ═══════════════════════════════════════════════════════════════════════════ #}
+  <div class="ssp-section section-break">
+    <div class="ssp-section-title">
+      <span class="ssp-section-num">2.</span> Security Categorization (FIPS 199)
+    </div>
+    <div class="note-box">
+      Security categorization is performed in accordance with FIPS Publication 199,
+      <em>Standards for Security Categorization of Federal Information and Information Systems</em>,
+      and NIST SP 800-60.
+    </div>
+    <table class="fips-table">
+      <thead>
+        <tr>
+          <th>Security Objective</th>
+          <th>Impact Level</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for label, val, desc in [
+          ('Confidentiality',
+           linked_system.confidentiality_impact if linked_system else 'Not specified',
+           'Preserving authorized restrictions on information access and disclosure.'),
+          ('Integrity',
+           linked_system.integrity_impact if linked_system else 'Not specified',
+           'Guarding against improper information modification or destruction.'),
+          ('Availability',
+           linked_system.availability_impact if linked_system else 'Not specified',
+           'Ensuring timely and reliable access to information.'),
+        ] %}
+        {% set v = (val or '') | lower %}
+        <tr>
+          <td><strong>{{ label }}</strong></td>
+          <td class="impact-{{ v if v in ['low','moderate','high'] else '' }}">{{ val or 'Not specified' }}</td>
+          <td style="font-size:0.88em;color:#444">{{ desc }}</td>
+        </tr>
+        {% endfor %}
+        <tr style="background:#f0f4ff">
+          <td><strong>Overall Impact</strong></td>
+          {% set ov = (linked_system.overall_impact if linked_system else '') or '' %}
+          {% set ovl = ov | lower %}
+          <td class="impact-{{ ovl if ovl in ['low','moderate','high'] else '' }}"><strong>{{ ov or 'Not specified' }}</strong></td>
+          <td style="font-size:0.88em;color:#444">Maximum impact level across all security objectives (FIPS 199 §3).</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="prose">
+      SC {{ linked_system.name if linked_system else 'System' }} = {(Confidentiality, {{ (linked_system.confidentiality_impact or 'Low') if linked_system else 'Low' }}),
+      (Integrity, {{ (linked_system.integrity_impact or 'Low') if linked_system else 'Low' }}),
+      (Availability, {{ (linked_system.availability_impact or 'Low') if linked_system else 'Low' }})}
+    </p>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════════════════
+     SECTION 3 — SYSTEM OVERVIEW
+  ═══════════════════════════════════════════════════════════════════════════ #}
+  <div class="ssp-section section-break">
+    <div class="ssp-section-title">
+      <span class="ssp-section-num">3.</span> System Overview
+    </div>
+    <div class="prose">
+      {% if linked_system and linked_system.purpose %}
+        <p><strong>Purpose:</strong> {{ linked_system.purpose }}</p>
+      {% elif not linked_system %}
+        <p><strong>Source Document:</strong> {{ assessment.filename }}</p>
+        <p>System overview details are derived from the submitted System Security Plan document.
+           Link this assessment to a registered system to populate structured system information.</p>
+      {% else %}
+        <p>No system purpose specified. Update the system record to include a purpose statement.</p>
+      {% endif %}
+      {% if linked_system and linked_system.description %}
+        <p><strong>Description:</strong> {{ linked_system.description }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════════════════
+     SECTION 4 — OPERATIONAL ENVIRONMENT
+  ═══════════════════════════════════════════════════════════════════════════ #}
+  <div class="ssp-section">
+    <div class="ssp-section-title">
+      <span class="ssp-section-num">4.</span> Operational Environment
+    </div>
+    <table class="info-table">
+      <tr>
+        <td>Deployment Environment</td>
+        <td>
+          {% if linked_system and linked_system.environment %}
+            {% if linked_system.environment == 'on_prem' %}On-Premises data center
+            {% elif linked_system.environment == 'cloud' %}Commercial cloud infrastructure
+            {% elif linked_system.environment == 'hybrid' %}Hybrid (on-premises and cloud)
+            {% elif linked_system.environment == 'saas' %}Software as a Service (SaaS)
+            {% elif linked_system.environment == 'paas' %}Platform as a Service (PaaS)
+            {% elif linked_system.environment == 'iaas' %}Infrastructure as a Service (IaaS)
+            {% else %}{{ linked_system.environment }}{% endif %}
+          {% else %}Not specified{% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>Interconnections</td>
+        <td>See Section 10 — Interconnections</td>
+      </tr>
+      <tr>
+        <td>Network Architecture</td>
+        <td>Refer to network architecture diagrams maintained in the system documentation package.</td>
+      </tr>
+    </table>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════════════════
+     SECTION 5 — SYSTEM BOUNDARY
+  ═══════════════════════════════════════════════════════════════════════════ #}
+  <div class="ssp-section">
+    <div class="ssp-section-title">
+      <span class="ssp-section-num">5.</span> System Boundary
+    </div>
+    <div class="prose">
+      {% if linked_system and linked_system.boundary %}
+        <p>{{ linked_system.boundary }}</p>
+      {% else %}
+        <p>The system boundary encompasses all hardware, software, data, people, and procedures
+           within the authorization boundary of this information system. A detailed system boundary
+           diagram should be maintained as an attachment to this SSP.</p>
+        <p style="color:#888;font-style:italic">
+          No boundary description provided. Update the system record to include boundary details.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════════════════
+     SECTION 6 — ROLES & RESPONSIBILITIES
+  ═══════════════════════════════════════════════════════════════════════════ #}
+  <div class="ssp-section section-break">
+    <div class="ssp-section-title">
+      <span class="ssp-section-num">6.</span> Roles &amp; Responsibilities
+    </div>
+    <div class="role-grid">
+      <div class="role-card">
+        <div class="role-title">System Owner</div>
+        <div class="role-name">{% if linked_system and linked_system.owner_name %}{{ linked_system.owner_name }}{% else %}Not specified{% endif %}</div>
+        {% if linked_system and linked_system.owner_email %}
+        <div class="role-email">{{ linked_system.owner_email }}</div>
+        {% endif %}
+      </div>
+      <div class="role-card">
+        <div class="role-title">System Assessor</div>
+        <div class="role-name">{{ candidate.name }}</div>
+        {% if candidate.email %}
+        <div class="role-email">{{ candidate.email }}</div>
+        {% endif %}
+      </div>
+      <div class="role-card">
+        <div class="role-title">Authorizing Official</div>
+        <div class="role-name">To be designated</div>
+      </div>
+      <div class="role-card">
+        <div class="role-title">Information System Security Officer</div>
+        <div class="role-name">To be designated</div>
+      </div>
+    </div>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════════════════
+     SECTION 7 — INFORMATION TYPES
+  ═══════════════════════════════════════════════════════════════════════════ #}
+  <div class="ssp-section">
+    <div class="ssp-section-title">
+      <span class="ssp-section-num">7.</span> Information Types
+    </div>
+    <div class="prose">
+      <p>
+        Information types processed, stored, or transmitted by this system shall be identified
+        and categorized in accordance with NIST SP 800-60, Volume II,
+        <em>Guide for Mapping Types of Information and Information Systems to Security Categories</em>.
+      </p>
+      <p>
+        A completed information type table (per NIST SP 800-60 §2.1) should be attached as
+        Appendix A to this document. Contact the system owner to obtain the current information
+        type inventory.
+      </p>
+    </div>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════════════════
+     SECTION 8 — CONTROL IMPLEMENTATION
+  ═══════════════════════════════════════════════════════════════════════════ #}
+  <div class="ssp-section section-break">
+    <div class="ssp-section-title">
+      <span class="ssp-section-num">8.</span> Control Implementation
+    </div>
+    <div class="note-box">
+      Control assessment performed against NIST SP 800-53 Rev 5.
+      Grades: <strong>COMPLETE</strong> (fully implemented), <strong>PARTIAL</strong> (partially implemented),
+      <strong>INSUFFICIENT</strong> (not adequately implemented), <strong>NOT FOUND</strong> (not addressed in SSP),
+      <strong>N/A</strong> (not applicable).
+    </div>
+
+    {% if controls %}
+    <table class="ctrl-table">
+      <thead>
+        <tr>
+          <th>Control ID</th>
+          <th>Title</th>
+          <th>Status</th>
+          <th>Grade</th>
+          <th>Implementation Narrative (excerpt)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in controls %}
+        {% set g = c.ai_grade | lower %}
+        <tr>
+          <td class="ctrl-id">{{ c.control_id | upper }}</td>
+          <td style="max-width:160px">{{ c.control_title }}</td>
+          <td style="white-space:nowrap;font-size:0.85em">
+            {{ c.implementation_status or '—' }}
+          </td>
+          <td class="grade-{{ g }}">{{ c.ai_grade }}</td>
+          <td style="max-width:260px;font-size:0.85em;color:#444">
+            {% if c.narrative_excerpt %}
+              {{ c.narrative_excerpt[:300] }}{% if c.narrative_excerpt | length > 300 %}…{% endif %}
+            {% else %}
+              <em style="color:#aaa">No narrative captured.</em>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:#888;font-style:italic">No control results available for this assessment.</p>
+    {% endif %}
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════════════════
+     SECTION 9 — POA&M ITEMS
+  ═══════════════════════════════════════════════════════════════════════════ #}
+  <div class="ssp-section section-break">
+    <div class="ssp-section-title">
+      <span class="ssp-section-num">9.</span> Plan of Action &amp; Milestones (POA&amp;M)
+    </div>
+    {% if poam_items %}
+    <p class="prose" style="margin-bottom:14px">
+      The following POA&amp;M items document weaknesses identified during this assessment that
+      require remediation. Each item is tracked per NIST CA-5 requirements.
+    </p>
+    <table class="poam-table">
+      <thead>
+        <tr>
+          <th>POA&amp;M ID</th>
+          <th>Control</th>
+          <th>Weakness</th>
+          <th>Severity</th>
+          <th>Scheduled Completion</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in poam_items %}
+        {% set sev = item.severity or 'Moderate' %}
+        {% set sevl = sev | lower %}
+        <tr>
+          <td style="font-family:'Courier New',monospace;font-size:0.9em">{{ item.id[:6] }}</td>
+          <td style="font-family:'Courier New',monospace;font-size:0.9em">{{ item.control_id or '—' }}</td>
+          <td>{{ item.weakness_name }}</td>
+          <td class="sev-{{ sevl if sevl in ['critical','high','moderate','low'] else 'moderate' }}">{{ sev }}</td>
+          <td style="white-space:nowrap">{{ item.scheduled_completion or '—' }}</td>
+          <td style="text-transform:capitalize">{{ (item.status or 'open') | replace('_', ' ') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="padding:16px;background:#f0fff4;border:1px solid #a8d5b5;border-radius:4px;font-size:0.88em;color:#1b5e20">
+      No open POA&amp;M items for this system. All identified weaknesses have been resolved or accepted.
+    </div>
+    {% endif %}
+  </div>
+
+  {# ══════════════════════════════════════════════════════════════════════════
+     SECTION 10 — INTERCONNECTIONS
+  ═══════════════════════════════════════════════════════════════════════════ #}
+  <div class="ssp-section">
+    <div class="ssp-section-title">
+      <span class="ssp-section-num">10.</span> Interconnections
+    </div>
+    <div class="prose">
+      <p>
+        System interconnections must be documented per OMB Circular A-130,
+        <em>Managing Information as a Strategic Resource</em>, Appendix II, and in accordance
+        with NIST SP 800-47, <em>Managing the Security of Information Exchanges</em>.
+      </p>
+      <p>
+        Each interconnection with an external system or network must be covered by an
+        Interconnection Security Agreement (ISA) or Memorandum of Understanding/Agreement (MOU/MOA).
+        Attach the completed interconnection table as Appendix B to this document.
+      </p>
+    </div>
+  </div>
+
+  {# ── Footer ───────────────────────────────────────────────────────────── #}
+  <div class="doc-footer">
+    Generated by BLACKSITE GRC Platform &middot; {{ brand }} &middot; {{ generated_at }}
+    <br>
+    NIST SP 800-53 Rev 5 &middot; FIPS 199 &middot; NIST SP 800-18
+  </div>
+
+</div>{# /page-wrap #}
+</body>
+</html>

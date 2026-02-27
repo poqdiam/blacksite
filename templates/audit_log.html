@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Audit Log{% endblock %}
+
+{% block head %}
+<style>
+  /* ── Action badge colors ─────────────────────────────────────────────────── */
+  .act-create  { background: rgba(0,200,83,0.15);   color: var(--green);  }
+  .act-delete  { background: rgba(244,67,54,0.15);  color: var(--red);    }
+  .act-update  { background: rgba(255,179,0,0.15);  color: var(--yellow); }
+  .act-export  { background: rgba(0,255,204,0.1);   color: var(--cyan);   }
+  .act-view    { background: rgba(136,136,136,0.1); color: var(--muted);  }
+  .act-login   { background: rgba(255,215,0,0.12);  color: var(--gold);   }
+  .act-default { background: rgba(136,136,136,0.08);color: var(--muted);  }
+
+  /* ── Table hover highlight ───────────────────────────────────────────────── */
+  .audit-table tbody tr:hover td {
+    background: rgba(0,255,204,0.025);
+  }
+  .audit-table tbody tr:nth-child(even) td {
+    background: rgba(255,255,255,0.012);
+  }
+  .audit-table tbody tr:nth-child(even):hover td {
+    background: rgba(0,255,204,0.025);
+  }
+
+  /* ── Mono timestamp + ID ─────────────────────────────────────────────────── */
+  .col-ts  { font-family: var(--mono); font-size: 0.78em; color: var(--muted); white-space: nowrap; }
+  .col-id  { font-family: var(--mono); font-size: 0.8em;  color: var(--muted); white-space: nowrap; }
+  .col-rid { font-family: var(--mono); font-size: 0.8em;  color: var(--muted); letter-spacing: 0.5px; }
+
+  /* ── Empty state ─────────────────────────────────────────────────────────── */
+  .audit-empty {
+    padding: 64px 24px;
+    text-align: center;
+    color: var(--muted);
+  }
+  .audit-empty-icon {
+    font-size: 2em;
+    font-family: var(--mono);
+    color: #1e1e30;
+    margin-bottom: 12px;
+    letter-spacing: 3px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Breadcrumb ──────────────────────────────────────────────────────────── #}
+<div class="breadcrumb">
+  <a href="/admin">Admin Dashboard</a>
+  <span class="sep">/</span>
+  <span>Audit Log</span>
+</div>
+
+{# ── Page header ─────────────────────────────────────────────────────────── #}
+<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+  <div>
+    <h1 style="margin:0">Audit Log</h1>
+    <p class="text-muted" style="margin-top:5px;font-size:0.85em">
+      System event trail &middot; NIST AU-2 / AU-12
+    </p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <a href="/admin/audit/export" class="btn btn-ghost btn-sm">↓ Export CSV</a>
+  </div>
+</div>
+
+{# ── Section header with count ────────────────────────────────────────────── #}
+<div class="section-header" style="margin-bottom:16px">
+  {% if entries %}
+    Showing {{ entries | length }} most recent event{% if entries | length != 1 %}s{% endif %}
+  {% else %}
+    Audit Events
+  {% endif %}
+</div>
+
+{# ── Legend ───────────────────────────────────────────────────────────────── #}
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+  {% for label, cls in [
+    ('CREATE', 'act-create'),
+    ('DELETE', 'act-delete'),
+    ('UPDATE', 'act-update'),
+    ('EXPORT', 'act-export'),
+    ('VIEW',   'act-view'),
+    ('LOGIN',  'act-login'),
+  ] %}
+  <span class="badge {{ cls }}" style="font-size:0.65em;padding:3px 8px">{{ label }}</span>
+  {% endfor %}
+</div>
+
+{# ── Audit table card ─────────────────────────────────────────────────────── #}
+<div class="card" style="padding:0;overflow:hidden">
+  {% if entries %}
+  <div style="overflow-x:auto">
+    <table class="audit-table">
+      <thead>
+        <tr>
+          <th style="width:40px;text-align:center">#</th>
+          <th>Time</th>
+          <th>User</th>
+          <th>Action</th>
+          <th>Resource Type</th>
+          <th>Resource ID</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in entries %}
+        {% set act = (entry.action or '') | upper %}
+        {% if act == 'CREATE' %}
+          {% set act_cls = 'act-create' %}
+        {% elif act == 'DELETE' %}
+          {% set act_cls = 'act-delete' %}
+        {% elif act == 'UPDATE' %}
+          {% set act_cls = 'act-update' %}
+        {% elif act == 'EXPORT' %}
+          {% set act_cls = 'act-export' %}
+        {% elif act == 'VIEW' %}
+          {% set act_cls = 'act-view' %}
+        {% elif act == 'LOGIN' %}
+          {% set act_cls = 'act-login' %}
+        {% else %}
+          {% set act_cls = 'act-default' %}
+        {% endif %}
+        <tr>
+          <td style="text-align:center;font-size:0.72em;color:#444;user-select:none">
+            {{ loop.index }}
+          </td>
+          <td class="col-ts">
+            {{ entry.timestamp.strftime('%Y-%m-%d %H:%M:%S') if entry.timestamp else '—' }}
+          </td>
+          <td style="font-size:0.85em;white-space:nowrap">
+            {% if entry.remote_user %}
+              <span style="color:var(--text)">{{ entry.remote_user }}</span>
+            {% else %}
+              <span style="color:#444">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge {{ act_cls }}">{{ act or '—' }}</span>
+          </td>
+          <td style="font-size:0.82em;color:var(--muted);white-space:nowrap">
+            {{ entry.resource_type or '—' }}
+          </td>
+          <td class="col-rid">
+            {% if entry.resource_id %}
+              {{ entry.resource_id[:8] }}{% if entry.resource_id | length > 8 %}…{% endif %}
+            {% else %}
+              <span style="color:#444">—</span>
+            {% endif %}
+          </td>
+          <td style="font-size:0.8em;color:var(--muted);max-width:280px;
+                     overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="{{ entry.details or '' }}">
+            {% if entry.details %}
+              {{ entry.details[:120] }}{% if entry.details | length > 120 %}…{% endif %}
+            {% else %}
+              <span style="color:#333">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="audit-empty">
+    <div class="audit-empty-icon">[ AUDIT ]</div>
+    <div style="font-size:0.9em;margin-bottom:6px">No audit events recorded yet.</div>
+    <div style="font-size:0.78em;color:#444">
+      Events will appear here as users interact with the platform.
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% if entries %}
+<p class="text-muted" style="font-size:0.75em;margin-top:10px;text-align:right">
+  Audit events are retained per NIST AU-11. Contact your administrator to adjust the retention period.
+</p>
+{% endif %}
+
+{% endblock %}
