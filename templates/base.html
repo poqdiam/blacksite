@@ -427,6 +427,7 @@
     <a href="/controls" {% if request.url.path.startswith('/controls') %}class="active"{% endif %}>Controls</a>
     <a href="/poam" {% if request.url.path.startswith('/poam') %}class="active"{% endif %}>POA&amp;M</a>
     <a href="/risks" {% if request.url.path.startswith('/risks') %}class="active"{% endif %}>Risks</a>
+    <a href="/posture" {% if request.url.path == '/posture' %}class="active"{% endif %}>Posture</a>
     {% if is_admin %}
     <a href="/upload" {% if request.url.path == '/upload' %}class="active"{% endif %}>Upload</a>
     {% endif %}

@@ -2642,6 +2642,231 @@ async def health():
     return {"status": "ok", "controls": len(CATALOG)}
 
 
+# ── Compliance Posture Dashboard ──────────────────────────────────────────────
+
+@app.get("/posture", response_class=HTMLResponse)
+async def posture_dashboard(request: Request):
+    """Executive-level compliance posture view — aggregate GRC health metrics."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+    is_adm = _is_admin(request)
+
+    today_str = date.today().isoformat()
+    week_str  = (date.today() + timedelta(days=7)).isoformat()
+
+    async with SessionLocal() as session:
+        # System scope for employee view
+        if is_adm:
+            scope_q = True   # no filter
+            sys_ids_scope = None
+        else:
+            sys_ids_scope = await _user_system_ids(request, session)
+
+        def _sys_scope(q):
+            return q if sys_ids_scope is None else q.where(System.id.in_(sys_ids_scope))
+        def _poam_scope(q):
+            return q if sys_ids_scope is None else q.where(PoamItem.system_id.in_(sys_ids_scope))
+        def _risk_scope(q):
+            return q if sys_ids_scope is None else q.where(Risk.system_id.in_(sys_ids_scope))
+        def _sub_scope(q):
+            return q if sys_ids_scope is None else q.where(Submission.system_id.in_(sys_ids_scope))
+
+        # ── System KPIs ───────────────────────────────────────────────────────
+        total_sys = (await session.execute(_sys_scope(select(func.count(System.id))))).scalar() or 0
+        auth_by_status = {}
+        for row in (await session.execute(
+            _sys_scope(select(System.auth_status, func.count(System.id)).group_by(System.auth_status))
+        )).all():
+            auth_by_status[row[0]] = row[1]
+
+        authorized_pct = round(auth_by_status.get("authorized", 0) / max(total_sys, 1) * 100)
+
+        # Systems expiring in next 90 days
+        in_90 = (date.today() + timedelta(days=90)).isoformat()
+        expiring_soon = (await session.execute(
+            _sys_scope(
+                select(func.count(System.id))
+                .where(System.auth_status == "authorized")
+                .where(System.auth_expiry.isnot(None))
+                .where(System.auth_expiry <= in_90)
+                .where(System.auth_expiry >= today_str)
+            )
+        )).scalar() or 0
+
+        expired_count = (await session.execute(
+            _sys_scope(select(func.count(System.id)).where(System.auth_status == "expired"))
+        )).scalar() or 0
+
+        # ── POA&M KPIs ────────────────────────────────────────────────────────
+        open_poams = (await session.execute(
+            _poam_scope(select(func.count(PoamItem.id)).where(PoamItem.status.in_(["open","in_progress"])))
+        )).scalar() or 0
+
+        overdue_poams = (await session.execute(
+            _poam_scope(
+                select(func.count(PoamItem.id))
+                .where(PoamItem.status.in_(["open","in_progress"]))
+                .where(PoamItem.scheduled_completion.isnot(None))
+                .where(PoamItem.scheduled_completion < today_str)
+            )
+        )).scalar() or 0
+
+        crit_high_poams = (await session.execute(
+            _poam_scope(
+                select(func.count(PoamItem.id))
+                .where(PoamItem.status.in_(["open","in_progress"]))
+                .where(PoamItem.severity.in_(["Critical","High"]))
+            )
+        )).scalar() or 0
+
+        poam_sev_data = {}
+        for row in (await session.execute(
+            _poam_scope(
+                select(PoamItem.severity, func.count(PoamItem.id))
+                .where(PoamItem.status.in_(["open","in_progress"]))
+                .group_by(PoamItem.severity)
+            )
+        )).all():
+            poam_sev_data[row[0]] = row[1]
+
+        # ── Risk KPIs ─────────────────────────────────────────────────────────
+        open_risks = (await session.execute(
+            _risk_scope(select(func.count(Risk.id)).where(Risk.status != "closed"))
+        )).scalar() or 0
+
+        crit_high_risks = (await session.execute(
+            _risk_scope(
+                select(func.count(Risk.id))
+                .where(Risk.status != "closed")
+                .where(Risk.risk_level.in_(["Critical","High"]))
+            )
+        )).scalar() or 0
+
+        risk_level_data = {}
+        for row in (await session.execute(
+            _risk_scope(
+                select(Risk.risk_level, func.count(Risk.id))
+                .where(Risk.status != "closed")
+                .group_by(Risk.risk_level)
+            )
+        )).all():
+            risk_level_data[row[0]] = row[1]
+
+        # ── Control Coverage ──────────────────────────────────────────────────
+        total_sc = (await session.execute(
+            _sys_scope(select(func.count(SystemControl.id)).where(SystemControl.system_id == System.id)
+                       .correlate(System))
+            if sys_ids_scope is None
+            else select(func.count(SystemControl.id)).where(SystemControl.system_id.in_(sys_ids_scope))
+        )).scalar() or 0
+
+        impl_sc = (await session.execute(
+            (select(func.count(SystemControl.id)).where(SystemControl.system_id.in_(sys_ids_scope))
+             .where(SystemControl.status.in_(["implemented","inherited","not_applicable"]))
+             if sys_ids_scope is not None
+             else select(func.count(SystemControl.id))
+                  .where(SystemControl.status.in_(["implemented","inherited","not_applicable"])))
+        )).scalar() or 0
+
+        coverage_pct = round(impl_sc / max(total_sc, 1) * 100)
+
+        sc_status_data = {}
+        sc_q = (select(SystemControl.status, func.count(SystemControl.id)).group_by(SystemControl.status)
+                if sys_ids_scope is None
+                else select(SystemControl.status, func.count(SystemControl.id))
+                     .where(SystemControl.system_id.in_(sys_ids_scope))
+                     .group_by(SystemControl.status))
+        for row in (await session.execute(sc_q)).all():
+            sc_status_data[row[0]] = row[1]
+
+        # ── Submission / ATO pipeline ─────────────────────────────────────────
+        sub_pipeline = {}
+        for row in (await session.execute(
+            _sub_scope(select(Submission.status, func.count(Submission.id)).group_by(Submission.status))
+        )).all():
+            sub_pipeline[row[0]] = row[1]
+
+        # ── 30-day activity: new POA&Ms and closed POA&Ms ─────────────────────
+        month_ago = (date.today() - timedelta(days=30)).isoformat()
+        new_poams_30d = (await session.execute(
+            _poam_scope(
+                select(func.count(PoamItem.id))
+                .where(PoamItem.created_at >= month_ago)
+            )
+        )).scalar() or 0
+        closed_poams_30d = (await session.execute(
+            _poam_scope(
+                select(func.count(PoamItem.id))
+                .where(PoamItem.status == "closed")
+                .where(PoamItem.updated_at >= month_ago)
+            )
+        )).scalar() or 0
+
+        # Top 5 systems by open POA&M count (admin only for global view)
+        top_poam_systems: list = []
+        if is_adm or sys_ids_scope:
+            tq = (
+                select(System.name, func.count(PoamItem.id).label("cnt"))
+                .join(PoamItem, PoamItem.system_id == System.id)
+                .where(PoamItem.status.in_(["open","in_progress"]))
+                .group_by(System.id)
+                .order_by(func.count(PoamItem.id).desc())
+                .limit(5)
+            )
+            if sys_ids_scope is not None:
+                tq = tq.where(System.id.in_(sys_ids_scope))
+            for row in (await session.execute(tq)).all():
+                top_poam_systems.append({"name": row[0], "count": row[1]})
+
+    # ── Posture Score (0-100, composite) ──────────────────────────────────────
+    # Simple weighted formula:
+    #   40% system authorization rate
+    #   30% control coverage
+    #   20% no overdue POA&Ms (penalty: -1 per overdue, floor 0)
+    #   10% no critical/high risks
+    auth_score    = authorized_pct * 0.40
+    coverage_score= coverage_pct   * 0.30
+    overdue_pen   = min(overdue_poams * 2, 20)
+    overdue_score = (20 - overdue_pen)
+    crit_pen      = min(crit_high_risks * 2, 10)
+    risk_score    = (10 - crit_pen)
+    posture_score = round(auth_score + coverage_score + overdue_score + risk_score)
+    if posture_score >= 80:    posture_level, posture_color = "Strong",   "var(--green)"
+    elif posture_score >= 60:  posture_level, posture_color = "Fair",     "var(--yellow)"
+    elif posture_score >= 40:  posture_level, posture_color = "Weak",     "#ff6b35"
+    else:                      posture_level, posture_color = "Critical", "var(--red)"
+
+    return templates.TemplateResponse("posture.html", {
+        "request":         request,
+        "total_sys":       total_sys,
+        "auth_by_status":  auth_by_status,
+        "authorized_pct":  authorized_pct,
+        "expiring_soon":   expiring_soon,
+        "expired_count":   expired_count,
+        "open_poams":      open_poams,
+        "overdue_poams":   overdue_poams,
+        "crit_high_poams": crit_high_poams,
+        "poam_sev_data":   poam_sev_data,
+        "open_risks":      open_risks,
+        "crit_high_risks": crit_high_risks,
+        "risk_level_data": risk_level_data,
+        "total_sc":        total_sc,
+        "impl_sc":         impl_sc,
+        "coverage_pct":    coverage_pct,
+        "sc_status_data":  sc_status_data,
+        "sub_pipeline":    sub_pipeline,
+        "new_poams_30d":   new_poams_30d,
+        "closed_poams_30d":closed_poams_30d,
+        "top_poam_systems":top_poam_systems,
+        "posture_score":   posture_score,
+        "posture_level":   posture_level,
+        "posture_color":   posture_color,
+        "today_str":       today_str,
+        **_tpl_ctx(request),
+    })
+
+
 # ── Global search ─────────────────────────────────────────────────────────────
 
 @app.get("/search", response_class=HTMLResponse)

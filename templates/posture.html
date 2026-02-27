@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Compliance Posture{% endblock %}
+
+{% block content %}
+{# ── Page header ──────────────────────────────────────────────────────────── #}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:28px">
+  <div>
+    <h1 style="margin:0">Compliance Posture</h1>
+    <p class="text-muted" style="margin-top:4px;font-size:0.88em">
+      Organization-wide GRC health · Authorizations, POA&amp;Ms, Risks, Control Coverage
+    </p>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/systems" class="btn btn-ghost btn-sm">Systems</a>
+    <a href="/poam"    class="btn btn-ghost btn-sm">POA&amp;M</a>
+    <a href="/risks"   class="btn btn-ghost btn-sm">Risks</a>
+  </div>
+</div>
+
+{# ── Posture Score Hero ───────────────────────────────────────────────────── #}
+<div class="card" style="padding:32px;margin-bottom:24px;text-align:center;
+     background:linear-gradient(135deg,var(--card) 0%,rgba(20,20,40,0.9) 100%);
+     border-color:{{ posture_color }}44">
+  <div style="font-size:0.7em;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:8px">
+    Composite Posture Score
+  </div>
+  <div style="font-size:5em;font-weight:900;color:{{ posture_color }};
+              text-shadow:0 0 40px {{ posture_color }}44;line-height:1;margin-bottom:8px">
+    {{ posture_score }}
+  </div>
+  <div style="font-size:1.2em;font-weight:700;color:{{ posture_color }};letter-spacing:2px;margin-bottom:20px">
+    {{ posture_level }}
+  </div>
+
+  {# Score bar #}
+  <div style="max-width:400px;margin:0 auto">
+    <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden">
+      <div style="width:{{ posture_score }}%;height:100%;background:{{ posture_color }};
+                  transition:width 1s;border-radius:4px"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:0.65em;color:var(--muted)">
+      <span>0 — Critical</span><span>40 — Weak</span><span>60 — Fair</span><span>80 — Strong</span><span>100</span>
+    </div>
+  </div>
+
+  {# Score breakdown pills #}
+  <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:24px">
+    {% for label, val, max_val, color in [
+        ('Auth Rate',       authorized_pct, 100, 'var(--green)'),
+        ('Coverage',        coverage_pct,   100, 'var(--cyan)'),
+        ('Overdue POA&Ms',  overdue_poams,  None, 'var(--yellow)'),
+        ('Critical Risks',  crit_high_risks,None, 'var(--red)'),
+    ] %}
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:20px;
+                padding:6px 16px;font-size:0.8em">
+      <span style="color:var(--muted)">{{ label }}:</span>
+      <strong style="color:{{ color }};margin-left:6px">
+        {{ val }}{% if max_val is not none %}%{% endif %}
+      </strong>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{# ── Four KPI columns ─────────────────────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px">
+
+  {# Systems #}
+  <div class="card" style="padding:20px;margin-bottom:0">
+    <div class="card-title" style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
+      <span style="color:var(--cyan)">⬡</span> Systems
+    </div>
+    <div style="font-size:2.2em;font-weight:900;color:var(--text);line-height:1;margin-bottom:4px">
+      {{ total_sys }}
+    </div>
+    <div class="text-muted" style="font-size:0.75em;margin-bottom:14px">total registered</div>
+    {% for status, color, label in [
+        ('authorized',    'var(--green)',  'Authorized'),
+        ('in_progress',   'var(--yellow)', 'In Progress'),
+        ('expired',       'var(--red)',    'Expired'),
+        ('not_authorized','var(--muted)',  'Not Authorized'),
+    ] %}
+    {% set cnt = auth_by_status.get(status, 0) %}
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                padding:4px 0;border-bottom:1px solid var(--border);font-size:0.8em">
+      <span style="color:{{ color }}">{{ label }}</span>
+      <strong style="color:{{ color }}">{{ cnt }}</strong>
+    </div>
+    {% endfor %}
+    {% if expiring_soon %}
+    <div style="margin-top:10px;padding:8px;background:rgba(255,107,53,0.1);
+                border-radius:4px;font-size:0.75em;color:#ff6b35;text-align:center">
+      ⚠ {{ expiring_soon }} expire{{ 's' if expiring_soon==1 else '' }} in 90 days
+    </div>
+    {% endif %}
+  </div>
+
+  {# POA&M #}
+  <div class="card" style="padding:20px;margin-bottom:0">
+    <div class="card-title" style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
+      <span style="color:var(--yellow)">⚑</span> POA&amp;M
+    </div>
+    <div style="font-size:2.2em;font-weight:900;color:var(--text);line-height:1;margin-bottom:4px">
+      {{ open_poams }}
+    </div>
+    <div class="text-muted" style="font-size:0.75em;margin-bottom:14px">open items</div>
+    {% for sev, color in [('Critical','#f44336'),('High','#ff6b35'),('Moderate','#ffb300'),('Low','#00c853')] %}
+    {% set cnt = poam_sev_data.get(sev, 0) %}
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                padding:4px 0;border-bottom:1px solid var(--border);font-size:0.8em">
+      <span style="color:{{ color }}">{{ sev }}</span>
+      <strong style="color:{{ color }}">{{ cnt }}</strong>
+    </div>
+    {% endfor %}
+    {% if overdue_poams %}
+    <div style="margin-top:10px;padding:8px;background:rgba(244,67,54,0.1);
+                border-radius:4px;font-size:0.75em;color:var(--red);text-align:center">
+      ⚠ {{ overdue_poams }} overdue
+    </div>
+    {% endif %}
+  </div>
+
+  {# Risks #}
+  <div class="card" style="padding:20px;margin-bottom:0">
+    <div class="card-title" style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
+      <span style="color:var(--red)">◈</span> Risks
+    </div>
+    <div style="font-size:2.2em;font-weight:900;color:var(--text);line-height:1;margin-bottom:4px">
+      {{ open_risks }}
+    </div>
+    <div class="text-muted" style="font-size:0.75em;margin-bottom:14px">open / accepted</div>
+    {% for level, color in [('Critical','#f44336'),('High','#ff6b35'),('Moderate','#ffb300'),('Low','#00c853')] %}
+    {% set cnt = risk_level_data.get(level, 0) %}
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                padding:4px 0;border-bottom:1px solid var(--border);font-size:0.8em">
+      <span style="color:{{ color }}">{{ level }}</span>
+      <strong style="color:{{ color }}">{{ cnt }}</strong>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# Control Coverage #}
+  <div class="card" style="padding:20px;margin-bottom:0">
+    <div class="card-title" style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
+      <span style="color:var(--cyan)">▦</span> Controls
+    </div>
+    <div style="font-size:2.2em;font-weight:900;
+                color:{% if coverage_pct >= 80 %}var(--green){% elif coverage_pct >= 50 %}var(--yellow){% else %}var(--red){% endif %};
+                line-height:1;margin-bottom:4px">
+      {{ coverage_pct }}%
+    </div>
+    <div class="text-muted" style="font-size:0.75em;margin-bottom:12px">coverage ({{ impl_sc }}/{{ total_sc }})</div>
+    {# Coverage bar #}
+    <div style="background:var(--border);border-radius:3px;height:6px;overflow:hidden;margin-bottom:12px">
+      <div style="width:{{ coverage_pct }}%;height:100%;border-radius:3px;
+                  background:{% if coverage_pct >= 80 %}var(--green){% elif coverage_pct >= 50 %}var(--yellow){% else %}var(--red){% endif %}">
+      </div>
+    </div>
+    {% for status, label, color in [
+        ('implemented',     'Implemented',   'var(--green)'),
+        ('inherited',       'Inherited',     'var(--cyan)'),
+        ('in_progress',     'In Progress',   'var(--yellow)'),
+        ('not_applicable',  'N/A',           'var(--muted)'),
+        ('not_started',     'Not Started',   '#333'),
+    ] %}
+    {% set cnt = sc_status_data.get(status, 0) %}
+    {% if cnt > 0 %}
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                padding:3px 0;font-size:0.78em">
+      <span style="color:{{ color }}">{{ label }}</span>
+      <strong style="color:{{ color }}">{{ cnt }}</strong>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+</div>
+
+{# ── Activity + Pipeline row ──────────────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px">
+
+  {# 30-day activity #}
+  <div class="card" style="padding:20px;margin-bottom:0">
+    <div class="card-title" style="margin-bottom:16px">30-Day Activity</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="text-align:center;background:rgba(0,200,83,0.06);border:1px solid rgba(0,200,83,0.1);
+                  border-radius:6px;padding:16px">
+        <div style="font-size:2em;font-weight:900;color:var(--green)">{{ closed_poams_30d }}</div>
+        <div class="text-muted" style="font-size:0.72em;margin-top:4px">POA&amp;Ms Closed</div>
+      </div>
+      <div style="text-align:center;background:rgba(244,67,54,0.06);border:1px solid rgba(244,67,54,0.1);
+                  border-radius:6px;padding:16px">
+        <div style="font-size:2em;font-weight:900;color:var(--red)">{{ new_poams_30d }}</div>
+        <div class="text-muted" style="font-size:0.72em;margin-top:4px">New POA&amp;Ms</div>
+      </div>
+    </div>
+    {% if new_poams_30d > 0 or closed_poams_30d > 0 %}
+    <div style="margin-top:14px">
+      {% set velocity = closed_poams_30d - new_poams_30d %}
+      <div style="font-size:0.8em;color:{% if velocity >= 0 %}var(--green){% else %}var(--red){% endif %};
+                  text-align:center">
+        {% if velocity > 0 %}
+        ▲ Net reduction: {{ velocity }} POA&amp;M{{ 's' if velocity!=1 }} closed vs opened
+        {% elif velocity < 0 %}
+        ▼ Net growth: {{ velocity | abs }} more POA&amp;M{{ 's' if velocity|abs!=1 }} opened than closed
+        {% else %}
+        → Flat: same number opened and closed
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ATO Pipeline #}
+  <div class="card" style="padding:20px;margin-bottom:0">
+    <div class="card-title" style="margin-bottom:16px">ATO Submission Pipeline</div>
+    {% if sub_pipeline %}
+    {% for status, label, color in [
+        ('authorized',    'Authorized',    'var(--green)'),
+        ('under_review',  'Under Review',  'var(--cyan)'),
+        ('submitted',     'Submitted',     'var(--yellow)'),
+        ('denied',        'Denied',        'var(--red)'),
+        ('draft',         'Draft',         'var(--muted)'),
+        ('withdrawn',     'Withdrawn',     '#333'),
+    ] %}
+    {% set cnt = sub_pipeline.get(status, 0) %}
+    {% if cnt > 0 %}
+    <div style="display:flex;align-items:center;gap:10px;padding:7px 0;
+                border-bottom:1px solid var(--border)">
+      <div style="font-size:1.1em;font-weight:900;color:{{ color }};width:32px;text-align:center">
+        {{ cnt }}
+      </div>
+      <span class="badge" style="background:rgba(0,0,0,0.2);color:{{ color }};font-size:0.75em">
+        {{ label }}
+      </span>
+      {# Mini progress bar #}
+      {% set total_subs = sub_pipeline.values()|sum %}
+      <div style="flex:1;background:var(--border);border-radius:2px;height:4px">
+        <div style="width:{{ cnt / total_subs * 100 | int }}%;height:100%;
+                    background:{{ color }};border-radius:2px"></div>
+      </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% else %}
+    <div class="text-muted" style="font-size:0.9em;text-align:center;padding:20px 0">
+      No submissions yet. <a href="/submissions" style="color:var(--cyan)">View submissions →</a>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{# ── Top systems by POA&M burden ─────────────────────────────────────────── #}
+{% if top_poam_systems %}
+<div class="section-header">Systems with Most Open POA&amp;Ms</div>
+<div class="card" style="padding:0;overflow:hidden;margin-bottom:24px">
+  {% set max_ct = top_poam_systems[0].count if top_poam_systems else 1 %}
+  <table>
+    <tbody>
+      {% for s in top_poam_systems %}
+      <tr>
+        <td style="width:160px;font-size:0.82em;color:var(--muted)">
+          {{ s.name | truncate(30) }}
+        </td>
+        <td>
+          <div style="background:var(--border);border-radius:3px;height:8px;overflow:hidden">
+            <div style="width:{{ s.count / max_ct * 100 | int }}%;height:100%;
+                        background:var(--red);opacity:0.7;border-radius:3px"></div>
+          </div>
+        </td>
+        <td style="width:50px;text-align:right;font-size:0.88em;font-weight:700;color:var(--red)">
+          {{ s.count }}
+        </td>
+        <td style="width:80px;text-align:right">
+          <a href="/poam?system_id=" class="btn btn-ghost btn-sm"
+             style="font-size:0.7em;padding:3px 8px">View →</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}
