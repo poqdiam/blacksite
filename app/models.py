@@ -4,7 +4,7 @@ BLACKSITE — Database models (SQLAlchemy + SQLite)
 from __future__ import annotations
 
 from sqlalchemy import (
-    Column, String, Integer, Float, Boolean, DateTime, Text, ForeignKey, create_engine, Index, text, event
+    Column, String, Integer, Float, Boolean, DateTime, Text, ForeignKey, create_engine, Index, text, event, UniqueConstraint
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -319,6 +319,55 @@ class RmfRecord(Base):
     created_by  = Column(String, nullable=True)
 
 
+# ── Phase 7 Models ─────────────────────────────────────────────────────────────
+
+class AtoDocument(Base):
+    """Per-system ATO artifact with workflow lifecycle."""
+    __tablename__ = "ato_documents"
+
+    id          = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    system_id   = Column(String, ForeignKey("systems.id"), nullable=False, index=True)
+    doc_type    = Column(String, nullable=False)   # FIPS199 | SSP | SAP | etc.
+    title       = Column(String, nullable=False)
+    version     = Column(String, default="0.1")
+    status      = Column(String, default="draft")  # draft|in_review|approved|finalized
+    content     = Column(Text, nullable=True)      # freeform text / JSON notes
+    assigned_to = Column(String, nullable=True)    # current reviewer/assignee
+    due_date    = Column(String, nullable=True)    # ISO date
+    created_by  = Column(String, nullable=True)
+    created_at  = Column(DateTime, default=_now)
+    updated_at  = Column(DateTime, default=_now, onupdate=_now)
+
+
+class AtoDocumentVersion(Base):
+    """Immutable snapshot of an AtoDocument at each state transition."""
+    __tablename__ = "ato_document_versions"
+
+    id           = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    document_id  = Column(String, ForeignKey("ato_documents.id"), nullable=False, index=True)
+    version      = Column(String, nullable=False)
+    content_snap = Column(Text, nullable=True)
+    from_status  = Column(String, nullable=True)
+    to_status    = Column(String, nullable=True)
+    changed_by   = Column(String, nullable=True)
+    changed_at   = Column(DateTime, default=_now)
+    change_note  = Column(String, nullable=True)
+
+
+class AtoWorkflowEvent(Base):
+    """Immutable workflow transition log for ATO documents."""
+    __tablename__ = "ato_workflow_events"
+
+    id          = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    document_id = Column(String, ForeignKey("ato_documents.id"), nullable=False, index=True)
+    from_status = Column(String, nullable=True)
+    to_status   = Column(String, nullable=True)
+    actor       = Column(String, nullable=True)
+    actor_role  = Column(String, nullable=True)
+    comment     = Column(Text, nullable=True)
+    timestamp   = Column(DateTime, default=_now)
+
+
 # ── Database setup ─────────────────────────────────────────────────────────────
 
 def get_db_url(config: dict) -> str:
@@ -346,6 +395,9 @@ async def _migrate_db(engine):
         "CREATE INDEX IF NOT EXISTS ix_system_assignments_remote_user ON system_assignments (remote_user)",
         "CREATE INDEX IF NOT EXISTS ix_audit_log_remote_user          ON audit_log (remote_user)",
         "CREATE INDEX IF NOT EXISTS ix_assessments_system_id          ON assessments (system_id)",
+        "CREATE INDEX IF NOT EXISTS ix_ato_documents_system_id        ON ato_documents (system_id)",
+        "CREATE INDEX IF NOT EXISTS ix_ato_doc_versions_document_id   ON ato_document_versions (document_id)",
+        "CREATE INDEX IF NOT EXISTS ix_ato_workflow_events_document_id ON ato_workflow_events (document_id)",
     ]
     async with engine.begin() as conn:
         for table, col, col_def in col_migrations:

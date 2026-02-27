@@ -108,6 +108,7 @@ from app.models import (
     Assessment, Candidate, ControlResult, ControlsMeta, DailyQuizActivity, QuizResponse,
     System, PoamItem, Risk, UserProfile, AuditLog, SystemAssignment, ControlEdit,
     SystemControl, Submission, RmfRecord,
+    AtoDocument, AtoDocumentVersion, AtoWorkflowEvent,
     init_db, make_engine, make_session_factory
 )
 from app.updater    import load_catalog, update_if_needed
@@ -441,6 +442,31 @@ RMF_STEPS = [
 
 # Status ordering for progress calculation
 _RMF_STEP_KEYS = [s["key"] for s in RMF_STEPS]
+
+# ── ATO Document Types ──────────────────────────────────────────────────────────
+# owner_roles: who drafts/edits; reviewer_roles: who approves
+ATO_DOC_TYPES: dict = {
+    "FIPS199":     {"name": "FIPS 199 — System Categorization",      "short": "FIPS 199",    "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "categorize"},
+    "SSP":         {"name": "System Security Plan",                   "short": "SSP",         "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin","auditor"],    "rmf_step": "select"},
+    "SAP":         {"name": "Security Assessment Plan",               "short": "SAP",         "owner_roles": ["auditor","admin"],      "reviewer_roles": ["admin"],              "rmf_step": "assess"},
+    "SAR":         {"name": "Security Assessment Report",             "short": "SAR",         "owner_roles": ["auditor","admin"],      "reviewer_roles": ["admin"],              "rmf_step": "assess"},
+    "POAM":        {"name": "Plan of Action & Milestones",            "short": "POA\u0026M",  "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "monitor"},
+    "ABD":         {"name": "Authorization Boundary Diagram",         "short": "ABD",         "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "categorize"},
+    "NET_DIAGRAM": {"name": "Network Diagrams",                       "short": "Net Diag.",   "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "categorize"},
+    "HW_INV":      {"name": "Hardware Inventory",                     "short": "HW Inv.",     "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "implement"},
+    "SW_INV":      {"name": "Software Inventory",                     "short": "SW Inv.",     "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "implement"},
+    "IRP":         {"name": "Incident Response Plan",                 "short": "IRP",         "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "monitor"},
+    "CP":          {"name": "Contingency Plan",                       "short": "CP",          "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "implement"},
+    "CPT":         {"name": "Contingency Plan Test",                  "short": "CPT",         "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "monitor"},
+    "CMP":         {"name": "Configuration Management Plan",          "short": "CMP",         "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "implement"},
+    "CONMON":      {"name": "Continuous Monitoring Plan",             "short": "ConMon",      "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "monitor"},
+    "PTA":         {"name": "Privacy Threshold Analysis",             "short": "PTA",         "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "categorize"},
+    "PIA":         {"name": "Privacy Impact Assessment",              "short": "PIA",         "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "categorize"},
+    "ROB":         {"name": "Rules of Behavior",                      "short": "RoB",         "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "implement"},
+    "ISA":         {"name": "Interconnection Security Agreement",     "short": "ISA/MOU",     "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "implement"},
+    "ADD":         {"name": "Authorization Decision Document",        "short": "ADD/ATO",     "owner_roles": ["admin"],               "reviewer_roles": ["admin"],              "rmf_step": "authorize"},
+}
+_ATO_DOC_KEYS = list(ATO_DOC_TYPES.keys())
 
 # ── Ticker cache ────────────────────────────────────────────────────────────────
 
@@ -4681,3 +4707,360 @@ async def reports_center(request: Request):
         )
 
     return templates.TemplateResponse("reports.html", {"request": request, **ctx})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 7 — ATO Document Workflow Engine
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _ato_user_role(request: Request, profile_role: str) -> str:
+    """Map UserProfile role + admin flag to ATO action role string."""
+    if _is_admin(request):
+        return "admin"
+    return profile_role  # system_owner | auditor | bcdr | employee
+
+
+def _ato_can_edit(ato_role: str, doc_type: str) -> bool:
+    return ato_role in ATO_DOC_TYPES.get(doc_type, {}).get("owner_roles", [])
+
+
+def _ato_can_review(ato_role: str, doc_type: str) -> bool:
+    return ato_role in ATO_DOC_TYPES.get(doc_type, {}).get("reviewer_roles", [])
+
+
+def _ato_status_color(status: str) -> str:
+    return {"draft": "var(--muted)", "in_review": "var(--warn)", "approved": "var(--ok)", "finalized": "var(--accent)"}.get(status, "var(--muted)")
+
+
+def _ato_next_version(current: str) -> str:
+    """Bump minor version: '0.1' -> '0.2', '1.3' -> '1.4'."""
+    try:
+        parts = current.split(".")
+        return f"{parts[0]}.{int(parts[1]) + 1}"
+    except Exception:
+        return "1.0"
+
+
+@app.get("/ato", response_class=HTMLResponse)
+async def ato_dashboard(request: Request):
+    """ATO Package dashboard — matrix of all systems x all doc types."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        sys_ids = await _user_system_ids(request, session)
+        systems = []
+        if sys_ids:
+            rows = await session.execute(
+                select(System).where(System.id.in_(sys_ids)).order_by(System.name)
+            )
+            systems = list(rows.scalars().all())
+
+        # All ATO docs for these systems, keyed by (system_id, doc_type)
+        ato_map: dict = {}
+        if sys_ids:
+            ato_rows = await session.execute(
+                select(AtoDocument).where(AtoDocument.system_id.in_(sys_ids))
+            )
+            for doc in ato_rows.scalars().all():
+                ato_map[(doc.system_id, doc.doc_type)] = doc
+
+        # Summary counts per system
+        sys_summary: dict = {}
+        for sys in systems:
+            total = len(_ATO_DOC_KEYS)
+            finalized = sum(1 for k in _ATO_DOC_KEYS if ato_map.get((sys.id, k)) and ato_map[(sys.id, k)].status == "finalized")
+            approved  = sum(1 for k in _ATO_DOC_KEYS if ato_map.get((sys.id, k)) and ato_map[(sys.id, k)].status == "approved")
+            in_review = sum(1 for k in _ATO_DOC_KEYS if ato_map.get((sys.id, k)) and ato_map[(sys.id, k)].status == "in_review")
+            draft     = sum(1 for k in _ATO_DOC_KEYS if ato_map.get((sys.id, k)) and ato_map[(sys.id, k)].status == "draft")
+            missing   = total - finalized - approved - in_review - draft
+            sys_summary[sys.id] = {"total": total, "finalized": finalized, "approved": approved, "in_review": in_review, "draft": draft, "missing": missing}
+
+        ctx = await _full_ctx(request, session,
+                              systems=systems,
+                              ato_map=ato_map,
+                              ato_doc_types=ATO_DOC_TYPES,
+                              ato_doc_keys=_ATO_DOC_KEYS,
+                              sys_summary=sys_summary,
+                              status_color=_ato_status_color)
+
+    return templates.TemplateResponse("ato_dashboard.html", {"request": request, **ctx})
+
+
+@app.get("/ato/{system_id}", response_class=HTMLResponse)
+async def ato_system(request: Request, system_id: str):
+    """Per-system ATO package — list of all 19 doc types with status."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        sys_obj = await session.get(System, system_id)
+        if not sys_obj:
+            raise HTTPException(status_code=404)
+
+        ato_rows = await session.execute(
+            select(AtoDocument).where(AtoDocument.system_id == system_id)
+        )
+        docs = {doc.doc_type: doc for doc in ato_rows.scalars().all()}
+
+        role = await _get_user_role(request, session)
+        ato_role = _ato_user_role(request, role)
+
+        finalized_ct = sum(1 for k in _ATO_DOC_KEYS if docs.get(k) and docs[k].status == "finalized")
+        ato_pct = round(finalized_ct / len(_ATO_DOC_KEYS) * 100)
+
+        today_str = date.today().isoformat()
+
+        ctx = await _full_ctx(request, session,
+                              system=sys_obj,
+                              docs=docs,
+                              ato_doc_types=ATO_DOC_TYPES,
+                              ato_doc_keys=_ATO_DOC_KEYS,
+                              ato_role=ato_role,
+                              finalized_ct=finalized_ct,
+                              ato_pct=ato_pct,
+                              today_str=today_str,
+                              status_color=_ato_status_color)
+
+    return templates.TemplateResponse("ato_system.html", {"request": request, **ctx})
+
+
+@app.get("/ato/{system_id}/{doc_type}", response_class=HTMLResponse)
+async def ato_document(request: Request, system_id: str, doc_type: str):
+    """ATO document detail — content editor + workflow + history."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+    if doc_type not in ATO_DOC_TYPES:
+        raise HTTPException(status_code=404, detail="Unknown document type")
+
+    async with SessionLocal() as session:
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        sys_obj = await session.get(System, system_id)
+        if not sys_obj:
+            raise HTTPException(status_code=404)
+
+        doc = (await session.execute(
+            select(AtoDocument)
+            .where(AtoDocument.system_id == system_id)
+            .where(AtoDocument.doc_type == doc_type)
+        )).scalar_one_or_none()
+
+        # Workflow event history
+        events: list = []
+        if doc:
+            ev_rows = await session.execute(
+                select(AtoWorkflowEvent)
+                .where(AtoWorkflowEvent.document_id == doc.id)
+                .order_by(AtoWorkflowEvent.timestamp.desc())
+            )
+            events = list(ev_rows.scalars().all())
+
+        # Version history
+        versions: list = []
+        if doc:
+            ver_rows = await session.execute(
+                select(AtoDocumentVersion)
+                .where(AtoDocumentVersion.document_id == doc.id)
+                .order_by(AtoDocumentVersion.changed_at.desc())
+                .limit(20)
+            )
+            versions = list(ver_rows.scalars().all())
+
+        role = await _get_user_role(request, session)
+        ato_role = _ato_user_role(request, role)
+        can_edit   = _ato_can_edit(ato_role, doc_type) and (not doc or doc.status == "draft")
+        can_submit = _ato_can_edit(ato_role, doc_type) and doc and doc.status == "draft"
+        can_approve = _ato_can_review(ato_role, doc_type) and doc and doc.status == "in_review"
+        can_reject  = _ato_can_review(ato_role, doc_type) and doc and doc.status == "in_review"
+        can_finalize = _is_admin(request) and doc and doc.status == "approved"
+        can_revise   = (_is_admin(request) or _ato_can_edit(ato_role, doc_type)) and doc and doc.status == "finalized"
+
+        doc_meta = ATO_DOC_TYPES[doc_type]
+
+        today_str = date.today().isoformat()
+
+        ctx = await _full_ctx(request, session,
+                              system=sys_obj,
+                              doc=doc,
+                              doc_type=doc_type,
+                              doc_meta=doc_meta,
+                              events=events,
+                              versions=versions,
+                              ato_role=ato_role,
+                              can_edit=can_edit,
+                              can_submit=can_submit,
+                              can_approve=can_approve,
+                              can_reject=can_reject,
+                              can_finalize=can_finalize,
+                              can_revise=can_revise,
+                              today_str=today_str,
+                              status_color=_ato_status_color)
+
+    return templates.TemplateResponse("ato_document.html", {"request": request, **ctx})
+
+
+@app.post("/ato/{system_id}/{doc_type}/save")
+async def ato_save(request: Request, system_id: str, doc_type: str,
+                   content: str = Form(""),
+                   title: str = Form(""),
+                   assigned_to: str = Form(""),
+                   due_date: str = Form("")):
+    """Save draft content (create document if doesn't exist yet)."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+    if doc_type not in ATO_DOC_TYPES:
+        raise HTTPException(status_code=404)
+
+    async with SessionLocal() as session:
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        role = await _get_user_role(request, session)
+        ato_role = _ato_user_role(request, role)
+        if not _ato_can_edit(ato_role, doc_type):
+            raise HTTPException(status_code=403, detail="Not authorized to edit this document type")
+
+        doc = (await session.execute(
+            select(AtoDocument)
+            .where(AtoDocument.system_id == system_id)
+            .where(AtoDocument.doc_type == doc_type)
+        )).scalar_one_or_none()
+
+        doc_title = title.strip() or ATO_DOC_TYPES[doc_type]["name"]
+
+        if doc:
+            if doc.status != "draft":
+                raise HTTPException(status_code=400, detail="Cannot edit — document is not in draft status")
+            doc.content     = content
+            doc.title       = doc_title
+            doc.assigned_to = assigned_to or None
+            doc.due_date    = due_date or None
+            doc.updated_at  = datetime.now(timezone.utc)
+        else:
+            doc = AtoDocument(
+                system_id   = system_id,
+                doc_type    = doc_type,
+                title       = doc_title,
+                content     = content,
+                assigned_to = assigned_to or None,
+                due_date    = due_date or None,
+                created_by  = user,
+            )
+            session.add(doc)
+
+        await _log_audit(session, user, "SAVE", "ato_document", f"{system_id}/{doc_type}",
+                         {"title": doc_title, "status": doc.status if hasattr(doc, 'id') else "draft"})
+        await session.commit()
+
+    return RedirectResponse(url=f"/ato/{system_id}/{doc_type}", status_code=303)
+
+
+@app.post("/ato/{system_id}/{doc_type}/action")
+async def ato_workflow_action(request: Request, system_id: str, doc_type: str,
+                              action: str = Form(...),
+                              comment: str = Form("")):
+    """Execute a workflow transition: submit | approve | reject | finalize | revise."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+    if doc_type not in ATO_DOC_TYPES:
+        raise HTTPException(status_code=404)
+
+    valid_actions = {"submit", "approve", "reject", "finalize", "revise"}
+    if action not in valid_actions:
+        raise HTTPException(status_code=400, detail="Invalid action")
+
+    async with SessionLocal() as session:
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        doc = (await session.execute(
+            select(AtoDocument)
+            .where(AtoDocument.system_id == system_id)
+            .where(AtoDocument.doc_type == doc_type)
+        )).scalar_one_or_none()
+
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found — save a draft first")
+
+        role = await _get_user_role(request, session)
+        ato_role = _ato_user_role(request, role)
+
+        # Validate transition
+        transitions = {
+            "submit":   ("draft",      "in_review",  _ato_can_edit(ato_role, doc_type)),
+            "approve":  ("in_review",  "approved",   _ato_can_review(ato_role, doc_type)),
+            "reject":   ("in_review",  "draft",      _ato_can_review(ato_role, doc_type)),
+            "finalize": ("approved",   "finalized",  _is_admin(request)),
+            "revise":   ("finalized",  "draft",      _is_admin(request) or _ato_can_edit(ato_role, doc_type)),
+        }
+        expected_status, new_status, authorized = transitions[action]
+
+        if doc.status != expected_status:
+            raise HTTPException(status_code=400, detail=f"Cannot {action}: document is in '{doc.status}' status")
+        if not authorized:
+            raise HTTPException(status_code=403, detail=f"Not authorized to {action} this document type")
+
+        from_status = doc.status
+
+        # Snapshot version on submit/approve/finalize
+        if action in ("submit", "approve", "finalize"):
+            snap = AtoDocumentVersion(
+                document_id  = doc.id,
+                version      = doc.version,
+                content_snap = doc.content,
+                from_status  = from_status,
+                to_status    = new_status,
+                changed_by   = user,
+                change_note  = comment or f"{action} by {user}",
+            )
+            session.add(snap)
+
+        # Bump version on revise
+        if action == "revise":
+            doc.version = _ato_next_version(doc.version)
+
+        doc.status     = new_status
+        doc.updated_at = datetime.now(timezone.utc)
+
+        # Workflow event
+        ev = AtoWorkflowEvent(
+            document_id = doc.id,
+            from_status = from_status,
+            to_status   = new_status,
+            actor       = user,
+            actor_role  = ato_role,
+            comment     = comment or None,
+        )
+        session.add(ev)
+
+        await _log_audit(session, user, action.upper(), "ato_document", f"{system_id}/{doc_type}",
+                         {"from": from_status, "to": new_status, "comment": comment})
+        await session.commit()
+
+        # Email notification on submit/approve/reject/finalize (fire-and-forget)
+        try:
+            sys_obj = await session.get(System, system_id)
+            sys_name = sys_obj.name if sys_obj else system_id
+            doc_name = ATO_DOC_TYPES[doc_type]["name"]
+            action_labels = {
+                "submit":   "submitted for review",
+                "approve":  "approved",
+                "reject":   "rejected — returned to draft",
+                "finalize": "FINALIZED (ATO granted)",
+                "revise":   "opened for revision",
+            }
+            log.info("ATO workflow: %s %s [%s] by %s (%s)", action_labels.get(action, action), doc_name, sys_name, user, ato_role)
+        except Exception:
+            pass
+
+    return RedirectResponse(url=f"/ato/{system_id}/{doc_type}", status_code=303)

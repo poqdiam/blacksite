@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}ATO Package — {{ system.name }} — BLACKSITE{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+    <a href="/ato" style="color:var(--muted);font-size:.85rem;text-decoration:none">← ATO Dashboard</a>
+    <span style="color:var(--border)">|</span>
+    <h1 class="page-title" style="margin:0">{{ system.name }}</h1>
+    <span class="badge badge-info">{{ system.classification or 'UNCLASSIFIED' }}</span>
+  </div>
+  <p class="page-sub">ATO Package — {{ finalized_ct }}/{{ ato_doc_keys|length }} documents finalized ({{ ato_pct }}%)</p>
+  <div style="margin-top:.75rem;background:var(--bg-card);border-radius:6px;height:8px;max-width:400px;overflow:hidden">
+    <div style="height:8px;width:{{ ato_pct }}%;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width .4s"></div>
+  </div>
+</div>
+
+<div class="card" style="overflow:hidden;padding:0">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Document</th>
+        <th>Short</th>
+        <th>Status</th>
+        <th>Version</th>
+        <th>Assigned To</th>
+        <th>Due Date</th>
+        <th>Last Updated</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for key in ato_doc_keys %}
+      {% set doc = docs.get(key) %}
+      {% set meta = ato_doc_types[key] %}
+      {% set st = doc.status if doc else 'missing' %}
+      <tr>
+        <td style="font-weight:500">{{ meta.name }}</td>
+        <td><code style="font-size:.78rem">{{ key }}</code></td>
+        <td>
+          <span class="badge
+            {% if st == 'finalized' %}badge-success
+            {% elif st == 'approved' %}badge-info
+            {% elif st == 'in_review' %}badge-warn
+            {% elif st == 'draft' %}badge-muted
+            {% else %}badge-danger{% endif %}">
+            {{ st.replace('_',' ').title() }}
+          </span>
+        </td>
+        <td style="color:var(--muted);font-size:.85rem">{{ doc.version if doc else '—' }}</td>
+        <td style="color:var(--muted);font-size:.85rem">{{ doc.assigned_to or '—' }}</td>
+        <td style="font-size:.85rem;{% if doc and doc.due_date and doc.due_date < today_str %}color:var(--danger){% else %}color:var(--muted){% endif %}">
+          {{ doc.due_date or '—' }}
+        </td>
+        <td style="color:var(--muted);font-size:.8rem">
+          {% if doc %}{{ doc.updated_at.strftime('%Y-%m-%d') if doc.updated_at else '—' }}{% else %}—{% endif %}
+        </td>
+        <td>
+          <a href="/ato/{{ system.id }}/{{ key }}" class="btn btn-sm btn-outline">
+            {% if doc %}View / Edit{% else %}Start{% endif %}
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

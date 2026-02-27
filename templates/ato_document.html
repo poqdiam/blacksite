@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}{{ doc_meta.name }} — {{ system.name }} — BLACKSITE{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+    <a href="/ato/{{ system.id }}" style="color:var(--muted);font-size:.85rem;text-decoration:none">← {{ system.name }} ATO Package</a>
+  </div>
+  <div style="display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;margin-top:.5rem">
+    <h1 class="page-title" style="margin:0">{{ doc_meta.name }}</h1>
+    {% if doc %}
+    <span class="badge
+      {% if doc.status == 'finalized' %}badge-success
+      {% elif doc.status == 'approved' %}badge-info
+      {% elif doc.status == 'in_review' %}badge-warn
+      {% else %}badge-muted{% endif %}">
+      {{ doc.status.replace('_',' ').title() }}
+    </span>
+    <span style="color:var(--muted);font-size:.85rem">v{{ doc.version }}</span>
+    {% else %}
+    <span class="badge badge-danger">Not Started</span>
+    {% endif %}
+  </div>
+  <p class="page-sub">{{ system.name }} • RMF Step: {{ doc_meta.rmf_step.title() }}</p>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 300px;gap:1.5rem;align-items:start">
+
+<!-- ── Left: document content ── -->
+<div>
+  {% if can_edit or not doc %}
+  <form method="post" action="/ato/{{ system.id }}/{{ doc_type }}/save">
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">Document Title</label>
+        <input type="text" name="title" class="form-control" value="{{ doc.title if doc else doc_meta.name }}" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Assigned To (username)</label>
+        <input type="text" name="assigned_to" class="form-control" value="{{ doc.assigned_to or '' }}" placeholder="Leave blank for unassigned">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Due Date</label>
+        <input type="date" name="due_date" class="form-control" value="{{ doc.due_date or '' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Content / Notes</label>
+        <textarea name="content" class="form-control" rows="14" placeholder="Document content, notes, links to external artifacts, evidence references...">{{ doc.content or '' }}</textarea>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:.4rem">Supports plain text. Reference external file names, SharePoint paths, or artifact details.</div>
+      </div>
+      <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+        <button type="submit" class="btn btn-primary">Save Draft</button>
+        <a href="/ato/{{ system.id }}" class="btn btn-outline">Cancel</a>
+      </div>
+    </div>
+  </form>
+  {% else %}
+  <div class="card">
+    {% if doc %}
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem">
+      <div>
+        <div style="font-weight:600;font-size:1rem;color:var(--fg)">{{ doc.title }}</div>
+        <div style="font-size:.8rem;color:var(--muted);margin-top:.2rem">
+          Created by {{ doc.created_by or 'unknown' }} •
+          Updated {{ doc.updated_at.strftime('%Y-%m-%d %H:%M') if doc.updated_at else '—' }}
+        </div>
+      </div>
+      {% if doc.assigned_to %}
+      <div style="text-align:right;font-size:.82rem">
+        <div style="color:var(--muted)">Assigned To</div>
+        <div style="color:var(--fg)">{{ doc.assigned_to }}</div>
+      </div>
+      {% endif %}
+    </div>
+    {% if doc.due_date %}
+    <div style="margin-bottom:1rem;font-size:.82rem;color:{% if doc.due_date < today_str %}var(--danger){% else %}var(--muted){% endif %}">
+      Due: {{ doc.due_date }}
+    </div>
+    {% endif %}
+    <pre style="white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:.9rem;color:var(--fg);background:var(--bg-input);padding:1rem;border-radius:6px;border:1px solid var(--border);min-height:120px">{{ doc.content or '(no content)' }}</pre>
+    {% else %}
+    <p style="color:var(--muted)">Document not yet started.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── Right: workflow panel ── -->
+<div style="display:flex;flex-direction:column;gap:1rem">
+
+  <!-- Workflow actions -->
+  <div class="card">
+    <div style="font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:.75rem">Workflow Actions</div>
+
+    {% if can_submit %}
+    <form method="post" action="/ato/{{ system.id }}/{{ doc_type }}/action" style="margin-bottom:.75rem">
+      <input type="hidden" name="action" value="submit">
+      <div class="form-group">
+        <textarea name="comment" class="form-control" rows="2" placeholder="Submit note (optional)"></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Submit for Review →</button>
+    </form>
+    {% endif %}
+
+    {% if can_approve %}
+    <form method="post" action="/ato/{{ system.id }}/{{ doc_type }}/action" style="margin-bottom:.5rem">
+      <input type="hidden" name="action" value="approve">
+      <div class="form-group">
+        <textarea name="comment" class="form-control" rows="2" placeholder="Approval note (optional)"></textarea>
+      </div>
+      <button type="submit" class="btn btn-success btn-full">Approve ✓</button>
+    </form>
+    {% endif %}
+
+    {% if can_reject %}
+    <form method="post" action="/ato/{{ system.id }}/{{ doc_type }}/action" style="margin-bottom:.5rem">
+      <input type="hidden" name="action" value="reject">
+      <div class="form-group">
+        <textarea name="comment" class="form-control" rows="2" placeholder="Rejection reason (required)" required></textarea>
+      </div>
+      <button type="submit" class="btn btn-danger btn-full">Reject — Return to Draft</button>
+    </form>
+    {% endif %}
+
+    {% if can_finalize %}
+    <form method="post" action="/ato/{{ system.id }}/{{ doc_type }}/action" style="margin-bottom:.5rem">
+      <input type="hidden" name="action" value="finalize">
+      <div class="form-group">
+        <textarea name="comment" class="form-control" rows="2" placeholder="ATO authorization note"></textarea>
+      </div>
+      <button type="submit" class="btn btn-accent btn-full" onclick="return confirm('Finalize this document as part of the ATO package?')">Finalize (ATO) ⊕</button>
+    </form>
+    {% endif %}
+
+    {% if can_revise %}
+    <form method="post" action="/ato/{{ system.id }}/{{ doc_type }}/action">
+      <input type="hidden" name="action" value="revise">
+      <input type="hidden" name="comment" value="Opened for revision">
+      <button type="submit" class="btn btn-outline btn-full" onclick="return confirm('Open this document for revision? This will bump the version and return it to Draft.')">Open for Revision ↺</button>
+    </form>
+    {% endif %}
+
+    {% if not can_submit and not can_approve and not can_reject and not can_finalize and not can_revise and not can_edit %}
+    <p style="color:var(--muted);font-size:.85rem;text-align:center">No actions available for your role in this state.</p>
+    {% endif %}
+  </div>
+
+  <!-- Document info -->
+  {% if doc %}
+  <div class="card">
+    <div style="font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:.75rem">Document Info</div>
+    <table style="width:100%;font-size:.82rem;border-collapse:collapse">
+      <tr><td style="color:var(--muted);padding:.3rem 0">Type</td><td style="color:var(--fg)">{{ doc_type }}</td></tr>
+      <tr><td style="color:var(--muted);padding:.3rem 0">Version</td><td style="color:var(--fg)">{{ doc.version }}</td></tr>
+      <tr><td style="color:var(--muted);padding:.3rem 0">Status</td><td><span class="badge {% if doc.status == 'finalized' %}badge-success{% elif doc.status == 'approved' %}badge-info{% elif doc.status == 'in_review' %}badge-warn{% else %}badge-muted{% endif %}">{{ doc.status.replace('_',' ').title() }}</span></td></tr>
+      <tr><td style="color:var(--muted);padding:.3rem 0">Created</td><td style="color:var(--muted)">{{ doc.created_at.strftime('%Y-%m-%d') if doc.created_at else '—' }}</td></tr>
+      <tr><td style="color:var(--muted);padding:.3rem 0">Author</td><td style="color:var(--muted)">{{ doc.created_by or '—' }}</td></tr>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Workflow history -->
+  {% if events %}
+  <div class="card">
+    <div style="font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:.75rem">Workflow History</div>
+    {% for ev in events %}
+    <div style="border-left:2px solid {% if ev.to_status == 'finalized' %}var(--accent){% elif ev.to_status == 'approved' %}var(--ok){% elif ev.to_status == 'in_review' %}var(--warn){% elif ev.to_status == 'draft' %}var(--danger){% else %}var(--border){% endif %};padding:.4rem .75rem;margin-bottom:.75rem">
+      <div style="font-size:.82rem;font-weight:600;color:var(--fg)">
+        {{ ev.from_status or '—' }} → {{ ev.to_status }}
+      </div>
+      <div style="font-size:.78rem;color:var(--muted)">
+        {{ ev.actor }} ({{ ev.actor_role }}) • {{ ev.timestamp.strftime('%Y-%m-%d %H:%M') if ev.timestamp else '—' }}
+      </div>
+      {% if ev.comment %}
+      <div style="font-size:.8rem;color:var(--fg);margin-top:.3rem;font-style:italic">"{{ ev.comment }}"</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Version history -->
+  {% if versions %}
+  <div class="card">
+    <div style="font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:.75rem">Version History</div>
+    {% for ver in versions %}
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:.35rem 0;border-bottom:1px solid var(--border)">
+      <div>
+        <span style="font-size:.82rem;font-weight:600;color:var(--accent)">v{{ ver.version }}</span>
+        <span style="font-size:.78rem;color:var(--muted);margin-left:.5rem">{{ ver.from_status }} → {{ ver.to_status }}</span>
+      </div>
+      <div style="font-size:.75rem;color:var(--muted)">{{ ver.changed_at.strftime('%Y-%m-%d') if ver.changed_at else '—' }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+</div>
+{% endblock %}

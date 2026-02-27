@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}ATO Package Dashboard — BLACKSITE{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">ATO Package Dashboard</h1>
+  <p class="page-sub">Authorization To Operate — document completion status across all systems</p>
+</div>
+
+{% if not systems %}
+<div class="empty-state">
+  <p>No systems assigned. <a href="/systems">View system catalog →</a></p>
+</div>
+{% else %}
+
+<!-- Summary strip -->
+<div class="stat-row" style="margin-bottom:1.5rem">
+  {% for sys in systems %}
+  {% set s = sys_summary[sys.id] %}
+  <a href="/ato/{{ sys.id }}" class="stat-card" style="text-decoration:none">
+    <div class="stat-label">{{ sys.name }}</div>
+    <div class="stat-value" style="font-size:1.4rem">{{ s.finalized }}/{{ s.total }}</div>
+    <div style="font-size:.75rem;color:var(--muted);margin-top:.3rem">finalized</div>
+    <div style="margin-top:.5rem;background:var(--bg-card);border-radius:4px;height:6px;overflow:hidden">
+      <div style="height:6px;width:{{ ((s.finalized / s.total) * 100)|int }}%;background:var(--accent)"></div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+<!-- Matrix table -->
+{% for sys in systems %}
+<div class="card" style="margin-bottom:2rem">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+    <h2 style="font-size:1rem;font-weight:600;color:var(--fg)">
+      <a href="/ato/{{ sys.id }}" style="color:var(--accent);text-decoration:none">{{ sys.name }}</a>
+      <span style="color:var(--muted);font-weight:400;font-size:.85rem;margin-left:.5rem">{{ sys.classification or '' }}</span>
+    </h2>
+    {% set s = sys_summary[sys.id] %}
+    <span style="font-size:.8rem;color:var(--muted)">
+      <span style="color:var(--accent)">{{ s.finalized }}</span> finalized •
+      <span style="color:var(--ok)">{{ s.approved }}</span> approved •
+      <span style="color:var(--warn)">{{ s.in_review }}</span> in review •
+      {{ s.draft }} draft •
+      <span style="color:var(--danger)">{{ s.missing }}</span> missing
+    </span>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+    {% for key in ato_doc_keys %}
+    {% set doc = ato_map.get((sys.id, key)) %}
+    {% set meta = ato_doc_types[key] %}
+    {% set st = doc.status if doc else 'missing' %}
+    <a href="/ato/{{ sys.id }}/{{ key }}"
+       title="{{ meta.name }}"
+       style="display:inline-flex;align-items:center;gap:.35rem;padding:.35rem .65rem;border-radius:4px;font-size:.75rem;font-weight:600;text-decoration:none;border:1px solid;
+       {% if st == 'finalized' %}background:rgba(0,200,150,.12);border-color:var(--accent);color:var(--accent)
+       {% elif st == 'approved' %}background:rgba(0,180,100,.1);border-color:var(--ok);color:var(--ok)
+       {% elif st == 'in_review' %}background:rgba(255,180,0,.1);border-color:var(--warn);color:var(--warn)
+       {% elif st == 'draft' %}background:rgba(255,255,255,.05);border-color:var(--border);color:var(--fg)
+       {% else %}background:rgba(255,60,60,.07);border-color:rgba(255,60,60,.3);color:var(--muted)
+       {% endif %}">
+      {{ meta.short }}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+
+<div style="margin-top:1rem;font-size:.78rem;color:var(--muted);display:flex;gap:1.5rem;flex-wrap:wrap">
+  <span style="color:var(--accent)">&#9632;</span> Finalized &nbsp;
+  <span style="color:var(--ok)">&#9632;</span> Approved &nbsp;
+  <span style="color:var(--warn)">&#9632;</span> In Review &nbsp;
+  <span style="color:var(--fg)">&#9632;</span> Draft &nbsp;
+  <span style="color:var(--danger)">&#9632;</span> Missing
+</div>
+{% endif %}
+{% endblock %}
