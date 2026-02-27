@@ -362,7 +362,45 @@
     <div class="stat-value">{{ risks | length }}</div>
     <div class="stat-label">Risks</div>
   </div>
+  {% if sc_total > 0 %}
+  <div class="stat">
+    <div class="stat-value"
+         style="color:{% if sc_coverage_pct >= 80 %}var(--green){% elif sc_coverage_pct >= 50 %}var(--yellow){% else %}var(--red){% endif %}">
+      {{ sc_coverage_pct }}%
+    </div>
+    <div class="stat-label">Control Coverage</div>
+  </div>
+  {% endif %}
 </div>
+
+{# ── Control Family Coverage ─────────────────────────────────────────────── #}
+{% if family_coverage %}
+<div class="card" style="margin-bottom:16px;padding:20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div class="card-title" style="margin-bottom:0">Control Coverage by Family</div>
+    <a href="/systems/{{ system.id }}/controls" class="btn btn-ghost btn-sm">
+      Full Plan →
+    </a>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+    {% for f in family_coverage %}
+    {% set bar_color = 'var(--green)' if f.pct >= 80 else ('var(--yellow)' if f.pct >= 50 else 'var(--red)') %}
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span class="mono" style="font-size:0.78em;color:var(--cyan);font-weight:700">{{ f.family }}</span>
+        <span style="font-size:0.75em;color:{{ bar_color }};font-weight:700">{{ f.pct }}%</span>
+      </div>
+      <div style="background:var(--border);border-radius:2px;height:4px;overflow:hidden">
+        <div style="width:{{ f.pct }}%;height:100%;background:{{ bar_color }};border-radius:2px"></div>
+      </div>
+      <div style="font-size:0.62em;color:var(--muted);margin-top:4px">
+        {{ f.impl }}/{{ f.total }} controls
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 
 {# ── Access Control — Assigned Users ─────────────────────────────────────── #}
 <div class="card" style="margin-bottom:16px">

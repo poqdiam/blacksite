@@ -94,7 +94,7 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, select, update, text
+from sqlalchemy import func, select, update, text, case as sa_case
 
 from app.models import (
     Assessment, Candidate, ControlResult, ControlsMeta, DailyQuizActivity, QuizResponse,
@@ -1615,6 +1615,41 @@ async def system_detail(request: Request, system_id: str):
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(status_code=403, detail="You are not assigned to this system")
 
+        # Control coverage: totals + by family
+        sc_total = (await session.execute(
+            select(func.count(SystemControl.id)).where(SystemControl.system_id == system_id)
+        )).scalar() or 0
+        sc_impl = (await session.execute(
+            select(func.count(SystemControl.id))
+            .where(SystemControl.system_id == system_id)
+            .where(SystemControl.status.in_(["implemented","inherited","not_applicable"]))
+        )).scalar() or 0
+        sc_coverage_pct = round(sc_impl / max(sc_total, 1) * 100)
+
+        # By family: {family: {total, impl, pct}}
+        family_rows = await session.execute(
+            select(SystemControl.control_family,
+                   func.count(SystemControl.id).label("total"),
+                   func.sum(
+                       sa_case(
+                           (SystemControl.status.in_(["implemented","inherited","not_applicable"]), 1),
+                           else_=0
+                       )
+                   ).label("impl"))
+            .where(SystemControl.system_id == system_id)
+            .group_by(SystemControl.control_family)
+            .order_by(SystemControl.control_family)
+        )
+        family_coverage: list[dict] = []
+        for row in family_rows.all():
+            pct = round((row.impl or 0) / max(row.total, 1) * 100)
+            family_coverage.append({
+                "family": row.control_family,
+                "total": row.total,
+                "impl":  row.impl or 0,
+                "pct":   pct,
+            })
+
         # Assignments for the access-control panel
         assign_rows = await session.execute(
             select(SystemAssignment)
@@ -1648,6 +1683,10 @@ async def system_detail(request: Request, system_id: str):
         "poam_due_week":           len(poam_due_week),
         "assignments":             assignments,
         "current_user_assignment": current_user_assignment,
+        "sc_total":                sc_total,
+        "sc_impl":                 sc_impl,
+        "sc_coverage_pct":         sc_coverage_pct,
+        "family_coverage":         family_coverage,
         **_tpl_ctx(request),
     })
 
