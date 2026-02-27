@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Import POA&M{% endblock %}
+
+{% block content %}
+{# ── Page header ──────────────────────────────────────────────────────────── #}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+  <div>
+    <h1 style="margin:0">Import POA&amp;M Items</h1>
+    <p class="text-muted" style="margin-top:4px;font-size:0.88em">
+      Bulk-import from CSV · Excel-compatible · Duplicate detection by weakness name
+    </p>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/poam/import/template" class="btn btn-ghost btn-sm">↓ CSV Template</a>
+    <a href="/poam" class="btn btn-ghost btn-sm">← POA&amp;M</a>
+  </div>
+</div>
+
+{# ── Result banner ─────────────────────────────────────────────────────────── #}
+{% if result %}
+<div class="card" style="padding:20px;margin-bottom:24px;
+     border-color:{% if result.dry_run %}var(--cyan){% elif result.created > 0 %}var(--green){% else %}var(--red){% endif %}44">
+  <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
+    <div style="flex:1">
+      {% if result.dry_run %}
+      <div style="font-size:1.1em;font-weight:700;color:var(--cyan);margin-bottom:8px">
+        Dry Run Complete — No items saved
+      </div>
+      {% elif result.created > 0 %}
+      <div style="font-size:1.1em;font-weight:700;color:var(--green);margin-bottom:8px">
+        Import Successful
+      </div>
+      {% else %}
+      <div style="font-size:1.1em;font-weight:700;color:var(--red);margin-bottom:8px">
+        Import Failed — No items created
+      </div>
+      {% endif %}
+
+      <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:0.88em">
+        <span>
+          <strong style="color:var(--green)">{{ result.created }}</strong>
+          <span class="text-muted"> item{{ 's' if result.created != 1 }} {% if result.dry_run %}would be imported{% else %}imported{% endif %}</span>
+        </span>
+        {% if result.skipped %}
+        <span>
+          <strong style="color:var(--yellow)">{{ result.skipped }}</strong>
+          <span class="text-muted"> skipped</span>
+        </span>
+        {% endif %}
+        <span class="text-muted">File: {{ result.filename }}</span>
+      </div>
+
+      {% if result.errors %}
+      <div style="margin-top:12px">
+        <div style="font-size:0.75em;color:var(--muted);font-weight:600;text-transform:uppercase;
+                    letter-spacing:0.5px;margin-bottom:6px">Warnings / Errors</div>
+        <div style="max-height:120px;overflow-y:auto;background:var(--surface);border-radius:4px;
+                    padding:8px 12px;font-size:0.78em;border:1px solid var(--border)">
+          {% for e in result.errors %}
+          <div style="color:var(--yellow);padding:2px 0">⚠ {{ e }}</div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if result.created > 0 and not result.dry_run %}
+    <a href="/poam" class="btn btn-primary btn-sm" style="align-self:flex-start">
+      View POA&amp;M →
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── Instructions ──────────────────────────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px">
+
+  {# Format spec #}
+  <div class="card" style="padding:20px;margin-bottom:0">
+    <div class="card-title" style="margin-bottom:12px">CSV Format</div>
+    <p style="font-size:0.82em;color:var(--muted);margin-bottom:12px">
+      Required column: <code style="color:var(--cyan)">weakness_name</code><br>
+      All other columns are optional. Download the template for the full column list.
+    </p>
+    <table style="width:100%;font-size:0.78em;border-collapse:collapse">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:4px 8px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600">Column</th>
+          <th style="text-align:left;padding:4px 8px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600">Values / Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for col, notes in [
+            ('weakness_name',        'Required. Short title of the weakness.'),
+            ('severity',             'Critical | High | Moderate | Low | Informational'),
+            ('status',               'open | in_progress | closed | risk_accepted | false_positive'),
+            ('control_id',           'e.g. ac-2, si-3 (NIST control identifier)'),
+            ('scheduled_completion', 'ISO date: YYYY-MM-DD'),
+            ('detection_source',     'assessment | scan | audit | pentest | self_report'),
+            ('responsible_party',    'Free text — team or person name'),
+            ('system_name',          'Must exactly match a system name in the catalog'),
+        ] %}
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:5px 8px"><code style="color:var(--cyan);font-size:0.92em">{{ col }}</code></td>
+          <td style="padding:5px 8px;color:var(--muted)">{{ notes }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# Tips #}
+  <div class="card" style="padding:20px;margin-bottom:0">
+    <div class="card-title" style="margin-bottom:12px">Import Tips</div>
+    <ul style="font-size:0.83em;color:var(--muted);line-height:1.7;padding-left:18px">
+      <li>Save your spreadsheet as <strong style="color:var(--text)">CSV (UTF-8)</strong>. Excel BOM is handled automatically.</li>
+      <li>Leave <code style="color:var(--cyan)">system_name</code> blank to link all rows to the selected system below, or fill it per row to assign to different systems.</li>
+      <li>Use <strong style="color:var(--text)">Dry Run</strong> to preview results without saving — check for errors before committing.</li>
+      <li>Invalid <code style="color:var(--cyan)">severity</code> values default to <em>Low</em>. Invalid dates are cleared.</li>
+      <li>There is no duplicate detection — re-importing the same file will create duplicates. Use dry run to verify first.</li>
+    </ul>
+    <div style="margin-top:14px;padding:10px;background:rgba(0,200,130,0.06);border:1px solid rgba(0,200,130,0.15);border-radius:6px;font-size:0.8em">
+      <strong style="color:var(--cyan)">CSV Template:</strong>
+      <span style="color:var(--muted);margin-left:6px">Includes all columns + one example row.</span>
+      <a href="/poam/import/template" style="color:var(--cyan);margin-left:8px">Download →</a>
+    </div>
+  </div>
+
+</div>
+
+{# ── Upload form ───────────────────────────────────────────────────────────── #}
+<div class="section-header">Upload CSV</div>
+<div class="card" style="padding:24px">
+  <form method="post" action="/poam/import" enctype="multipart/form-data"
+        style="display:flex;flex-direction:column;gap:16px">
+
+    {# File picker #}
+    <div>
+      <label style="display:block;font-size:0.8em;font-weight:600;color:var(--muted);
+                    text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">
+        CSV File <span style="color:var(--red)">*</span>
+      </label>
+      <input type="file" name="file" accept=".csv,text/csv" required
+             class="form-control" style="cursor:pointer">
+    </div>
+
+    {# System override #}
+    {% if all_sys %}
+    <div>
+      <label style="display:block;font-size:0.8em;font-weight:600;color:var(--muted);
+                    text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">
+        Link All Rows to System (optional — overridden per-row by system_name column)
+      </label>
+      <select name="system_id" class="form-control">
+        <option value="">— No default system (use system_name column) —</option>
+        {% for s in all_sys %}
+        <option value="{{ s.id }}">{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    {# Dry run toggle #}
+    <div style="display:flex;align-items:center;gap:10px">
+      <input type="checkbox" name="dry_run" id="dry_run" value="1"
+             style="width:16px;height:16px;cursor:pointer">
+      <label for="dry_run" style="font-size:0.88em;cursor:pointer">
+        <strong>Dry Run</strong>
+        <span class="text-muted" style="margin-left:6px">— Parse and validate without saving. Preview errors before importing.</span>
+      </label>
+    </div>
+
+    <div style="display:flex;gap:8px;padding-top:4px">
+      <button type="submit" class="btn btn-primary">Import CSV</button>
+      <a href="/poam" class="btn btn-ghost btn-sm" style="align-self:center">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

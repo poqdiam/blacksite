@@ -38,6 +38,9 @@ Routes:
   GET  /systems/{id}/assignments    List current assignments (admin only, JSON)
   POST /results/{id}/controls/{ctrl}/edit  Edit a control field (assigned user or admin)
   GET  /poam                        POA&M dashboard
+  GET  /poam/import                 CSV bulk import form
+  POST /poam/import                 Parse + insert from CSV
+  GET  /poam/import/template        Download blank CSV template
   GET  /poam/new                    Create POA&M item form
   POST /poam                        Create POA&M item
   GET  /poam/{id}                   POA&M item detail + edit
@@ -75,6 +78,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import csv
+import io
 import os
 import random
 import uuid
@@ -2128,6 +2133,170 @@ async def poam_export(request: Request):
         "items":       items,
         "systems_map": systems_map,
         "export_date": date.today().isoformat(),
+        **_tpl_ctx(request),
+    })
+
+
+@app.get("/poam/import/template")
+async def poam_import_template(request: Request):
+    """Download a blank CSV template for bulk POA&M import."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    fields = [
+        "weakness_name", "weakness_description", "severity", "control_id",
+        "responsible_party", "scheduled_completion", "detection_source",
+        "resources_required", "remediation_plan", "status", "comments",
+        "system_name",
+    ]
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=fields)
+    w.writeheader()
+    w.writerow({
+        "weakness_name":       "Incomplete access control list",
+        "weakness_description":"AC-2 not fully implemented — stale accounts present",
+        "severity":            "High",
+        "control_id":          "ac-2",
+        "responsible_party":   "IAM Team",
+        "scheduled_completion":"2026-06-30",
+        "detection_source":    "audit",
+        "resources_required":  "8 hours engineering",
+        "remediation_plan":    "Remove stale accounts, enable quarterly reviews",
+        "status":              "open",
+        "comments":            "Tracked in Jira INFOSEC-123",
+        "system_name":         "",
+    })
+    content = buf.getvalue()
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=poam_import_template.csv"},
+    )
+
+
+@app.get("/poam/import", response_class=HTMLResponse)
+async def poam_import_form(request: Request):
+    """CSV bulk import form."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        sys_rows = await session.execute(select(System).order_by(System.name))
+        all_sys = sys_rows.scalars().all()
+
+    return templates.TemplateResponse("poam_import.html", {
+        "request": request,
+        "all_sys": all_sys,
+        **_tpl_ctx(request),
+    })
+
+
+@app.post("/poam/import")
+async def poam_import_csv(
+    request: Request,
+    file: UploadFile = File(...),
+    system_id: str = Form(""),
+    dry_run: str = Form("0"),
+):
+    """Parse uploaded CSV and bulk-create POA&M items."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    content = await file.read()
+    try:
+        text_content = content.decode("utf-8-sig")  # handle Excel BOM
+    except UnicodeDecodeError:
+        text_content = content.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(text_content))
+    VALID_SEVERITIES   = {"Critical", "High", "Moderate", "Low", "Informational"}
+    VALID_STATUSES     = {"open", "in_progress", "closed", "risk_accepted", "false_positive"}
+    VALID_SOURCES      = {"assessment", "scan", "audit", "pentest", "self_report"}
+
+    created, skipped, errors = 0, 0, []
+    items_to_insert = []
+
+    async with SessionLocal() as session:
+        # Build system name → id lookup
+        sys_rows = await session.execute(select(System.id, System.name))
+        name_to_id = {s.name.lower().strip(): s.id for s in sys_rows.all()}
+
+        for i, row in enumerate(reader, start=2):  # row 1 = header
+            wname = (row.get("weakness_name") or "").strip()
+            if not wname:
+                errors.append(f"Row {i}: missing weakness_name — skipped")
+                skipped += 1
+                continue
+
+            sev = (row.get("severity") or "Low").strip().title()
+            if sev not in VALID_SEVERITIES:
+                sev = "Low"
+
+            status = (row.get("status") or "open").strip().lower()
+            if status not in VALID_STATUSES:
+                status = "open"
+
+            source = (row.get("detection_source") or "audit").strip().lower()
+            if source not in VALID_SOURCES:
+                source = "audit"
+
+            # Resolve system: row-level system_name takes priority, else form-level system_id
+            resolved_sys_id = system_id or None
+            row_sys_name = (row.get("system_name") or "").strip().lower()
+            if row_sys_name and row_sys_name in name_to_id:
+                resolved_sys_id = name_to_id[row_sys_name]
+
+            # Validate date
+            sched = (row.get("scheduled_completion") or "").strip() or None
+            if sched:
+                try:
+                    date.fromisoformat(sched)
+                except ValueError:
+                    sched = None
+                    errors.append(f"Row {i}: invalid scheduled_completion date — cleared")
+
+            items_to_insert.append(PoamItem(
+                id=str(uuid.uuid4()),
+                system_id=resolved_sys_id if resolved_sys_id else None,
+                control_id=(row.get("control_id") or "").strip().lower() or None,
+                weakness_name=wname,
+                weakness_description=(row.get("weakness_description") or "").strip() or None,
+                detection_source=source,
+                severity=sev,
+                responsible_party=(row.get("responsible_party") or "").strip() or None,
+                resources_required=(row.get("resources_required") or "").strip() or None,
+                scheduled_completion=sched,
+                status=status,
+                remediation_plan=(row.get("remediation_plan") or "").strip() or None,
+                comments=(row.get("comments") or "").strip() or None,
+                created_by=user,
+            ))
+
+        is_dry = dry_run.strip() in ("1", "true", "yes", "on")
+        if not is_dry and items_to_insert:
+            for item in items_to_insert:
+                session.add(item)
+            await session.commit()
+            # Audit log
+            await _log_audit(session, user, "CREATE", "poam_bulk_import", "",
+                             {"imported": len(items_to_insert), "file": file.filename})
+            await session.commit()
+
+        created = len(items_to_insert)
+
+    return templates.TemplateResponse("poam_import.html", {
+        "request":    request,
+        "all_sys":    [],
+        "result": {
+            "created":  created,
+            "skipped":  skipped,
+            "errors":   errors,
+            "dry_run":  is_dry,
+            "filename": file.filename,
+        },
         **_tpl_ctx(request),
     })
 
