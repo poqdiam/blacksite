@@ -4,7 +4,7 @@ BLACKSITE — Database models (SQLAlchemy + SQLite)
 from __future__ import annotations
 
 from sqlalchemy import (
-    Column, String, Integer, Float, Boolean, DateTime, Text, ForeignKey, create_engine, Index, text
+    Column, String, Integer, Float, Boolean, DateTime, Text, ForeignKey, create_engine, Index, text, event
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -55,7 +55,7 @@ class ControlResult(Base):
     __tablename__ = "control_results"
 
     id                  = Column(Integer, primary_key=True, autoincrement=True)
-    assessment_id       = Column(String, ForeignKey("assessments.id"), nullable=False)
+    assessment_id       = Column(String, ForeignKey("assessments.id"), nullable=False, index=True)
     control_id          = Column(String, nullable=False)        # e.g. "ac-1"
     control_family      = Column(String, nullable=False)        # e.g. "AC"
     control_title       = Column(String, nullable=False)
@@ -138,8 +138,8 @@ class PoamItem(Base):
     __tablename__ = "poam_items"
 
     id                   = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    system_id            = Column(String, ForeignKey("systems.id"), nullable=True)
-    assessment_id        = Column(String, ForeignKey("assessments.id"), nullable=True)
+    system_id            = Column(String, ForeignKey("systems.id"), nullable=True, index=True)
+    assessment_id        = Column(String, ForeignKey("assessments.id"), nullable=True, index=True)
     control_id           = Column(String, nullable=True)        # e.g. "ac-2"
     weakness_name        = Column(String, nullable=False)
     weakness_description = Column(Text, nullable=True)
@@ -162,7 +162,7 @@ class Risk(Base):
     __tablename__ = "risks"
 
     id                  = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    system_id           = Column(String, ForeignKey("systems.id"), nullable=True)
+    system_id           = Column(String, ForeignKey("systems.id"), nullable=True, index=True)
     poam_id             = Column(String, ForeignKey("poam_items.id"), nullable=True)
     risk_name           = Column(String, nullable=False)
     risk_description    = Column(Text, nullable=True)
@@ -222,8 +222,8 @@ class SystemAssignment(Base):
     __tablename__ = "system_assignments"
 
     id          = Column(Integer, primary_key=True, autoincrement=True)
-    system_id   = Column(String, ForeignKey("systems.id"), nullable=False)
-    remote_user = Column(String, nullable=False)   # Authelia username of the assignee
+    system_id   = Column(String, ForeignKey("systems.id"), nullable=False, index=True)
+    remote_user = Column(String, nullable=False, index=True)   # Authelia username of the assignee
     assigned_by = Column(String, nullable=True)    # admin who made the assignment
     assigned_at = Column(DateTime, default=_now)
     note        = Column(String, nullable=True)    # optional context note
@@ -306,25 +306,33 @@ def get_db_url(config: dict) -> str:
 
 
 async def _migrate_db(engine):
-    """Add any missing columns to existing tables (safe ALTER TABLE migrations)."""
-    migrations = [
+    """Add any missing columns and indexes to existing tables (safe migrations)."""
+    col_migrations = [
         # (table_name, column_name, column_def)
         ("assessments",     "system_id",          "TEXT REFERENCES systems(id)"),
         ("control_results", "is_na",               "BOOLEAN DEFAULT 0"),
         ("control_results", "proctor_assessment",  "TEXT"),
         ("control_results", "proctor_score",       "INTEGER"),
     ]
+    # Performance indexes — CREATE INDEX IF NOT EXISTS is idempotent
+    index_migrations = [
+        "CREATE INDEX IF NOT EXISTS ix_control_results_assessment_id ON control_results (assessment_id)",
+        "CREATE INDEX IF NOT EXISTS ix_poam_items_system_id           ON poam_items (system_id)",
+        "CREATE INDEX IF NOT EXISTS ix_poam_items_assessment_id       ON poam_items (assessment_id)",
+        "CREATE INDEX IF NOT EXISTS ix_risks_system_id                ON risks (system_id)",
+        "CREATE INDEX IF NOT EXISTS ix_system_assignments_system_id   ON system_assignments (system_id)",
+        "CREATE INDEX IF NOT EXISTS ix_system_assignments_remote_user ON system_assignments (remote_user)",
+        "CREATE INDEX IF NOT EXISTS ix_audit_log_remote_user          ON audit_log (remote_user)",
+        "CREATE INDEX IF NOT EXISTS ix_assessments_system_id          ON assessments (system_id)",
+    ]
     async with engine.begin() as conn:
-        for table, col, col_def in migrations:
-            # Check if column exists
-            result = await conn.execute(
-                text(f"PRAGMA table_info({table})")
-            )
+        for table, col, col_def in col_migrations:
+            result = await conn.execute(text(f"PRAGMA table_info({table})"))
             cols = [row[1] for row in result.fetchall()]
             if col not in cols:
-                await conn.execute(
-                    text(f"ALTER TABLE {table} ADD COLUMN {col} {col_def}")
-                )
+                await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_def}"))
+        for idx_sql in index_migrations:
+            await conn.execute(text(idx_sql))
 
 
 async def init_db(engine):
@@ -333,8 +341,20 @@ async def init_db(engine):
     await _migrate_db(engine)
 
 
+def _configure_sqlite(dbapi_conn, _connection_record):
+    """Apply SQLite performance and safety PRAGMAs on every new connection."""
+    dbapi_conn.execute("PRAGMA journal_mode=WAL")
+    dbapi_conn.execute("PRAGMA synchronous=NORMAL")   # safe with WAL, 3-5× faster than FULL
+    dbapi_conn.execute("PRAGMA cache_size=-20000")    # 20 MB page cache
+    dbapi_conn.execute("PRAGMA temp_store=MEMORY")    # temp tables in RAM
+    dbapi_conn.execute("PRAGMA mmap_size=268435456")  # 256 MB memory-mapped I/O
+    dbapi_conn.execute("PRAGMA foreign_keys=ON")
+
+
 def make_engine(config: dict):
-    return create_async_engine(get_db_url(config), echo=False)
+    eng = create_async_engine(get_db_url(config), echo=False)
+    event.listen(eng.sync_engine, "connect", _configure_sqlite)
+    return eng
 
 
 def make_session_factory(engine) -> async_sessionmaker:

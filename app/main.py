@@ -161,6 +161,37 @@ if Path("static").exists():
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+# ── Security headers middleware ─────────────────────────────────────────────
+
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add defensive HTTP security headers to every response."""
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        # Skip static asset routes (no need for HTML security headers on CSS/JS/images)
+        path = request.url.path
+        if path.startswith("/static/"):
+            return response
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        # CSP: self-only, allow Chart.js CDN, inline styles for our design system
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "font-src 'self'; "
+            "frame-ancestors 'none';"
+        )
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _cfg(key: str, default=None):
@@ -1780,22 +1811,107 @@ async def list_assignments(request: Request, system_id: str):
 
 @app.get("/poam", response_class=HTMLResponse)
 async def poam_dashboard(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user    = request.headers.get("Remote-User", "")
     if not user:
         raise HTTPException(status_code=401)
+    is_adm  = _is_admin(request)
 
     today_str = date.today().isoformat()
     week_str  = (date.today() + timedelta(days=7)).isoformat()
     month_ago = (date.today() - timedelta(days=30)).isoformat()
 
-    async with SessionLocal() as session:
-        rows = await session.execute(
-            select(PoamItem).order_by(PoamItem.severity, PoamItem.scheduled_completion)
-        )
-        all_items = rows.scalars().all()
+    # Query params for filtering / pagination
+    status_filter = request.query_params.get("status", "open")   # open|in_progress|all|closed
+    severity_filter = request.query_params.get("severity", "")
+    system_filter   = request.query_params.get("system_id", "")
+    PAGE_SIZE = 50
+    try:
+        page = max(1, int(request.query_params.get("page", 1)))
+    except ValueError:
+        page = 1
 
-        # Load linked systems for display
-        sys_ids = {p.system_id for p in all_items if p.system_id}
+    async with SessionLocal() as session:
+        # Scope to assigned systems for employees
+        scoped_sys_ids: list | None = None
+        if not is_adm:
+            scoped_sys_ids = await _user_system_ids(session, user)
+
+        def _build_q(base_q):
+            if scoped_sys_ids is not None:
+                base_q = base_q.where(PoamItem.system_id.in_(scoped_sys_ids))
+            if status_filter == "all":
+                pass
+            elif status_filter == "open":
+                base_q = base_q.where(PoamItem.status.in_(["open", "in_progress"]))
+            else:
+                base_q = base_q.where(PoamItem.status == status_filter)
+            if severity_filter:
+                base_q = base_q.where(PoamItem.severity == severity_filter)
+            if system_filter:
+                base_q = base_q.where(PoamItem.system_id == system_filter)
+            return base_q
+
+        # Stat counts (indexed queries, no full table scan for rendering)
+        open_statuses = ["open", "in_progress"]
+        base_open = select(func.count(PoamItem.id)).where(PoamItem.status.in_(open_statuses))
+        if scoped_sys_ids is not None:
+            base_open = base_open.where(PoamItem.system_id.in_(scoped_sys_ids))
+
+        total_open   = (await session.execute(base_open)).scalar() or 0
+        crit_high_ct = (await session.execute(
+            base_open.where(PoamItem.severity.in_(["Critical","High"]))
+        )).scalar() or 0
+        overdue_ct   = (await session.execute(
+            base_open.where(PoamItem.scheduled_completion < today_str)
+            .where(PoamItem.scheduled_completion.isnot(None))
+        )).scalar() or 0
+        due_soon_ct  = (await session.execute(
+            base_open.where(PoamItem.scheduled_completion >= today_str)
+                     .where(PoamItem.scheduled_completion <= week_str)
+        )).scalar() or 0
+        base_closed = select(func.count(PoamItem.id)).where(PoamItem.status == "closed")
+        if scoped_sys_ids is not None:
+            base_closed = base_closed.where(PoamItem.system_id.in_(scoped_sys_ids))
+        closed_month_ct = (await session.execute(
+            base_closed.where(PoamItem.completion_date >= month_ago)
+        )).scalar() or 0
+
+        sev_counts = {}
+        for sev in ("Critical", "High", "Moderate", "Low"):
+            ct = (await session.execute(
+                base_open.where(PoamItem.severity == sev)
+            )).scalar() or 0
+            sev_counts[sev] = ct
+
+        # Aging (use raw SQL for speed)
+        aging = {"0_30": 0, "31_60": 0, "61_90": 0, "90_plus": 0}
+        age_q = select(PoamItem.created_at).where(PoamItem.status.in_(open_statuses))
+        if scoped_sys_ids is not None:
+            age_q = age_q.where(PoamItem.system_id.in_(scoped_sys_ids))
+        age_rows = (await session.execute(age_q)).fetchall()
+        today_dt = date.today()
+        for (created_at,) in age_rows:
+            if created_at:
+                age = (today_dt - created_at.date()).days
+            else:
+                age = 0
+            if age <= 30:   aging["0_30"] += 1
+            elif age <= 60: aging["31_60"] += 1
+            elif age <= 90: aging["61_90"] += 1
+            else:           aging["90_plus"] += 1
+
+        # Filtered + paginated list
+        list_q = _build_q(select(PoamItem)).order_by(
+            PoamItem.severity, PoamItem.scheduled_completion
+        )
+        total_filtered = (await session.execute(
+            _build_q(select(func.count(PoamItem.id)))
+        )).scalar() or 0
+        list_q = list_q.offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE)
+        page_items = (await session.execute(list_q)).scalars().all()
+
+        # Systems map for display
+        sys_ids = {p.system_id for p in page_items if p.system_id}
         systems_map = {}
         if sys_ids:
             sys_rows = await session.execute(
@@ -1803,47 +1919,38 @@ async def poam_dashboard(request: Request):
             )
             systems_map = {s.id: s for s in sys_rows.scalars().all()}
 
-    open_items   = [p for p in all_items if p.status in ("open","in_progress")]
-    crit_high    = [p for p in open_items if p.severity in ("Critical","High")]
-    overdue      = [p for p in open_items if p.scheduled_completion and p.scheduled_completion < today_str]
-    due_soon     = [p for p in open_items if p.scheduled_completion and today_str <= p.scheduled_completion <= week_str]
-    closed_month = [p for p in all_items if p.status == "closed" and p.completion_date and p.completion_date >= month_ago]
-
-    sev_counts = {
-        "Critical": sum(1 for p in open_items if p.severity == "Critical"),
-        "High":     sum(1 for p in open_items if p.severity == "High"),
-        "Moderate": sum(1 for p in open_items if p.severity == "Moderate"),
-        "Low":      sum(1 for p in open_items if p.severity == "Low"),
-    }
-
-    # Aging buckets
-    aging = {"0_30": 0, "31_60": 0, "61_90": 0, "90_plus": 0}
-    today_dt = date.today()
-    for p in open_items:
-        if p.created_at:
-            age = (today_dt - p.created_at.date()).days
+        # System list for filter dropdown
+        if is_adm:
+            all_sys = (await session.execute(select(System).order_by(System.name))).scalars().all()
         else:
-            age = 0
-        if age <= 30:
-            aging["0_30"] += 1
-        elif age <= 60:
-            aging["31_60"] += 1
-        elif age <= 90:
-            aging["61_90"] += 1
-        else:
-            aging["90_plus"] += 1
+            all_sys = []
+            if scoped_sys_ids:
+                all_sys = (await session.execute(
+                    select(System).where(System.id.in_(scoped_sys_ids)).order_by(System.name)
+                )).scalars().all()
+
+    total_pages = max(1, (total_filtered + PAGE_SIZE - 1) // PAGE_SIZE)
 
     return templates.TemplateResponse("poam.html", {
-        "request":      request,
-        "all_items":    all_items,
-        "open_items":   open_items,
-        "crit_high":    crit_high,
-        "overdue":      overdue,
-        "due_soon":     due_soon,
-        "closed_month": closed_month,
-        "sev_counts":   sev_counts,
-        "aging":        aging,
-        "systems_map":  systems_map,
+        "request":        request,
+        "page_items":     page_items,
+        "total_open":     total_open,
+        "crit_high_ct":   crit_high_ct,
+        "overdue_ct":     overdue_ct,
+        "due_soon_ct":    due_soon_ct,
+        "closed_month_ct":closed_month_ct,
+        "sev_counts":     sev_counts,
+        "aging":          aging,
+        "systems_map":    systems_map,
+        "all_sys":        all_sys,
+        "status_filter":  status_filter,
+        "severity_filter":severity_filter,
+        "system_filter":  system_filter,
+        "page":           page,
+        "total_pages":    total_pages,
+        "total_filtered": total_filtered,
+        "today_str":      today_str,
+        "week_str":       week_str,
         **_tpl_ctx(request),
     })
 
@@ -2054,15 +2161,58 @@ async def poam_auto_create(request: Request, assessment_id: str):
 
 @app.get("/risks", response_class=HTMLResponse)
 async def risks_dashboard(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user    = request.headers.get("Remote-User", "")
     if not user:
         raise HTTPException(status_code=401)
+    is_adm  = _is_admin(request)
+
+    status_filter = request.query_params.get("status", "open")   # open|closed|all|accepted
+    level_filter  = request.query_params.get("level", "")
+    system_filter = request.query_params.get("system_id", "")
+    PAGE_SIZE = 50
+    try:
+        page = max(1, int(request.query_params.get("page", 1)))
+    except ValueError:
+        page = 1
 
     async with SessionLocal() as session:
-        rows = await session.execute(
+        scoped_sys_ids: list | None = None
+        if not is_adm:
+            scoped_sys_ids = await _user_system_ids(session, user)
+
+        def _build_risk_q(base_q):
+            if scoped_sys_ids is not None:
+                base_q = base_q.where(Risk.system_id.in_(scoped_sys_ids))
+            if status_filter == "all":
+                pass
+            elif status_filter == "open":
+                base_q = base_q.where(Risk.status.in_(["open", "accepted"]))
+            else:
+                base_q = base_q.where(Risk.status == status_filter)
+            if level_filter:
+                base_q = base_q.where(Risk.risk_level == level_filter)
+            if system_filter:
+                base_q = base_q.where(Risk.system_id == system_filter)
+            return base_q
+
+        # Build heat matrix from active (non-closed) risks using count query
+        matrix = [[0]*5 for _ in range(5)]
+        matrix_q = select(Risk.likelihood, Risk.impact).where(Risk.status != "closed")
+        if scoped_sys_ids is not None:
+            matrix_q = matrix_q.where(Risk.system_id.in_(scoped_sys_ids))
+        for (li, im) in (await session.execute(matrix_q)).fetchall():
+            row = max(0, min(4, (li or 1) - 1))
+            col = max(0, min(4, (im or 1) - 1))
+            matrix[4 - row][col] += 1
+
+        # Filtered + paginated list
+        total_filtered = (await session.execute(
+            _build_risk_q(select(func.count(Risk.id)))
+        )).scalar() or 0
+        list_q = _build_risk_q(
             select(Risk).order_by(Risk.risk_score.desc())
-        )
-        risks = rows.scalars().all()
+        ).offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE)
+        risks = (await session.execute(list_q)).scalars().all()
 
         sys_ids = {r.system_id for r in risks if r.system_id}
         systems_map = {}
@@ -2072,19 +2222,29 @@ async def risks_dashboard(request: Request):
             )
             systems_map = {s.id: s for s in sys_rows.scalars().all()}
 
-    # Build 5×5 heat matrix
-    matrix = [[0]*5 for _ in range(5)]
-    for r in risks:
-        if r.status != "closed":
-            li = max(0, min(4, (r.likelihood or 1) - 1))
-            im = max(0, min(4, (r.impact or 1) - 1))
-            matrix[4 - li][im] += 1
+        if is_adm:
+            all_sys = (await session.execute(select(System).order_by(System.name))).scalars().all()
+        else:
+            all_sys = []
+            if scoped_sys_ids:
+                all_sys = (await session.execute(
+                    select(System).where(System.id.in_(scoped_sys_ids)).order_by(System.name)
+                )).scalars().all()
+
+    total_pages = max(1, (total_filtered + PAGE_SIZE - 1) // PAGE_SIZE)
 
     return templates.TemplateResponse("risks.html", {
-        "request":     request,
-        "risks":       risks,
-        "systems_map": systems_map,
-        "matrix":      matrix,
+        "request":        request,
+        "risks":          risks,
+        "systems_map":    systems_map,
+        "matrix":         matrix,
+        "all_sys":        all_sys,
+        "status_filter":  status_filter,
+        "level_filter":   level_filter,
+        "system_filter":  system_filter,
+        "page":           page,
+        "total_pages":    total_pages,
+        "total_filtered": total_filtered,
         **_tpl_ctx(request),
     })
 

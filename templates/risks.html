@@ -111,8 +111,41 @@
   </div>
 </div>
 
+{# ── Filter bar ─────────────────────────────────────────────────────────────── #}
+<form method="get" action="/risks" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+  <select name="status" class="form-control" style="flex:1;min-width:140px">
+    <option value="open"   {% if status_filter=='open'   %}selected{% endif %}>Open / Accepted</option>
+    <option value="closed" {% if status_filter=='closed' %}selected{% endif %}>Closed</option>
+    <option value="all"    {% if status_filter=='all'    %}selected{% endif %}>All Statuses</option>
+  </select>
+  <select name="level" class="form-control" style="flex:1;min-width:140px">
+    <option value="">All Levels</option>
+    {% for lvl in ['Critical','High','Moderate','Low'] %}
+    <option {% if level_filter==lvl %}selected{% endif %}>{{ lvl }}</option>
+    {% endfor %}
+  </select>
+  {% if all_sys %}
+  <select name="system_id" class="form-control" style="flex:2;min-width:200px">
+    <option value="">All Systems</option>
+    {% for s in all_sys %}
+    <option value="{{ s.id }}" {% if system_filter==s.id %}selected{% endif %}>{{ s.name }}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
+  <button type="submit" class="btn btn-ghost btn-sm">Filter</button>
+  {% if status_filter != 'open' or level_filter or system_filter %}
+  <a href="/risks" class="btn btn-ghost btn-sm" style="color:var(--muted)">✕ Clear</a>
+  {% endif %}
+</form>
+
 {# ── Risk table ───────────────────────────────────────────────────────────── #}
-<div class="section-header">All Risks</div>
+<div class="section-header" style="display:flex;justify-content:space-between;align-items:center">
+  <span>Risks</span>
+  <span class="text-muted" style="font-size:0.8em;font-weight:400">
+    {{ total_filtered }} risk{{ 's' if total_filtered != 1 }}
+    {% if total_pages > 1 %} · Page {{ page }}/{{ total_pages }}{% endif %}
+  </span>
+</div>
 <div class="card" style="padding:0;overflow:hidden">
   {% if risks %}
   <div style="overflow-x:auto">
@@ -212,10 +245,26 @@
     </tbody>
   </table>
   </div>
+
+  {# Pagination #}
+  {% if total_pages > 1 %}
+  <div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:14px;border-top:1px solid var(--border)">
+    {% if page > 1 %}
+    <a href="/risks?page={{ page-1 }}&status={{ status_filter }}&level={{ level_filter }}&system_id={{ system_filter }}"
+       class="btn btn-ghost btn-sm">← Prev</a>
+    {% endif %}
+    <span class="text-muted" style="font-size:0.85em">{{ page }} / {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="/risks?page={{ page+1 }}&status={{ status_filter }}&level={{ level_filter }}&system_id={{ system_filter }}"
+       class="btn btn-ghost btn-sm">Next →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% else %}
   <div style="padding:60px;text-align:center">
     <div style="font-size:2em;margin-bottom:12px;color:#1e1e30">[ ]</div>
-    <div class="text-muted" style="margin-bottom:16px;font-size:0.9em">No risks registered yet.</div>
+    <div class="text-muted" style="margin-bottom:16px;font-size:0.9em">No risks match the current filter.</div>
     <a href="/risks/new" class="btn btn-primary btn-sm">+ New Risk</a>
   </div>
   {% endif %}

@@ -17,23 +17,23 @@
 {# ── Stat row ─────────────────────────────────────────────────────────────── #}
 <div class="stats" style="margin-bottom:24px">
   <div class="stat">
-    <div class="stat-value">{{ open_items|length }}</div>
+    <div class="stat-value">{{ total_open }}</div>
     <div class="stat-label">Open Items</div>
   </div>
   <div class="stat">
-    <div class="stat-value" style="color:var(--red)">{{ crit_high|length }}</div>
+    <div class="stat-value" style="color:var(--red)">{{ crit_high_ct }}</div>
     <div class="stat-label">Critical + High</div>
   </div>
   <div class="stat">
-    <div class="stat-value" style="color:var(--red)">{{ overdue|length }}</div>
+    <div class="stat-value" style="color:var(--red)">{{ overdue_ct }}</div>
     <div class="stat-label">Overdue</div>
   </div>
   <div class="stat">
-    <div class="stat-value" style="color:var(--yellow)">{{ due_soon|length }}</div>
+    <div class="stat-value" style="color:var(--yellow)">{{ due_soon_ct }}</div>
     <div class="stat-label">Due This Week</div>
   </div>
   <div class="stat">
-    <div class="stat-value" style="color:var(--green)">{{ closed_month|length }}</div>
+    <div class="stat-value" style="color:var(--green)">{{ closed_month_ct }}</div>
     <div class="stat-label">Closed This Month</div>
   </div>
 </div>
@@ -92,10 +92,43 @@
 
 </div>
 
+{# ── Filter bar ─────────────────────────────────────────────────────────────── #}
+<form method="get" action="/poam" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+  <select name="status" class="form-control" style="flex:1;min-width:140px">
+    <option value="open"   {% if status_filter=='open'   %}selected{% endif %}>Open / In Progress</option>
+    <option value="closed" {% if status_filter=='closed' %}selected{% endif %}>Closed</option>
+    <option value="all"    {% if status_filter=='all'    %}selected{% endif %}>All Statuses</option>
+  </select>
+  <select name="severity" class="form-control" style="flex:1;min-width:140px">
+    <option value="">All Severities</option>
+    {% for sev in ['Critical','High','Moderate','Low','Informational'] %}
+    <option {% if severity_filter==sev %}selected{% endif %}>{{ sev }}</option>
+    {% endfor %}
+  </select>
+  {% if all_sys %}
+  <select name="system_id" class="form-control" style="flex:2;min-width:200px">
+    <option value="">All Systems</option>
+    {% for s in all_sys %}
+    <option value="{{ s.id }}" {% if system_filter==s.id %}selected{% endif %}>{{ s.name }}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
+  <button type="submit" class="btn btn-ghost btn-sm">Filter</button>
+  {% if status_filter != 'open' or severity_filter or system_filter %}
+  <a href="/poam" class="btn btn-ghost btn-sm" style="color:var(--muted)">✕ Clear</a>
+  {% endif %}
+</form>
+
 {# ── Items table ───────────────────────────────────────────────────────────── #}
-<div class="section-header">All POA&amp;M Items</div>
+<div class="section-header" style="display:flex;justify-content:space-between;align-items:center">
+  <span>POA&amp;M Items</span>
+  <span class="text-muted" style="font-size:0.8em;font-weight:400">
+    {{ total_filtered }} item{{ 's' if total_filtered != 1 }}
+    {% if total_pages > 1 %} · Page {{ page }}/{{ total_pages }}{% endif %}
+  </span>
+</div>
 <div class="card" style="padding:0;overflow:hidden">
-  {% if all_items %}
+  {% if page_items %}
   <div style="overflow-x:auto">
   <table>
     <thead>
@@ -111,7 +144,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for item in all_items %}
+      {% for item in page_items %}
       {% set sev = item.severity or 'Low' %}
       {% if sev == 'Critical' %}
         {% set sev_color = 'var(--red)' %}
@@ -150,11 +183,11 @@
         <td class="mono" style="font-size:0.75em;color:var(--muted);white-space:nowrap">
           {{ item.id[:6] }}
         </td>
-        <td style="font-size:0.82em;color:var(--muted);white-space:nowrap">
+        <td style="font-size:0.82em;color:var(--muted);white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis">
           {% if item.system_id and item.system_id in systems_map %}
-            {{ systems_map[item.system_id].name }}
-          {% elif item.system_id %}
-            <span class="mono" style="font-size:0.85em">{{ item.system_id[:8] }}</span>
+            <a href="/systems/{{ item.system_id }}" style="color:var(--muted)">
+              {{ systems_map[item.system_id].name | truncate(28) }}
+            </a>
           {% else %}
             <span style="color:#444">—</span>
           {% endif %}
@@ -179,7 +212,7 @@
         <td style="font-size:0.8em;white-space:nowrap">
           {% if item.scheduled_completion %}
             {% set due = item.scheduled_completion %}
-            <span style="color:{% if item in overdue %}var(--red){% elif item in due_soon %}var(--yellow){% else %}var(--muted){% endif %}">
+            <span style="color:{% if due < today_str %}var(--red){% elif due <= week_str %}var(--yellow){% else %}var(--muted){% endif %}">
               {{ due.strftime('%Y-%m-%d') if due and due.strftime is defined else due }}
             </span>
           {% else %}
@@ -196,12 +229,34 @@
     </tbody>
   </table>
   </div>
+
+  {# Pagination #}
+  {% if total_pages > 1 %}
+  <div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:14px;border-top:1px solid var(--border)">
+    {% if page > 1 %}
+    <a href="/poam?page={{ page-1 }}&status={{ status_filter }}&severity={{ severity_filter }}&system_id={{ system_filter }}"
+       class="btn btn-ghost btn-sm">← Prev</a>
+    {% endif %}
+    <span class="text-muted" style="font-size:0.85em">{{ page }} / {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="/poam?page={{ page+1 }}&status={{ status_filter }}&severity={{ severity_filter }}&system_id={{ system_filter }}"
+       class="btn btn-ghost btn-sm">Next →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% else %}
   <div style="padding:60px;text-align:center">
     <div style="font-size:2em;margin-bottom:12px;color:#1e1e30">[ ]</div>
-    <div class="text-muted" style="margin-bottom:16px;font-size:0.9em">No POA&amp;M items created yet.</div>
+    <div class="text-muted" style="margin-bottom:16px;font-size:0.9em">
+      No POA&amp;M items match the current filter.
+    </div>
     <a href="/poam/new" class="btn btn-primary btn-sm">+ New Item</a>
   </div>
   {% endif %}
 </div>
+
+{# Pass date strings to template for overdue coloring #}
+{% set today_str = today_str if today_str is defined else '' %}
+{% set week_str  = week_str  if week_str  is defined else '' %}
 {% endblock %}
