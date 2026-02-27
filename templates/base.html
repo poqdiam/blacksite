@@ -430,6 +430,24 @@
     {% if is_admin %}
     <a href="/upload" {% if request.url.path == '/upload' %}class="active"{% endif %}>Upload</a>
     {% endif %}
+    {# ── Search box ── #}
+    <form method="get" action="/search" id="nav-search-form"
+          style="position:relative;display:flex;align-items:center;margin-left:4px">
+      <input type="text" name="q" id="nav-search-q"
+             autocomplete="off" placeholder="⌕ Search…"
+             value="{{ request.query_params.get('q','') if request.url.path=='/search' else '' }}"
+             style="width:160px;background:var(--card);border:1px solid var(--border);
+                    color:var(--text);border-radius:5px;padding:5px 10px;font-size:0.78em;
+                    font-family:var(--mono);transition:width 0.2s,border-color 0.2s"
+             onfocus="this.style.width='220px';this.style.borderColor='rgba(0,255,204,0.3)'"
+             onblur="this.style.width='160px';this.style.borderColor='var(--border)'">
+      <div id="nav-suggestions"
+           style="display:none;position:absolute;top:100%;left:0;min-width:280px;
+                  background:var(--card);border:1px solid var(--border);border-radius:6px;
+                  margin-top:4px;z-index:200;max-height:300px;overflow-y:auto;
+                  box-shadow:0 8px 24px rgba(0,0,0,0.5)">
+      </div>
+    </form>
     {% if remote_user %}
     <details class="nav-user-menu">
       <summary>
@@ -517,5 +535,51 @@
 </div>
 
 {% block scripts %}{% endblock %}
+
+<script>
+// ── Nav search autocomplete ───────────────────────────────────────────────────
+(function(){
+  const inp  = document.getElementById('nav-search-q');
+  const sug  = document.getElementById('nav-suggestions');
+  if (!inp || !sug) return;
+  let timer = null;
+
+  inp.addEventListener('input', function(){
+    clearTimeout(timer);
+    const q = this.value.trim();
+    if (q.length < 2) { sug.style.display='none'; return; }
+    timer = setTimeout(function(){
+      fetch('/api/search/suggest?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(data => {
+          sug.innerHTML = '';
+          if (!data.suggestions || !data.suggestions.length) { sug.style.display='none'; return; }
+          data.suggestions.forEach(function(s){
+            const a = document.createElement('a');
+            a.href  = s.url;
+            a.style.cssText = 'display:block;padding:8px 12px;text-decoration:none;' +
+              'color:var(--text);font-size:0.82em;border-bottom:1px solid var(--border)';
+            a.onmouseenter = function(){ this.style.background='rgba(255,255,255,0.05)'; };
+            a.onmouseleave = function(){ this.style.background=''; };
+            const typeTag = s.type === 'control'
+              ? '<span style="font-size:0.7em;color:var(--cyan);font-family:var(--mono);margin-left:4px">CTL</span>'
+              : '<span style="font-size:0.7em;color:var(--green);font-family:var(--mono);margin-left:4px">SYS</span>';
+            a.innerHTML = s.label + typeTag;
+            sug.appendChild(a);
+          });
+          sug.style.display = 'block';
+        })
+        .catch(function(){ sug.style.display='none'; });
+    }, 200);
+  });
+
+  document.addEventListener('click', function(e){
+    if (!e.target.closest('#nav-search-form')) sug.style.display='none';
+  });
+  inp.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') sug.style.display='none';
+  });
+})();
+</script>
 </body>
 </html>

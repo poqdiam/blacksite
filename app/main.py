@@ -1834,7 +1834,7 @@ async def poam_dashboard(request: Request):
         # Scope to assigned systems for employees
         scoped_sys_ids: list | None = None
         if not is_adm:
-            scoped_sys_ids = await _user_system_ids(session, user)
+            scoped_sys_ids = await _user_system_ids(request, session)
 
         def _build_q(base_q):
             if scoped_sys_ids is not None:
@@ -2116,6 +2116,36 @@ async def poam_update(request: Request, item_id: str):
     return RedirectResponse(url=f"/poam/{item_id}", status_code=303)
 
 
+@app.post("/api/poam/{item_id}/status")
+async def poam_quick_status(request: Request, item_id: str):
+    """AJAX: update just the status of a POA&M item. Returns JSON {ok, status}."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    body = await request.json()
+    new_status = body.get("status", "")
+    valid_statuses = {"open", "in_progress", "closed", "risk_accepted", "false_positive"}
+    if new_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail="Invalid status")
+
+    async with SessionLocal() as session:
+        row = await session.execute(select(PoamItem).where(PoamItem.id == item_id))
+        item = row.scalar_one_or_none()
+        if not item:
+            raise HTTPException(status_code=404)
+        old_status = item.status
+        item.status = new_status
+        item.updated_at = datetime.now(timezone.utc)
+        if new_status == "closed" and not item.completion_date:
+            item.completion_date = date.today().isoformat()
+        await _log_audit(session, user, "UPDATE", "poam", item_id,
+                         {"status": f"{old_status}→{new_status}"})
+        await session.commit()
+
+    return JSONResponse({"ok": True, "status": new_status})
+
+
 @app.post("/poam/auto/{assessment_id}")
 async def poam_auto_create(request: Request, assessment_id: str):
     """Auto-create POA&M items from INSUFFICIENT/NOT_FOUND controls."""
@@ -2178,7 +2208,7 @@ async def risks_dashboard(request: Request):
     async with SessionLocal() as session:
         scoped_sys_ids: list | None = None
         if not is_adm:
-            scoped_sys_ids = await _user_system_ids(session, user)
+            scoped_sys_ids = await _user_system_ids(request, session)
 
         def _build_risk_q(base_q):
             if scoped_sys_ids is not None:
@@ -2610,6 +2640,168 @@ async def trigger_update():
 @app.get("/health")
 async def health():
     return {"status": "ok", "controls": len(CATALOG)}
+
+
+# ── Global search ─────────────────────────────────────────────────────────────
+
+@app.get("/search", response_class=HTMLResponse)
+async def global_search(request: Request):
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+    is_adm = _is_admin(request)
+
+    q = (request.query_params.get("q") or "").strip()
+    results: dict[str, list] = {"systems": [], "poams": [], "risks": [], "controls": []}
+
+    if not q or len(q) < 2:
+        return templates.TemplateResponse("search.html", {
+            "request": request, "q": q, "results": results,
+            "total": 0, **_tpl_ctx(request),
+        })
+
+    needle = f"%{q}%"
+
+    async with SessionLocal() as session:
+        # System scope
+        if is_adm:
+            sys_scope = None
+        else:
+            sys_scope = await _user_system_ids(request, session)
+
+        # ── Systems ──────────────────────────────────────────────────────────
+        sys_q = (
+            select(System)
+            .where(
+                System.name.ilike(needle) |
+                System.abbreviation.ilike(needle) |
+                System.description.ilike(needle) |
+                System.owner_name.ilike(needle)
+            )
+            .limit(10)
+        )
+        if sys_scope is not None:
+            sys_q = sys_q.where(System.id.in_(sys_scope))
+        systems = (await session.execute(sys_q)).scalars().all()
+        results["systems"] = [
+            {"id": s.id, "name": s.name, "abbr": s.abbreviation,
+             "type": s.system_type, "auth": s.auth_status}
+            for s in systems
+        ]
+
+        # ── POA&M items ───────────────────────────────────────────────────────
+        poam_q = (
+            select(PoamItem)
+            .where(
+                PoamItem.weakness_name.ilike(needle) |
+                PoamItem.weakness_description.ilike(needle) |
+                PoamItem.control_id.ilike(needle) |
+                PoamItem.responsible_party.ilike(needle)
+            )
+            .where(PoamItem.status.in_(["open", "in_progress"]))
+            .limit(10)
+        )
+        if sys_scope is not None:
+            poam_q = poam_q.where(PoamItem.system_id.in_(sys_scope))
+        poams = (await session.execute(poam_q)).scalars().all()
+
+        sys_ids_needed = {p.system_id for p in poams if p.system_id}
+        sys_map: dict = {}
+        if sys_ids_needed:
+            sr = await session.execute(select(System).where(System.id.in_(list(sys_ids_needed))))
+            sys_map = {s.id: s.name for s in sr.scalars().all()}
+
+        results["poams"] = [
+            {"id": p.id, "name": p.weakness_name, "severity": p.severity,
+             "control": p.control_id, "status": p.status,
+             "system": sys_map.get(p.system_id, "")}
+            for p in poams
+        ]
+
+        # ── Risks ─────────────────────────────────────────────────────────────
+        risk_q = (
+            select(Risk)
+            .where(
+                Risk.risk_name.ilike(needle) |
+                Risk.risk_description.ilike(needle) |
+                Risk.threat_event.ilike(needle)
+            )
+            .where(Risk.status != "closed")
+            .limit(10)
+        )
+        if sys_scope is not None:
+            risk_q = risk_q.where(Risk.system_id.in_(sys_scope))
+        risks = (await session.execute(risk_q)).scalars().all()
+
+        rsys_ids = {r.system_id for r in risks if r.system_id} - sys_ids_needed
+        if rsys_ids:
+            rsr = await session.execute(select(System).where(System.id.in_(list(rsys_ids))))
+            for s in rsr.scalars().all():
+                sys_map[s.id] = s.name
+
+        results["risks"] = [
+            {"id": r.id, "name": r.risk_name, "level": r.risk_level,
+             "score": r.risk_score, "treatment": r.treatment,
+             "system": sys_map.get(r.system_id, "")}
+            for r in risks
+        ]
+
+    # ── NIST Controls (in-memory) ─────────────────────────────────────────────
+    q_lower = q.lower()
+    ctrl_hits = []
+    for ctrl_id, ctrl in CATALOG.items():
+        title = ctrl.get("title", "")
+        text  = ctrl.get("text", "")
+        if q_lower in ctrl_id.lower() or q_lower in title.lower() or q_lower in text.lower():
+            ctrl_hits.append({
+                "id": ctrl_id, "title": title,
+                "family": ctrl.get("family", ctrl_id.split("-")[0].upper()),
+                "snippet": text[:200] if text else "",
+            })
+            if len(ctrl_hits) >= 10:
+                break
+    results["controls"] = ctrl_hits
+
+    total = sum(len(v) for v in results.values())
+    return templates.TemplateResponse("search.html", {
+        "request": request,
+        "q":       q,
+        "results": results,
+        "total":   total,
+        **_tpl_ctx(request),
+    })
+
+
+@app.get("/api/search/suggest")
+async def search_suggest(request: Request):
+    """AJAX autocomplete — returns top 5 system names + control IDs matching q."""
+    user = request.headers.get("Remote-User", "")
+    if not user:
+        raise HTTPException(status_code=401)
+    q = (request.query_params.get("q") or "").strip()
+    if len(q) < 2:
+        return JSONResponse({"suggestions": []})
+    needle = f"%{q}%"
+    q_lower = q.lower()
+    suggestions = []
+    async with SessionLocal() as session:
+        sys_rows = await session.execute(
+            select(System.id, System.name)
+            .where(System.name.ilike(needle) | System.abbreviation.ilike(needle))
+            .limit(5)
+        )
+        for sid, sname in sys_rows.all():
+            suggestions.append({"type": "system", "label": sname, "url": f"/systems/{sid}"})
+    # Add control matches
+    for ctrl_id, ctrl in CATALOG.items():
+        if q_lower in ctrl_id.lower() or q_lower in ctrl.get("title", "").lower():
+            suggestions.append({
+                "type": "control", "label": f"{ctrl_id.upper()} — {ctrl.get('title','')}",
+                "url": f"/controls/{ctrl_id}"
+            })
+            if len(suggestions) >= 8:
+                break
+    return JSONResponse({"suggestions": suggestions[:8]})
 
 
 # ══════════════════════════════════════════════════════════════════════════════

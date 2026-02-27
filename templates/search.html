@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Search{% endblock %}
+
+{% block content %}
+{# ── Search bar (large, centered) ─────────────────────────────────────────── #}
+<div style="max-width:700px;margin:0 auto 36px">
+  <h1 style="margin:0 0 20px;font-size:1.4em;color:var(--muted);font-weight:400">
+    Global Search
+  </h1>
+  <form method="get" action="/search" style="display:flex;gap:8px">
+    <input type="text" name="q" value="{{ q | e }}" autofocus autocomplete="off"
+           placeholder="Search systems, POA&Ms, risks, controls…"
+           style="flex:1;background:var(--card);border:1px solid var(--border);color:var(--text);
+                  border-radius:6px;padding:12px 16px;font-size:1em;font-family:var(--mono)">
+    <button type="submit" class="btn btn-primary">Search</button>
+    {% if q %}
+    <a href="/search" class="btn btn-ghost" style="color:var(--muted)">✕</a>
+    {% endif %}
+  </form>
+</div>
+
+{% if not q %}
+<div style="text-align:center;padding:40px 0">
+  <div style="font-size:2.5em;margin-bottom:12px;color:#1e1e30">⌕</div>
+  <div class="text-muted" style="font-size:0.9em">
+    Enter a term to search across systems, POA&Ms, risks, and NIST controls.
+  </div>
+</div>
+
+{% elif total == 0 %}
+<div style="text-align:center;padding:40px 0">
+  <div style="font-size:2em;margin-bottom:12px;color:#1e1e30">[ ]</div>
+  <div class="text-muted" style="font-size:0.9em;margin-bottom:8px">
+    No results for <strong style="color:var(--text)">"{{ q | e }}"</strong>
+  </div>
+  <div style="font-size:0.8em;color:#444">Try a shorter term or check spelling.</div>
+</div>
+
+{% else %}
+
+<div class="text-muted" style="font-size:0.82em;margin-bottom:24px">
+  {{ total }} result{{ 's' if total != 1 }} for
+  <strong style="color:var(--text)">"{{ q | e }}"</strong>
+</div>
+
+{# ── Systems ─────────────────────────────────────────────────────────────── #}
+{% if results.systems %}
+<div class="section-header">IT Systems ({{ results.systems|length }})</div>
+<div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">
+  <table>
+    <tbody>
+      {% for s in results.systems %}
+      {% set auth = s.auth or 'not_authorized' %}
+      {% if auth == 'authorized' %}
+        {% set ac = 'var(--green)' %}{% set ab = 'rgba(0,200,83,0.1)' %}
+      {% elif auth == 'in_progress' %}
+        {% set ac = 'var(--yellow)' %}{% set ab = 'rgba(255,179,0,0.1)' %}
+      {% elif auth == 'expired' %}
+        {% set ac = 'var(--red)' %}{% set ab = 'rgba(244,67,54,0.1)' %}
+      {% else %}
+        {% set ac = 'var(--muted)' %}{% set ab = 'rgba(136,136,136,0.08)' %}
+      {% endif %}
+      <tr>
+        <td style="width:44px;text-align:center">
+          <span style="font-size:1.3em;color:var(--cyan)">⬡</span>
+        </td>
+        <td>
+          <a href="/systems/{{ s.id }}"
+             style="font-weight:600;color:var(--text);font-size:0.95em">{{ s.name }}</a>
+          {% if s.abbr %}
+          <span class="mono" style="font-size:0.7em;color:var(--muted);margin-left:6px">{{ s.abbr }}</span>
+          {% endif %}
+          {% if s.type %}
+          <span class="text-muted" style="font-size:0.75em;margin-left:8px">{{ s.type | replace('_',' ') }}</span>
+          {% endif %}
+        </td>
+        <td style="text-align:right">
+          <span class="badge" style="background:{{ ab }};color:{{ ac }}">
+            {{ auth | replace('_',' ') }}
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# ── POA&M Items ─────────────────────────────────────────────────────────── #}
+{% if results.poams %}
+<div class="section-header">POA&amp;M Items ({{ results.poams|length }})</div>
+<div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">
+  <table>
+    <tbody>
+      {% for p in results.poams %}
+      {% set sev = p.severity or 'Low' %}
+      {% if sev == 'Critical' %}
+        {% set sc = 'var(--red)' %}{% set sb = 'rgba(244,67,54,0.12)' %}
+      {% elif sev == 'High' %}
+        {% set sc = '#ff6b35' %}{% set sb = 'rgba(255,107,53,0.12)' %}
+      {% elif sev == 'Moderate' %}
+        {% set sc = 'var(--yellow)' %}{% set sb = 'rgba(255,179,0,0.12)' %}
+      {% else %}
+        {% set sc = 'var(--green)' %}{% set sb = 'rgba(0,200,83,0.12)' %}
+      {% endif %}
+      <tr>
+        <td style="width:44px;text-align:center">
+          <span class="badge" style="background:{{ sb }};color:{{ sc }};font-size:0.65em">{{ sev[:4] }}</span>
+        </td>
+        <td>
+          <a href="/poam/{{ p.id }}"
+             style="font-weight:600;color:var(--text);font-size:0.92em">{{ p.name }}</a>
+          {% if p.control %}
+          <span class="mono" style="font-size:0.72em;color:var(--cyan);margin-left:8px">{{ p.control }}</span>
+          {% endif %}
+          {% if p.system %}
+          <div class="text-muted" style="font-size:0.75em">{{ p.system }}</div>
+          {% endif %}
+        </td>
+        <td style="text-align:right">
+          <span class="text-muted" style="font-size:0.75em">{{ p.status | replace('_',' ') }}</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# ── Risks ───────────────────────────────────────────────────────────────── #}
+{% if results.risks %}
+<div class="section-header">Risks ({{ results.risks|length }})</div>
+<div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">
+  <table>
+    <tbody>
+      {% for r in results.risks %}
+      {% set lv = r.level or 'Low' %}
+      {% if lv == 'Critical' %}
+        {% set lc = 'var(--red)' %}{% set lb = 'rgba(244,67,54,0.12)' %}
+      {% elif lv == 'High' %}
+        {% set lc = '#ff6b35' %}{% set lb = 'rgba(255,107,53,0.12)' %}
+      {% elif lv == 'Moderate' %}
+        {% set lc = 'var(--yellow)' %}{% set lb = 'rgba(255,179,0,0.12)' %}
+      {% else %}
+        {% set lc = 'var(--green)' %}{% set lb = 'rgba(0,200,83,0.12)' %}
+      {% endif %}
+      <tr>
+        <td style="width:44px;text-align:center">
+          <span class="badge" style="background:{{ lb }};color:{{ lc }};font-size:0.7em">
+            {{ r.score }}
+          </span>
+        </td>
+        <td>
+          <a href="/risks/{{ r.id }}"
+             style="font-weight:600;color:var(--text);font-size:0.92em">{{ r.name }}</a>
+          <span class="badge" style="background:{{ lb }};color:{{ lc }};font-size:0.65em;margin-left:6px">
+            {{ lv }}
+          </span>
+          {% if r.system %}
+          <div class="text-muted" style="font-size:0.75em">{{ r.system }}</div>
+          {% endif %}
+        </td>
+        <td style="text-align:right">
+          <span class="text-muted" style="font-size:0.75em">{{ r.treatment or '—' }}</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# ── NIST Controls ───────────────────────────────────────────────────────── #}
+{% if results.controls %}
+<div class="section-header">NIST Controls ({{ results.controls|length }})</div>
+<div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">
+  <table>
+    <tbody>
+      {% for c in results.controls %}
+      <tr>
+        <td style="width:90px">
+          <span class="mono" style="font-size:0.85em;color:var(--cyan);font-weight:700">
+            {{ c.id | upper }}
+          </span>
+        </td>
+        <td>
+          <a href="/controls/{{ c.id }}"
+             style="font-weight:600;color:var(--text);font-size:0.92em">{{ c.title }}</a>
+          <div class="text-muted" style="font-size:0.75em;font-family:var(--mono)">
+            {{ c.family }}
+          </div>
+          {% if c.snippet %}
+          <div class="text-muted" style="font-size:0.78em;margin-top:3px;
+                       max-height:2.4em;overflow:hidden;line-height:1.4">
+            {{ c.snippet | truncate(180) }}
+          </div>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endif %}{# end q / total #}
+{% endblock %}
