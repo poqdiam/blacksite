@@ -128,13 +128,20 @@ class System(Base):
     auth_status             = Column(String, default="not_authorized")  # authorized|in_progress|expired|not_authorized
     auth_date               = Column(String, nullable=True)   # ISO date
     auth_expiry             = Column(String, nullable=True)   # ISO date
+    ato_decision            = Column(String, nullable=True)   # NULL|approved|denied (Phase 10)
     created_at              = Column(DateTime, default=_now)
     updated_at              = Column(DateTime, default=_now, onupdate=_now)
     created_by              = Column(String, nullable=True)   # Remote-User
+    # Phase 15 — soft-delete
+    deleted_at              = Column(DateTime, nullable=True)
+    deleted_by              = Column(String, nullable=True)
 
 
 class PoamItem(Base):
-    """Plan of Action & Milestones (NIST CA-5)"""
+    """Plan of Action & Milestones — DHS Attachment H aligned.
+    Status lifecycle (DHS-H): draft → open → in_progress → blocked → ready_for_review
+      → closed_verified | deferred_waiver | accepted_risk
+    """
     __tablename__ = "poam_items"
 
     id                   = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -148,10 +155,16 @@ class PoamItem(Base):
     responsible_party    = Column(String, nullable=True)
     resources_required   = Column(Text, nullable=True)
     scheduled_completion = Column(String, nullable=True)        # ISO date
-    status               = Column(String, default="open")       # open|in_progress|closed|risk_accepted|false_positive
+    # DHS-H status set: draft|open|in_progress|blocked|ready_for_review|closed_verified|deferred_waiver|accepted_risk|false_positive
+    status               = Column(String, default="open")
     remediation_plan     = Column(Text, nullable=True)
+    root_cause           = Column(Text, nullable=True)          # DHS-H: required root-cause summary
+    closure_evidence     = Column(Text, nullable=True)          # DHS-H: required before closed_verified
     completion_date      = Column(String, nullable=True)        # ISO date (actual)
     comments             = Column(Text, nullable=True)
+    # DHS-H Waiver / Risk Acceptance linkage
+    waiver_id            = Column(String, nullable=True)        # FK to future Waiver table
+    risk_accept_review   = Column(String, nullable=True)        # ISO date for next annual review (accepted_risk)
     created_at           = Column(DateTime, default=_now)
     updated_at           = Column(DateTime, default=_now, onupdate=_now)
     created_by           = Column(String, nullable=True)
@@ -199,6 +212,12 @@ class UserProfile(Base):
     notifications_email   = Column(Boolean, default=True)
     notifications_quiz    = Column(Boolean, default=True)
     quiz_domains          = Column(Text, nullable=True)         # JSON list e.g. ["D1","D3"]
+    max_packages          = Column(Integer, default=10)         # Max systems this ISSO can hold
+    last_login            = Column(DateTime, nullable=True)
+    status                = Column(String, default="active")    # active|frozen|removed
+    removed_at            = Column(DateTime, nullable=True)
+    removed_by            = Column(String, nullable=True)
+    removal_reason        = Column(String, nullable=True)
     created_at            = Column(DateTime, default=_now)
     updated_at            = Column(DateTime, default=_now, onupdate=_now)
 
@@ -214,6 +233,23 @@ class AuditLog(Base):
     resource_type = Column(String, nullable=True)     # assessment|system|poam|risk|profile
     resource_id   = Column(String, nullable=True)
     details       = Column(Text, nullable=True)       # JSON summary
+
+
+class SecurityEvent(Base):
+    """SIEM event log — HTTP, auth, access, and anomaly events."""
+    __tablename__ = "security_events"
+
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp   = Column(DateTime, default=_now, index=True)
+    event_type  = Column(String, index=True)   # http|login|failed_auth|access_denied|frozen_access|anomaly
+    severity    = Column(String, default="info")  # info|low|medium|high|critical
+    remote_ip   = Column(String)
+    remote_user = Column(String, index=True)
+    method      = Column(String)
+    path        = Column(String)
+    status_code = Column(Integer)
+    user_agent  = Column(String)
+    details     = Column(Text)
 
 
 # ── Phase 4 Models ─────────────────────────────────────────────────────────────
@@ -368,6 +404,150 @@ class AtoWorkflowEvent(Base):
     timestamp   = Column(DateTime, default=_now)
 
 
+# ── Phase 10 Models ────────────────────────────────────────────────────────────
+
+class SystemTeam(Base):
+    """Teams/groups associated with a system (recovery, response, general, BCDR)."""
+    __tablename__ = "system_teams"
+
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    system_id   = Column(String, ForeignKey("systems.id"), nullable=False)
+    name        = Column(String, nullable=False)          # e.g. "Rapid Response Team"
+    team_type   = Column(String, default="general")       # general|recovery|response|bcdr
+    description = Column(String, nullable=True)
+    created_by  = Column(String, nullable=True)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+
+
+class TeamMembership(Base):
+    """Membership linking a user to a SystemTeam."""
+    __tablename__ = "team_memberships"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    team_id      = Column(Integer, ForeignKey("system_teams.id"), nullable=False)
+    remote_user  = Column(String, nullable=False)
+    role_in_team = Column(String, default="member")       # lead|member|observer
+    assigned_by  = Column(String, nullable=True)
+    assigned_at  = Column(DateTime, default=datetime.utcnow)
+
+
+class BcdrEvent(Base):
+    """BCDR incident / drill / test event."""
+    __tablename__ = "bcdr_events"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    system_id    = Column(String, ForeignKey("systems.id"), nullable=True)
+    team_id      = Column(Integer, ForeignKey("system_teams.id"), nullable=True)
+    event_type   = Column(String, nullable=True)          # drill|incident|recovery|test
+    title        = Column(String, nullable=True)
+    status       = Column(String, default="open")         # open|in_progress|closed
+    triggered_by = Column(String, nullable=True)
+    triggered_at = Column(DateTime, default=datetime.utcnow)
+    target_rto   = Column(Integer, nullable=True)         # hours
+    target_rpo   = Column(Integer, nullable=True)         # hours
+    closed_at    = Column(DateTime, nullable=True)
+
+
+class BcdrSignoff(Base):
+    """Required sign-off record for a BcdrEvent."""
+    __tablename__ = "bcdr_signoffs"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    event_id     = Column(Integer, ForeignKey("bcdr_events.id"), nullable=False)
+    remote_user  = Column(String, nullable=False)
+    role_in_team = Column(String, nullable=True)
+    required     = Column(Boolean, default=True)
+    signed_off   = Column(Boolean, default=False)
+    signed_at    = Column(DateTime, nullable=True)
+    notes        = Column(String, nullable=True)
+
+
+# ── Phase 12 Models ────────────────────────────────────────────────────────────
+
+class Observation(Base):
+    """Unified findings inbox — pre-POA&M staging (FedRAMP gap closure)."""
+    __tablename__ = "observations"
+
+    id               = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    system_id        = Column(String, ForeignKey("systems.id"), nullable=True, index=True)
+    title            = Column(String, nullable=False)
+    source           = Column(String)    # assessment|scan|audit|pentest|self_report|threat_intel
+    obs_type         = Column(String)    # finding|shortcoming|deviation|risk_indicator
+    severity         = Column(String, default="Moderate")  # Critical|High|Moderate|Low|Info
+    description      = Column(Text)
+    control_ids      = Column(Text)      # JSON list ["ac-1","ac-2"]
+    scope_tags       = Column(Text)      # JSON list ["environment:prod","component:db"]
+    status           = Column(String, default="open")  # open|promoted|closed|false_positive
+    promoted_to_poam = Column(String, ForeignKey("poam_items.id"), nullable=True)
+    assigned_to      = Column(String)
+    due_date         = Column(String)
+    created_by       = Column(String)
+    created_at       = Column(DateTime, default=_now)
+    updated_at       = Column(DateTime, default=_now, onupdate=_now)
+
+
+class InventoryItem(Base):
+    """Structured hardware/software/firmware inventory rows."""
+    __tablename__ = "inventory_items"
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    system_id     = Column(String, ForeignKey("systems.id"), nullable=False, index=True)
+    item_type     = Column(String, nullable=False)   # hardware|software|firmware
+    name          = Column(String, nullable=False)
+    vendor        = Column(String)
+    version       = Column(String)
+    quantity      = Column(Integer, default=1)
+    location      = Column(String)
+    ip_address    = Column(String)
+    serial_number = Column(String)
+    notes         = Column(Text)
+    added_by      = Column(String)
+    added_at      = Column(DateTime, default=_now)
+
+
+class SystemConnection(Base):
+    """Internal/external boundary connection records."""
+    __tablename__ = "system_connections"
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    system_id     = Column(String, ForeignKey("systems.id"), nullable=False, index=True)
+    conn_type     = Column(String)    # internal|external
+    name          = Column(String, nullable=False)
+    description   = Column(Text)
+    remote_system = Column(String)
+    data_types    = Column(String)
+    protocol      = Column(String)
+    port          = Column(String)
+    direction     = Column(String)    # inbound|outbound|bidirectional
+    has_isa       = Column(Boolean, default=False)
+    isa_doc_id    = Column(String, nullable=True)
+    added_by      = Column(String)
+    added_at      = Column(DateTime, default=_now)
+
+
+class Artifact(Base):
+    """Evidence artifact with integrity metadata."""
+    __tablename__ = "artifacts"
+
+    id              = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    system_id       = Column(String, ForeignKey("systems.id"), nullable=False, index=True)
+    control_id      = Column(String, index=True)
+    artifact_type   = Column(String)   # screenshot|log|config|policy|report|scan_result|other
+    title           = Column(String, nullable=False)
+    description     = Column(Text)
+    file_path       = Column(String)
+    source          = Column(String)
+    integrity_hash  = Column(String)   # SHA-256
+    collected_at    = Column(DateTime)
+    freshness_days  = Column(Integer, default=365)
+    owner           = Column(String)
+    approval_status = Column(String, default="pending")  # pending|approved|rejected
+    approved_by     = Column(String)
+    approved_at     = Column(DateTime)
+    created_by      = Column(String)
+    created_at      = Column(DateTime, default=_now)
+
+
 # ── Database setup ─────────────────────────────────────────────────────────────
 
 def get_db_url(config: dict) -> str:
@@ -384,6 +564,28 @@ async def _migrate_db(engine):
         ("control_results", "proctor_assessment",  "TEXT"),
         ("control_results", "proctor_score",       "INTEGER"),
         ("user_profiles",   "role",                "TEXT DEFAULT 'employee'"),
+        ("user_profiles",   "max_packages",        "INTEGER DEFAULT 10"),
+        ("systems",         "ato_decision",        "TEXT DEFAULT NULL"),
+        # Phase 12 additions
+        ("submissions",     "authorization_type",  "TEXT DEFAULT 'ATO'"),
+        ("submissions",     "term_months",         "INTEGER DEFAULT NULL"),
+        ("submissions",     "term_expires_at",     "TEXT DEFAULT NULL"),
+        ("submissions",     "extension_used",      "BOOLEAN DEFAULT 0"),
+        ("systems",         "is_eis",              "BOOLEAN DEFAULT 0"),
+        # Phase 13 additions
+        ("user_profiles",   "last_login",          "DATETIME DEFAULT NULL"),
+        ("user_profiles",   "status",              "TEXT DEFAULT 'active'"),
+        ("user_profiles",   "removed_at",          "DATETIME DEFAULT NULL"),
+        ("user_profiles",   "removed_by",          "TEXT DEFAULT NULL"),
+        ("user_profiles",   "removal_reason",      "TEXT DEFAULT NULL"),
+        # Phase 14 — DHS-H POA&M state expansion
+        ("poam_items",      "root_cause",          "TEXT DEFAULT NULL"),
+        ("poam_items",      "closure_evidence",    "TEXT DEFAULT NULL"),
+        ("poam_items",      "waiver_id",           "TEXT DEFAULT NULL"),
+        ("poam_items",      "risk_accept_review",  "TEXT DEFAULT NULL"),
+        # Phase 15 — System soft-delete
+        ("systems",         "deleted_at",          "DATETIME DEFAULT NULL"),
+        ("systems",         "deleted_by",          "TEXT DEFAULT NULL"),
     ]
     # Performance indexes — CREATE INDEX IF NOT EXISTS is idempotent
     index_migrations = [
@@ -399,7 +601,136 @@ async def _migrate_db(engine):
         "CREATE INDEX IF NOT EXISTS ix_ato_doc_versions_document_id   ON ato_document_versions (document_id)",
         "CREATE INDEX IF NOT EXISTS ix_ato_workflow_events_document_id ON ato_workflow_events (document_id)",
     ]
+    # Phase 10: new tables (CREATE TABLE IF NOT EXISTS is idempotent)
+    new_tables = [
+        """CREATE TABLE IF NOT EXISTS system_teams (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            system_id   TEXT NOT NULL REFERENCES systems(id),
+            name        TEXT NOT NULL,
+            team_type   TEXT DEFAULT 'general',
+            description TEXT,
+            created_by  TEXT,
+            created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+        )""",
+        """CREATE TABLE IF NOT EXISTS team_memberships (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            team_id      INTEGER NOT NULL REFERENCES system_teams(id),
+            remote_user  TEXT NOT NULL,
+            role_in_team TEXT DEFAULT 'member',
+            assigned_by  TEXT,
+            assigned_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+        )""",
+        """CREATE TABLE IF NOT EXISTS bcdr_events (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            system_id    TEXT REFERENCES systems(id),
+            team_id      INTEGER REFERENCES system_teams(id),
+            event_type   TEXT,
+            title        TEXT,
+            status       TEXT DEFAULT 'open',
+            triggered_by TEXT,
+            triggered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            target_rto   INTEGER,
+            target_rpo   INTEGER,
+            closed_at    DATETIME
+        )""",
+        """CREATE TABLE IF NOT EXISTS bcdr_signoffs (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id     INTEGER NOT NULL REFERENCES bcdr_events(id),
+            remote_user  TEXT NOT NULL,
+            role_in_team TEXT,
+            required     BOOLEAN DEFAULT 1,
+            signed_off   BOOLEAN DEFAULT 0,
+            signed_at    DATETIME,
+            notes        TEXT
+        )""",
+        # Phase 12 new tables
+        """CREATE TABLE IF NOT EXISTS observations (
+            id               TEXT PRIMARY KEY,
+            system_id        TEXT REFERENCES systems(id),
+            title            TEXT NOT NULL,
+            source           TEXT,
+            obs_type         TEXT,
+            severity         TEXT DEFAULT 'Moderate',
+            description      TEXT,
+            control_ids      TEXT,
+            scope_tags       TEXT,
+            status           TEXT DEFAULT 'open',
+            promoted_to_poam TEXT REFERENCES poam_items(id),
+            assigned_to      TEXT,
+            due_date         TEXT,
+            created_by       TEXT,
+            created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP
+        )""",
+        """CREATE TABLE IF NOT EXISTS inventory_items (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            system_id     TEXT NOT NULL REFERENCES systems(id),
+            item_type     TEXT NOT NULL,
+            name          TEXT NOT NULL,
+            vendor        TEXT,
+            version       TEXT,
+            quantity      INTEGER DEFAULT 1,
+            location      TEXT,
+            ip_address    TEXT,
+            serial_number TEXT,
+            notes         TEXT,
+            added_by      TEXT,
+            added_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+        )""",
+        """CREATE TABLE IF NOT EXISTS system_connections (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            system_id     TEXT NOT NULL REFERENCES systems(id),
+            conn_type     TEXT,
+            name          TEXT NOT NULL,
+            description   TEXT,
+            remote_system TEXT,
+            data_types    TEXT,
+            protocol      TEXT,
+            port          TEXT,
+            direction     TEXT,
+            has_isa       BOOLEAN DEFAULT 0,
+            isa_doc_id    TEXT,
+            added_by      TEXT,
+            added_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+        )""",
+        """CREATE TABLE IF NOT EXISTS artifacts (
+            id              TEXT PRIMARY KEY,
+            system_id       TEXT NOT NULL REFERENCES systems(id),
+            control_id      TEXT,
+            artifact_type   TEXT,
+            title           TEXT NOT NULL,
+            description     TEXT,
+            file_path       TEXT,
+            source          TEXT,
+            integrity_hash  TEXT,
+            collected_at    DATETIME,
+            freshness_days  INTEGER DEFAULT 365,
+            owner           TEXT,
+            approval_status TEXT DEFAULT 'pending',
+            approved_by     TEXT,
+            approved_at     DATETIME,
+            created_by      TEXT,
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+        )""",
+        # Phase 13
+        """CREATE TABLE IF NOT EXISTS security_events (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp   DATETIME DEFAULT CURRENT_TIMESTAMP,
+            event_type  TEXT,
+            severity    TEXT DEFAULT 'info',
+            remote_ip   TEXT,
+            remote_user TEXT,
+            method      TEXT,
+            path        TEXT,
+            status_code INTEGER,
+            user_agent  TEXT,
+            details     TEXT
+        )""",
+    ]
+
     async with engine.begin() as conn:
+        for create_sql in new_tables:
+            await conn.execute(text(create_sql))
         for table, col, col_def in col_migrations:
             result = await conn.execute(text(f"PRAGMA table_info({table})"))
             cols = [row[1] for row in result.fetchall()]

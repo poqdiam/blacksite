@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Archived Systems{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/systems">Systems</a>
+  <span class="sep">›</span>
+  <span>Archived Systems</span>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:8px">
+  <h1 style="margin:0">Archived Systems</h1>
+  <a href="/systems" class="btn btn-ghost btn-sm">← System Catalog</a>
+</div>
+<p class="text-muted" style="margin-bottom:24px;font-size:0.88em">
+  Soft-deleted systems are retained for 365 days. Use <strong>Restore</strong> to return a system to the
+  active catalog, or <strong>Purge</strong> to permanently delete it and all linked records.
+</p>
+
+<div class="card" style="padding:0;overflow:hidden">
+  {% if archived %}
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Owner</th>
+        <th>Deleted At</th>
+        <th>Deleted By</th>
+        <th style="text-align:right">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in archived %}
+      <tr style="opacity:0.8">
+        <td>
+          <span class="mono" style="font-size:0.92em">{{ s.name }}</span>
+          {% if s.abbreviation %}
+          <span style="margin-left:6px;font-size:0.75em;color:var(--muted)">{{ s.abbreviation }}</span>
+          {% endif %}
+          <span style="margin-left:6px;font-size:0.7em;color:var(--red);font-weight:700;
+                       text-transform:uppercase;letter-spacing:1px;
+                       padding:2px 6px;background:rgba(244,67,54,0.12);border-radius:3px">archived</span>
+        </td>
+        <td style="color:var(--muted);font-size:0.85em">{{ s.system_type or '—' }}</td>
+        <td style="color:var(--muted);font-size:0.85em">{{ s.owner_name or '—' }}</td>
+        <td style="font-size:0.82em;color:var(--muted)">
+          {{ s.deleted_at.strftime('%Y-%m-%d %H:%M') if s.deleted_at else '—' }}
+        </td>
+        <td style="font-size:0.82em;color:var(--muted)">{{ s.deleted_by or '—' }}</td>
+        <td style="text-align:right">
+          <form method="post" action="/admin/systems/{{ s.id }}/restore" style="display:inline">
+            <button class="btn btn-sm"
+                    style="background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.3);font-size:0.78em">
+              Restore
+            </button>
+          </form>
+          <form method="post" action="/admin/systems/{{ s.id }}/purge" style="display:inline;margin-left:6px"
+                onsubmit="return confirm('Permanently delete {{ s.name }}? This cannot be undone.')">
+            <button class="btn btn-sm"
+                    style="background:rgba(244,67,54,0.1);color:var(--red);border:1px solid rgba(244,67,54,0.3);font-size:0.78em">
+              Purge
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:64px;text-align:center;color:var(--muted)">
+    <div style="font-size:2em;font-family:var(--mono);color:#1e1e30;margin-bottom:12px">[ ]</div>
+    No archived systems.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
