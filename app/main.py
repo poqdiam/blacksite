@@ -153,6 +153,9 @@ def load_config() -> dict:
 
 CONFIG = load_config()
 
+# ── HTTP header constants ──────────────────────────────────────────────────────
+_REMOTE_USER_HDR = "Remote-User"
+
 # ── App secret + role-shell HMAC signing ───────────────────────────────────────
 
 def _get_app_secret() -> str:
@@ -713,7 +716,7 @@ async def siem_middleware(request: Request, call_next):
                     event_type  = etype,
                     severity    = sev,
                     remote_ip   = request.headers.get("X-Forwarded-For", ""),
-                    remote_user = request.headers.get("Remote-User", ""),
+                    remote_user = request.headers.get(_REMOTE_USER_HDR, ""),
                     method      = request.method,
                     path        = path,
                     status_code = code,
@@ -732,7 +735,7 @@ _SESSION_SKIP_PREFIXES = ("/static", "/api/heartbeat", "/ws/", "/favicon")
 @app.middleware("http")
 async def session_timeout_middleware(request: Request, call_next):
     """Enforce idle session timeout for non-exempt users."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     path = request.url.path
     if user and user not in _SESSION_EXEMPT and not any(path.startswith(p) for p in _SESSION_SKIP_PREFIXES):
         last = _LAST_ACTIVITY.get(user)
@@ -763,8 +766,16 @@ def _cfg(key: str, default=None):
     return val
 
 
+def _require_user(request: Request) -> str:
+    """Return the Remote-User header value; raise HTTP 401 if absent."""
+    _u = request.headers.get(_REMOTE_USER_HDR, "")
+    if not _u:
+        raise HTTPException(status_code=401)
+    return _u
+
+
 def _is_admin(request: Request) -> bool:
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     return bool(user) and user in set(CONFIG.get("app", {}).get("admin_users", ["dan"]))
 
 
@@ -793,7 +804,7 @@ def _view_mode(request: Request) -> str:
 
 def _tpl_ctx(request: Request) -> dict:
     """Common template context included in every page render."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     employees = CONFIG.get("employees", [])
     # Best-effort display name: check employees config first, then title-case username
     emp_map = {e.get("username"): e.get("name") for e in employees if e.get("username")}
@@ -924,7 +935,7 @@ async def _can_access_system(system_id: str, request: Request, session) -> bool:
     """Returns True if user is admin OR is assigned to this system."""
     if _is_admin(request):
         return True
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     result = await session.execute(
         select(SystemAssignment)
         .where(SystemAssignment.system_id == system_id)
@@ -938,7 +949,7 @@ async def _user_system_ids(request: Request, session) -> list:
     if _is_admin(request):
         result = await session.execute(select(System.id).where(System.deleted_at.is_(None)))
         return [r[0] for r in result.all()]
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     result = await session.execute(
         select(SystemAssignment.system_id)
         .where(SystemAssignment.remote_user == user)
@@ -963,7 +974,7 @@ async def _get_user_role(request: Request, session) -> str:
         if shell in _VALID_SHELL_ROLES:
             return shell   # admin shelling into this role
         return "admin"
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         return "anonymous"
     row = (await session.execute(
@@ -1041,7 +1052,7 @@ async def _full_ctx(request: Request, session, **extra) -> dict:
         # For non-admins: actual_role may already be the shell role
         native_row = (await session.execute(
             select(UserProfile.role).where(
-                UserProfile.remote_user == request.headers.get("Remote-User", "")
+                UserProfile.remote_user == request.headers.get(_REMOTE_USER_HDR, "")
             )
         )).scalar_one_or_none()
         native_role  = native_row or "employee"
@@ -1049,7 +1060,7 @@ async def _full_ctx(request: Request, session, **extra) -> dict:
         is_shell     = actual_role != native_role
 
     # Touch last_login for non-anonymous/blocked users
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if user and actual_role not in ("anonymous", "blocked"):
         try:
             await session.execute(
@@ -1113,7 +1124,9 @@ POAM_STATUSES = [
     "closed_verified", "deferred_waiver", "accepted_risk", "false_positive",
 ]
 POAM_ACTIVE_STATUSES  = {"open", "in_progress", "blocked", "ready_for_review", "draft"}
+POAM_OPEN_STATUSES    = frozenset({"open", "in_progress"})   # active-work subset used in 27+ queries
 POAM_CLOSED_STATUSES  = {"closed_verified", "deferred_waiver", "accepted_risk", "false_positive"}
+_CRIT_HIGH_SEVS       = frozenset({"Critical", "High"})      # severity filter used across dashboards
 
 POAM_STATUS_LABELS = {
     "draft":           "Draft",
@@ -1510,7 +1523,7 @@ _ROLE_DASHBOARD: dict = {
 
 @app.get("/")
 async def index(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized — Authelia authentication required")
     if _is_admin(request):
@@ -1563,7 +1576,7 @@ async def switch_role_view(request: Request, role: str = ""):
     - Allowed targets = ROLE_CAN_VIEW_DOWN[native_role].
     - Shelled users receive the "WORKING AS" banner and ONLY that role's permissions.
     """
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     ref = request.headers.get("Referer", "/systems")
@@ -1637,7 +1650,7 @@ async def upload(
     if suffix not in allowed:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}. Allowed: {', '.join(allowed)}")
 
-    submitted_by = request.headers.get("Remote-User", "")
+    submitted_by = request.headers.get(_REMOTE_USER_HDR, "")
 
     uploads_dir = Path(_cfg("storage.uploads_dir", "uploads"))
     uploads_dir.mkdir(exist_ok=True)
@@ -1688,7 +1701,7 @@ async def status_page(request: Request, assessment_id: str):
 
 @app.get("/api/status/{assessment_id}")
 async def status_api(request: Request, assessment_id: str):
-    if not request.headers.get("Remote-User", ""):
+    if not request.headers.get(_REMOTE_USER_HDR, ""):
         raise HTTPException(status_code=401, detail="Authentication required")
     async with SessionLocal() as session:
         asmt = await _get_assessment(assessment_id, session)
@@ -1739,7 +1752,7 @@ async def results_page(request: Request, assessment_id: str):
         all_systems = all_systems_row.scalars().all()
 
         # can_edit: admin, submitter, or a user assigned to the linked system
-        user = request.headers.get("Remote-User", "")
+        user = request.headers.get(_REMOTE_USER_HDR, "")
         can_edit = (
             _is_admin(request)
             or asmt.submitted_by == user
@@ -1814,7 +1827,7 @@ async def save_proctor_note(
 async def link_system(request: Request, assessment_id: str):
     form      = await request.form()
     system_id = str(form.get("system_id", "")).strip() or None
-    user      = request.headers.get("Remote-User", "")
+    user      = request.headers.get(_REMOTE_USER_HDR, "")
 
     async with SessionLocal() as session:
         asmt = await _get_assessment(assessment_id, session)
@@ -1834,7 +1847,7 @@ async def edit_control(
     value: str = Form(""),
 ):
     """Employee (or admin) can edit narrative, responsible_role, or add a note on a control."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -2012,7 +2025,7 @@ async def admin_page(request: Request):
         # Phase 3: Open POA&M count
         poam_open_row = await session.execute(
             select(func.count(PoamItem.id))
-            .where(PoamItem.status.in_(["open", "in_progress"]))
+            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
         )
         poam_open_count = poam_open_row.scalar() or 0
 
@@ -2029,7 +2042,7 @@ async def admin_page(request: Request):
 
         poam_overdue_row = await session.execute(
             select(func.count(PoamItem.id))
-            .where(PoamItem.status.in_(["open", "in_progress"]))
+            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
             .where(PoamItem.scheduled_completion != None)
             .where(PoamItem.scheduled_completion < today_str)
         )
@@ -2037,7 +2050,7 @@ async def admin_page(request: Request):
 
         poam_due_soon_row = await session.execute(
             select(func.count(PoamItem.id))
-            .where(PoamItem.status.in_(["open", "in_progress"]))
+            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
             .where(PoamItem.scheduled_completion != None)
             .where(PoamItem.scheduled_completion >= today_str)
             .where(PoamItem.scheduled_completion <= week_str)
@@ -2306,7 +2319,7 @@ async def download_json(request: Request, assessment_id: str):
             select(QuizResponse).where(QuizResponse.assessment_id == assessment_id)
         )
         quiz_responses = quiz_rows.scalars().all()
-        await _log_audit(session, request.headers.get("Remote-User", ""),
+        await _log_audit(session, request.headers.get(_REMOTE_USER_HDR, ""),
                          "EXPORT", "assessment", assessment_id, {"format": "json"})
         await session.commit()
 
@@ -2449,7 +2462,7 @@ async def forward_to_employee(request: Request, assessment_id: str):
         ]
 
         asmt.email_sent = True
-        await _log_audit(session, request.headers.get("Remote-User", ""),
+        await _log_audit(session, request.headers.get(_REMOTE_USER_HDR, ""),
                          "EXPORT", "assessment", assessment_id,
                          {"forwarded_to": employee_username})
         await session.commit()
@@ -2469,7 +2482,7 @@ async def forward_to_employee(request: Request, assessment_id: str):
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def employee_dashboard(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized — Authelia authentication required")
 
@@ -2577,7 +2590,7 @@ async def employee_dashboard(request: Request):
 
 @app.get("/dashboard/quiz", response_class=HTMLResponse)
 async def daily_quiz_page(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -2611,7 +2624,7 @@ async def daily_quiz_page(request: Request):
 
 @app.post("/dashboard/quiz/submit")
 async def daily_quiz_submit(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -2697,7 +2710,7 @@ async def _get_user_feeds(user: str, session) -> set[str]:
 
 @app.get("/profile/feeds", response_class=HTMLResponse)
 async def profile_feeds(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as s:
@@ -2712,7 +2725,7 @@ async def profile_feeds(request: Request):
 
 @app.post("/profile/feeds")
 async def profile_feeds_save(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     form = await request.form()
@@ -2738,7 +2751,7 @@ async def profile_feeds_save(request: Request):
 @app.get("/api/feeds/user")
 async def api_user_feeds(request: Request):
     """Return the ticker feed items filtered to this user's subscriptions."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     async with SessionLocal() as s:
         enabled = await _get_user_feeds(user, s)
     # Pass enabled feed URLs to the existing feed fetcher
@@ -2751,7 +2764,7 @@ async def api_user_feeds(request: Request):
 
 @app.get("/profile", response_class=HTMLResponse)
 async def profile_page(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -2788,7 +2801,7 @@ async def profile_save(
     notifications_email: bool = Form(False),
     notifications_quiz:  bool = Form(False),
 ):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -2819,9 +2832,50 @@ async def profile_save(
     return RedirectResponse(url="/profile", status_code=303)
 
 
+# ── Upload / generated-file directory constants ──────────────────────────────────
+# All file-path construction MUST go through these constants + _safe_subpath().
+
+_AVATAR_DIR        = Path("data/avatars")
+_POAM_EVIDENCE_DIR = Path("data/uploads/poam_evidence")
+_ATO_GENERATED_DIR = Path("data/ato_generated")
+_ATO_UPLOAD_DIR    = Path("data/ato_uploads")
+_ARTIFACT_DIR      = Path("uploads")
+_BUNDLE_DIR        = Path("data/bundles")
+# _SSP_UPLOAD_DIR is defined near the SSP section (~line 7758)
+# _REPORT_DIR is defined near Phase 25 section (~line 12853)
+
+# Allowlist of valid report_type values for _generate_system_report
+_REPORT_TYPE_ALLOWLIST: frozenset = frozenset({
+    "executive_summary", "evidence_pack_controls", "bcdr_evidence_pack",
+    "ir_evidence_pack", "ir_summary", "bcdr_annual_summary",
+    "sca_evidence_pack", "audit_report", "pentest_report",
+    "data_protection_report", "pmo_security_summary", "portfolio_executive_summary",
+})
+
+# Allowlist of valid ATO doc_type values (mirrors ATO_DOC_TYPES in the ATO section)
+_ATO_DOC_TYPE_ALLOWLIST: frozenset = frozenset({
+    "system_security_plan", "privacy_impact_assessment", "incident_response_plan",
+    "contingency_plan", "configuration_management_plan", "fips_199",
+    "risk_assessment", "plan_of_action", "security_assessment_report",
+    "authorization_decision", "continuous_monitoring_plan",
+    "supply_chain_risk_plan", "vulnerability_scan", "penetration_test",
+    "awareness_training", "access_control_review", "audit_log_review",
+    "change_management_log", "disaster_recovery_test", "system_inventory",
+})
+
+
+def _safe_subpath(base: Path, untrusted: str) -> Path:
+    """Return base/untrusted only if the resolved path stays inside base.
+    Raises ValueError on path traversal attempt."""
+    base_resolved = base.resolve()
+    candidate = (base / untrusted).resolve()
+    if not str(candidate).startswith(str(base_resolved) + "/") and candidate != base_resolved:
+        raise ValueError(f"Path traversal detected: '{untrusted}' escapes '{base}'")
+    return candidate
+
+
 # ── Profile avatar ──────────────────────────────────────────────────────────────
 
-_AVATAR_DIR  = Path("data/avatars")
 _AVATAR_TYPES = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 _AVATAR_MAX   = 5 * 1024 * 1024   # 5 MB
 
@@ -2830,7 +2884,7 @@ async def profile_avatar_upload(
     request: Request,
     file:    UploadFile = File(...),
 ):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -2847,7 +2901,8 @@ async def profile_avatar_upload(
     for old in _AVATAR_DIR.glob(f"{user}.*"):
         old.unlink(missing_ok=True)
     dest = _AVATAR_DIR / f"{user}{ext}"
-    dest.write_bytes(data)
+    async with aiofiles.open(dest, "wb") as _f:
+        await _f.write(data)
 
     # Store the canonical serving URL in UserProfile
     async with SessionLocal() as session:
@@ -2880,7 +2935,7 @@ async def serve_avatar(username: str):
 
 @app.get("/systems", response_class=HTMLResponse)
 async def systems_list(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -2932,7 +2987,7 @@ async def systems_list(request: Request):
 
 @app.get("/systems/new", response_class=HTMLResponse)
 async def system_new_form(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     return templates.TemplateResponse("system_form.html", {
@@ -2989,7 +3044,7 @@ async def _next_inventory_number(session, abbr: str) -> str:
 
 @app.post("/systems")
 async def system_create(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -3052,7 +3107,7 @@ async def system_create(request: Request):
 
 @app.get("/systems/{system_id}", response_class=HTMLResponse)
 async def system_detail(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -3205,9 +3260,9 @@ async def system_detail(request: Request, system_id: str):
         _daily_tasks_total = len(_detail_task_nums)
 
     today_str = date.today().isoformat()
-    poam_overdue  = [p for p in poam_items if p.scheduled_completion and p.scheduled_completion < today_str and p.status in ("open","in_progress")]
-    poam_due_week = [p for p in poam_items if p.scheduled_completion and today_str <= p.scheduled_completion <= (date.today() + timedelta(days=7)).isoformat() and p.status in ("open","in_progress")]
-    poam_open_ct  = sum(1 for p in poam_items if p.status in ("open","in_progress"))
+    poam_overdue  = [p for p in poam_items if p.scheduled_completion and p.scheduled_completion < today_str and p.status in POAM_OPEN_STATUSES]
+    poam_due_week = [p for p in poam_items if p.scheduled_completion and today_str <= p.scheduled_completion <= (date.today() + timedelta(days=7)).isoformat() and p.status in POAM_OPEN_STATUSES]
+    poam_open_ct  = sum(1 for p in poam_items if p.status in POAM_OPEN_STATUSES)
 
     return templates.TemplateResponse("system_detail.html", {
         "request":                 request,
@@ -3244,7 +3299,7 @@ async def system_detail(request: Request, system_id: str):
 @app.get("/systems/{system_id}/report", response_class=HTMLResponse)
 async def system_report(request: Request, system_id: str):
     """Printable compliance report — PDF-ready standalone document."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -3308,7 +3363,7 @@ async def system_report(request: Request, system_id: str):
 
     # POA&M breakdowns
     sev_order  = ["Critical", "High", "Moderate", "Low", "Informational"]
-    open_poams = [p for p in all_poams if p.status in ("open", "in_progress")]
+    open_poams = [p for p in all_poams if p.status in POAM_OPEN_STATUSES]
     poam_by_sev = {s: sum(1 for p in open_poams if (p.severity or "Low") == s) for s in sev_order}
     poam_overdue  = [p for p in open_poams if p.scheduled_completion and p.scheduled_completion < today_str]
     poam_due_week = [p for p in open_poams if p.scheduled_completion and today_str <= p.scheduled_completion <= week_str]
@@ -3330,7 +3385,7 @@ async def system_report(request: Request, system_id: str):
     return templates.TemplateResponse("system_report.html", {
         "request":              request,
         "system":               sys,
-        "generated_at":         datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+        "generated_at":         datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "generated_date":       date.today().isoformat(),
         "sc_total":             sc_total,
         "sc_impl":              sc_impl,
@@ -3349,7 +3404,7 @@ async def system_report(request: Request, system_id: str):
 
 @app.get("/systems/{system_id}/edit", response_class=HTMLResponse)
 async def system_edit_form(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -3373,7 +3428,7 @@ async def system_edit_form(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/edit")
 async def system_update(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -3437,7 +3492,7 @@ async def system_delete(request: Request, system_id: str):
     if not _is_admin(request):
         raise HTTPException(status_code=403)
 
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     effective_role = _verify_shell(request.cookies.get("bsv_role_shell", "")) or "admin"
     async with SessionLocal() as session:
         sys_row = await session.execute(
@@ -3482,7 +3537,7 @@ async def admin_system_restore(request: Request, system_id: str):
     """Restore a soft-deleted system. Admin only."""
     if not _is_admin(request):
         raise HTTPException(status_code=403)
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     async with SessionLocal() as session:
         sys = await session.get(System, system_id)
         if not sys or sys.deleted_at is None:
@@ -3500,7 +3555,7 @@ async def admin_system_purge(request: Request, system_id: str):
     """Permanently delete a soft-deleted system. Admin only."""
     if not _is_admin(request):
         raise HTTPException(status_code=403)
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     async with SessionLocal() as session:
         sys = await session.get(System, system_id)
         if not sys or sys.deleted_at is None:
@@ -3520,7 +3575,7 @@ async def assign_system(request: Request, system_id: str,
                         note: str = Form("")):
     if not _is_admin(request):
         raise HTTPException(status_code=403)
-    admin = request.headers.get("Remote-User", "")
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
     async with SessionLocal() as session:
         # Allow admin self-assignment; otherwise validate against employees config OR UserProfile table
         if username != admin:
@@ -3556,7 +3611,7 @@ async def assign_system(request: Request, system_id: str,
 async def unassign_system(request: Request, system_id: str, username: str = Form(...)):
     if not _is_admin(request):
         raise HTTPException(status_code=403)
-    admin = request.headers.get("Remote-User", "")
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
     async with SessionLocal() as session:
         result = await session.execute(
             select(SystemAssignment)
@@ -3594,7 +3649,7 @@ async def list_assignments(request: Request, system_id: str):
 
 @app.get("/poam", response_class=HTMLResponse)
 async def poam_dashboard(request: Request):
-    user    = request.headers.get("Remote-User", "")
+    user    = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     is_adm  = _is_admin(request)
@@ -3638,7 +3693,7 @@ async def poam_dashboard(request: Request):
             else:
                 base_q = base_q.where(PoamItem.status == status_filter)
             if crit_high_filter == "1":
-                base_q = base_q.where(PoamItem.severity.in_(["Critical", "High"]))
+                base_q = base_q.where(PoamItem.severity.in_(_CRIT_HIGH_SEVS))
             elif severity_filter:
                 base_q = base_q.where(PoamItem.severity == severity_filter)
             if overdue_filter == "1":
@@ -3663,7 +3718,7 @@ async def poam_dashboard(request: Request):
             total_all_q = total_all_q.where(PoamItem.system_id.in_(scoped_sys_ids))
         total_all = (await session.execute(total_all_q)).scalar() or 0
         crit_high_ct = (await session.execute(
-            base_open.where(PoamItem.severity.in_(["Critical","High"]))
+            base_open.where(PoamItem.severity.in_(_CRIT_HIGH_SEVS))
         )).scalar() or 0
         overdue_ct   = (await session.execute(
             base_open.where(PoamItem.scheduled_completion < today_str)
@@ -3784,7 +3839,7 @@ async def poam_dashboard(request: Request):
 
 @app.get("/poam/export", response_class=HTMLResponse)
 async def poam_export(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -3816,7 +3871,7 @@ async def poam_export(request: Request):
 @app.get("/poam/import/template")
 async def poam_import_template(request: Request):
     """Download a blank CSV template for bulk POA&M import."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -3854,7 +3909,7 @@ async def poam_import_template(request: Request):
 @app.get("/poam/import", response_class=HTMLResponse)
 async def poam_import_form(request: Request):
     """CSV bulk import form."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -3877,7 +3932,7 @@ async def poam_import_csv(
     dry_run: str = Form("0"),
 ):
     """Parse uploaded CSV and bulk-create POA&M items."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -3983,7 +4038,7 @@ async def poam_import_csv(
 
 @app.get("/poam/new", response_class=HTMLResponse)
 async def poam_new_form(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -4016,7 +4071,7 @@ async def poam_new_form(request: Request):
 
 @app.post("/poam")
 async def poam_create(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -4069,7 +4124,7 @@ async def poam_create(request: Request):
 
 @app.get("/poam/{item_id}", response_class=HTMLResponse)
 async def poam_item_detail(request: Request, item_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -4086,10 +4141,7 @@ async def poam_item_detail(request: Request, item_id: str):
 
         linked_system = None
         if item.system_id:
-            for s in systems:
-                if s.id == item.system_id:
-                    linked_system = s
-                    break
+            linked_system = await session.get(System, item.system_id)
 
         # Evidence files
         ev_rows = await session.execute(
@@ -4123,7 +4175,7 @@ async def poam_item_detail(request: Request, item_id: str):
 
 @app.post("/poam/{item_id}/update")
 async def poam_update(request: Request, item_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -4217,7 +4269,7 @@ async def poam_update(request: Request, item_id: str):
 @app.post("/api/poam/{item_id}/status")
 async def poam_quick_status(request: Request, item_id: str):
     """AJAX: update just the status of a POA&M item. Returns JSON {ok, status}."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -4227,17 +4279,39 @@ async def poam_quick_status(request: Request, item_id: str):
         raise HTTPException(status_code=400, detail="Invalid status")
 
     async with SessionLocal() as session:
+        # ── RBAC: resolve role; push-power check enforces allowed transitions ──
+        role = await _get_user_role(request, session)
+
         row = await session.execute(select(PoamItem).where(PoamItem.id == item_id))
         item = row.scalar_one_or_none()
         if not item:
             raise HTTPException(status_code=404)
+
+        # ── Scope: user must be assigned to the item's system ─────────────────
+        if item.system_id and not await _can_access_system(item.system_id, request, session):
+            await _log_audit(session, user, "DENIED", "poam", item_id,
+                             {"reason": "system_scope", "attempted_status": new_status, "role": role})
+            await session.commit()
+            raise HTTPException(status_code=403, detail="Not assigned to this system")
+
+        # ── Push-power: role must be allowed to set this specific status ───────
         old_status = item.status
+        allowed = _poam_allowed_statuses(role, old_status)
+        if new_status not in allowed:
+            await _log_audit(session, user, "DENIED", "poam", item_id,
+                             {"reason": "push_power", "role": role,
+                              "old_status": old_status, "attempted_status": new_status})
+            await session.commit()
+            raise HTTPException(status_code=403,
+                                detail=f"Role '{role}' cannot set status to '{new_status}'")
+
         item.status = new_status
         item.updated_at = datetime.now(timezone.utc)
         if new_status == "closed_verified" and not item.completion_date:
             item.completion_date = date.today().isoformat()
         await _log_audit(session, user, "UPDATE", "poam", item_id,
-                         {"status": f"{old_status}→{new_status}"})
+                         {"role": role, "old_status": old_status, "new_status": new_status,
+                          "system_id": item.system_id})
         await session.commit()
 
     return JSONResponse({"ok": True, "status": new_status,
@@ -4249,15 +4323,31 @@ async def poam_evidence_upload(request: Request, item_id: str,
                                 file: UploadFile = File(...),
                                 description: str = Form("")):
     """Upload a closure evidence file for a POA&M item."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
+    _EVIDENCE_UPLOAD_ROLES = {"admin", "issm", "isso", "sca", "auditor"}
+
     async with SessionLocal() as session:
+        # ── RBAC: role must be in allowed uploader set ─────────────────────────
+        role = await _get_user_role(request, session)
+        if role not in _EVIDENCE_UPLOAD_ROLES:
+            raise HTTPException(status_code=403,
+                                detail=f"Role '{role}' cannot upload POA&M evidence")
+
         row = await session.execute(select(PoamItem).where(PoamItem.id == item_id))
         item = row.scalar_one_or_none()
         if not item:
             raise HTTPException(status_code=404)
+
+        # ── Scope: user must be assigned to the item's system ─────────────────
+        if item.system_id and not await _can_access_system(item.system_id, request, session):
+            await _log_audit(session, user, "DENIED", "poam_evidence", item_id,
+                             {"reason": "system_scope", "role": role,
+                              "filename": file.filename})
+            await session.commit()
+            raise HTTPException(status_code=403, detail="Not assigned to this system")
 
     # Validate file type
     _ALLOWED_EXT = {".pdf", ".docx", ".xlsx", ".pptx", ".txt",
@@ -4267,12 +4357,13 @@ async def poam_evidence_upload(request: Request, item_id: str,
         raise HTTPException(status_code=400, detail=f"File type '{_ext}' not allowed")
 
     # Save file
-    ev_dir = Path("data/uploads/poam_evidence")
+    ev_dir = _POAM_EVIDENCE_DIR
     ev_dir.mkdir(parents=True, exist_ok=True)
-    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", file.filename or "file")
+    safe_name = _re.sub(r"[^A-Za-z0-9._-]", "_", file.filename or "file")
     dest = ev_dir / f"{item_id[:8]}_{safe_name}"
     content = await file.read()
-    dest.write_bytes(content)
+    async with aiofiles.open(dest, "wb") as _f:
+        await _f.write(content)
 
     async with SessionLocal() as session:
         ev = PoamEvidence(
@@ -4284,6 +4375,8 @@ async def poam_evidence_upload(request: Request, item_id: str,
             description  = description.strip() or None,
         )
         session.add(ev)
+        await _log_audit(session, user, "UPLOAD", "poam_evidence", item_id,
+                         {"filename": safe_name, "size": len(content)})
         await session.commit()
 
     return RedirectResponse(url=f"/poam/{item_id}", status_code=303)
@@ -4292,7 +4385,7 @@ async def poam_evidence_upload(request: Request, item_id: str,
 @app.get("/poam/{item_id}/evidence/{ev_id}")
 async def poam_evidence_download(request: Request, item_id: str, ev_id: str):
     """Download a closure evidence file."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as session:
@@ -4310,7 +4403,7 @@ async def poam_evidence_download(request: Request, item_id: str, ev_id: str):
 @app.post("/poam/auto/{assessment_id}")
 async def poam_auto_create(request: Request, assessment_id: str):
     """Auto-create POA&M items from INSUFFICIENT/NOT_FOUND controls."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -4352,7 +4445,7 @@ async def poam_auto_create(request: Request, assessment_id: str):
 
 @app.get("/risks", response_class=HTMLResponse)
 async def risks_dashboard(request: Request):
-    user    = request.headers.get("Remote-User", "")
+    user    = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     is_adm  = _is_admin(request)
@@ -4447,7 +4540,7 @@ async def risks_dashboard(request: Request):
 
 @app.get("/risks/export", response_class=HTMLResponse)
 async def risks_export(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -4478,7 +4571,7 @@ async def risks_export(request: Request):
 
 @app.get("/risks/new", response_class=HTMLResponse)
 async def risk_new_form(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -4497,7 +4590,7 @@ async def risk_new_form(request: Request):
 
 @app.post("/risks")
 async def risk_create(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -4548,7 +4641,7 @@ async def risk_create(request: Request):
 
 @app.get("/risks/{risk_id}", response_class=HTMLResponse)
 async def risk_detail(request: Request, risk_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -4565,10 +4658,7 @@ async def risk_detail(request: Request, risk_id: str):
 
         linked_system = None
         if risk.system_id:
-            for s in systems:
-                if s.id == risk.system_id:
-                    linked_system = s
-                    break
+            linked_system = await session.get(System, risk.system_id)
 
     return templates.TemplateResponse("risk_form.html", {
         "request":       request,
@@ -4582,7 +4672,7 @@ async def risk_detail(request: Request, risk_id: str):
 
 @app.post("/risks/{risk_id}/update")
 async def risk_update(request: Request, risk_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -4740,7 +4830,7 @@ async def ssp_document(request: Request, assessment_id: str,
     mode=full      → Full Report (appendices embedded as base64 in-document)
     mode=controls  → Controls Only (appendix listing table, no file embedding)
     """
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -4778,7 +4868,7 @@ async def ssp_document(request: Request, assessment_id: str,
             poam_rows = await session.execute(
                 select(PoamItem)
                 .where(PoamItem.system_id == asmt.system_id)
-                .where(PoamItem.status.in_(["open","in_progress"]))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
                 .order_by(PoamItem.severity)
             )
             poam_items = poam_rows.scalars().all()
@@ -4827,7 +4917,7 @@ async def ssp_document(request: Request, assessment_id: str,
 
 @app.get("/ssp/{assessment_id}/oscal")
 async def ssp_oscal(request: Request, assessment_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -4914,7 +5004,7 @@ async def ssp_oscal(request: Request, assessment_id: str):
 
 @app.post("/api/review/{assessment_id}")
 async def api_review(request: Request, assessment_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -4972,7 +5062,7 @@ async def api_version():
 @app.get("/posture", response_class=HTMLResponse)
 async def posture_dashboard(request: Request):
     """Executive-level compliance posture view — aggregate GRC health metrics."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     is_adm = _is_admin(request)
@@ -5027,13 +5117,13 @@ async def posture_dashboard(request: Request):
 
         # ── POA&M KPIs ────────────────────────────────────────────────────────
         open_poams = (await session.execute(
-            _poam_scope(select(func.count(PoamItem.id)).where(PoamItem.status.in_(["open","in_progress"])))
+            _poam_scope(select(func.count(PoamItem.id)).where(PoamItem.status.in_(POAM_OPEN_STATUSES)))
         )).scalar() or 0
 
         overdue_poams = (await session.execute(
             _poam_scope(
                 select(func.count(PoamItem.id))
-                .where(PoamItem.status.in_(["open","in_progress"]))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
                 .where(PoamItem.scheduled_completion.isnot(None))
                 .where(PoamItem.scheduled_completion < today_str)
             )
@@ -5042,8 +5132,8 @@ async def posture_dashboard(request: Request):
         crit_high_poams = (await session.execute(
             _poam_scope(
                 select(func.count(PoamItem.id))
-                .where(PoamItem.status.in_(["open","in_progress"]))
-                .where(PoamItem.severity.in_(["Critical","High"]))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
+                .where(PoamItem.severity.in_(_CRIT_HIGH_SEVS))
             )
         )).scalar() or 0
 
@@ -5051,7 +5141,7 @@ async def posture_dashboard(request: Request):
         for row in (await session.execute(
             _poam_scope(
                 select(PoamItem.severity, func.count(PoamItem.id))
-                .where(PoamItem.status.in_(["open","in_progress"]))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
                 .group_by(PoamItem.severity)
             )
         )).all():
@@ -5066,7 +5156,7 @@ async def posture_dashboard(request: Request):
             _risk_scope(
                 select(func.count(Risk.id))
                 .where(Risk.status != "closed")
-                .where(Risk.risk_level.in_(["Critical","High"]))
+                .where(Risk.risk_level.in_(_CRIT_HIGH_SEVS))
             )
         )).scalar() or 0
 
@@ -5136,7 +5226,7 @@ async def posture_dashboard(request: Request):
             tq = (
                 select(System.name, func.count(PoamItem.id).label("cnt"))
                 .join(PoamItem, PoamItem.system_id == System.id)
-                .where(PoamItem.status.in_(["open","in_progress"]))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
                 .group_by(System.id)
                 .order_by(func.count(PoamItem.id).desc())
                 .limit(5)
@@ -5198,7 +5288,7 @@ async def posture_dashboard(request: Request):
 
 @app.get("/search", response_class=HTMLResponse)
 async def global_search(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     is_adm = _is_admin(request)
@@ -5250,7 +5340,7 @@ async def global_search(request: Request):
                 PoamItem.control_id.ilike(needle) |
                 PoamItem.responsible_party.ilike(needle)
             )
-            .where(PoamItem.status.in_(["open", "in_progress"]))
+            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
             .limit(10)
         )
         if sys_scope is not None:
@@ -5327,7 +5417,7 @@ async def global_search(request: Request):
 @app.get("/api/search/suggest")
 async def search_suggest(request: Request):
     """AJAX autocomplete — returns top 5 system names + control IDs matching q."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     q = (request.query_params.get("q") or "").strip()
@@ -5435,7 +5525,7 @@ def _sc_stats(controls: list) -> dict:
 @app.get("/controls", response_class=HTMLResponse)
 async def controls_catalog(request: Request, family: str = "", q: str = "",
                             page: int = 1, per_page: int = 20):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -5478,7 +5568,7 @@ async def controls_catalog(request: Request, family: str = "", q: str = "",
 
 @app.get("/controls/{ctrl_id}", response_class=HTMLResponse)
 async def control_detail(request: Request, ctrl_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -5517,7 +5607,7 @@ async def control_detail(request: Request, ctrl_id: str):
 @app.get("/systems/{system_id}/controls", response_class=HTMLResponse)
 async def system_controls_page(request: Request, system_id: str, family: str = "", status_filter: str = "",
                                 page: int = 1, per_page: int = 25):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -5607,7 +5697,7 @@ async def system_controls_page(request: Request, system_id: str, family: str = "
 
 @app.post("/systems/{system_id}/controls/{ctrl_id}")
 async def update_system_control(request: Request, system_id: str, ctrl_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -5670,7 +5760,7 @@ async def update_system_control(request: Request, system_id: str, ctrl_id: str):
 @app.get("/systems/{system_id}/workspace/{ctrl_id}", response_class=HTMLResponse)
 async def isso_control_workspace_get(request: Request, system_id: str, ctrl_id: str):
     """ISSO per-control implementation workspace — view only for auditors/sca, editable for isso/ciso/ao/admin."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -5738,7 +5828,7 @@ async def isso_control_workspace_get(request: Request, system_id: str, ctrl_id: 
 @app.post("/systems/{system_id}/workspace/{ctrl_id}")
 async def isso_control_workspace_post(request: Request, system_id: str, ctrl_id: str):
     """ISSO workspace — save/upsert SystemControl record."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -5825,7 +5915,7 @@ async def isso_control_workspace_post(request: Request, system_id: str, ctrl_id:
 @app.post("/systems/{system_id}/import-controls")
 async def import_controls_from_assessment(request: Request, system_id: str):
     """Bulk-import control implementation status from the most recent complete assessment."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -5904,7 +5994,7 @@ async def import_controls_from_assessment(request: Request, system_id: str):
 
 @app.get("/systems/{system_id}/submit", response_class=HTMLResponse)
 async def submission_form(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -5929,7 +6019,7 @@ async def submission_form(request: Request, system_id: str):
         poam_rows = await session.execute(
             select(PoamItem)
             .where(PoamItem.system_id == system_id)
-            .where(PoamItem.status.in_(["open","in_progress"]))
+            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
         )
         open_poams = list(poam_rows.scalars().all())
 
@@ -5962,7 +6052,7 @@ async def submission_form(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/submit")
 async def create_submission(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -6041,7 +6131,7 @@ async def create_submission(request: Request, system_id: str):
 
 @app.get("/submissions", response_class=HTMLResponse)
 async def submissions_list(request: Request, page: int = 1, per_page: int = 10):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -6102,7 +6192,7 @@ async def submissions_list(request: Request, page: int = 1, per_page: int = 10):
 
 @app.get("/submissions/{sub_id}", response_class=HTMLResponse)
 async def submission_detail(request: Request, sub_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -6121,7 +6211,7 @@ async def submission_detail(request: Request, sub_id: str):
         poam_rows = await session.execute(
             select(PoamItem)
             .where(PoamItem.system_id == sub.system_id)
-            .where(PoamItem.status.in_(["open","in_progress"]))
+            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
             .order_by(PoamItem.severity)
         )
         open_poams = list(poam_rows.scalars().all())
@@ -6151,7 +6241,7 @@ async def submission_detail(request: Request, sub_id: str):
 async def update_submission(request: Request, sub_id: str):
     if not _is_admin(request):
         raise HTTPException(status_code=403, detail="Admin only")
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
 
     async with SessionLocal() as session:
         sub_row = await session.execute(select(Submission).where(Submission.id == sub_id))
@@ -6193,7 +6283,7 @@ from app.rss_feed import get_feed_items, get_all_feed_items, fetch_one_for_test,
 @app.get("/api/notifications")
 async def api_notifications(request: Request, limit: int = 20, unread_only: bool = False):
     """Return in-app notifications for the current user."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as session:
@@ -6211,7 +6301,7 @@ async def api_notifications(request: Request, limit: int = 20, unread_only: bool
 @app.post("/api/notifications/{notif_id}/read")
 async def api_notification_read(request: Request, notif_id: int):
     """Mark a notification as read."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as session:
@@ -6226,7 +6316,7 @@ async def api_notification_read(request: Request, notif_id: int):
 @app.post("/api/notifications/read-all")
 async def api_notifications_read_all(request: Request):
     """Mark all notifications as read for current user."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as session:
@@ -6241,7 +6331,7 @@ async def api_notifications_read_all(request: Request):
 @app.get("/notifications", response_class=HTMLResponse)
 async def notifications_page(request: Request, unread: bool = False, limit: int = 40):
     """Full notifications inbox page."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     limit = max(10, min(limit, 200))
@@ -6272,7 +6362,7 @@ async def notifications_page(request: Request, unread: bool = False, limit: int 
 @app.post("/api/heartbeat")
 async def api_heartbeat(request: Request):
     """Reset idle session timer for the current user. Called every 5 min by client JS."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     if user not in _SESSION_EXEMPT:
@@ -6283,7 +6373,7 @@ async def api_heartbeat(request: Request):
 @app.patch("/api/preferences")
 async def api_preferences(request: Request):
     """H6: Save UI preferences to UserProfile and set long-lived cookies."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     form = await request.form()
@@ -6326,7 +6416,7 @@ async def api_alerts(request: Request):
     Return actionable GRC alerts for the current user.
     Admin: org-wide alerts. Employee: scoped to their systems.
     """
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     is_adm = _is_admin(request)
@@ -6352,7 +6442,7 @@ async def api_alerts(request: Request):
         # Overdue POA&Ms
         overdue_ct = (await session.execute(
             _ps(select(func.count(PoamItem.id))
-                .where(PoamItem.status.in_(["open","in_progress"]))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
                 .where(PoamItem.scheduled_completion.isnot(None))
                 .where(PoamItem.scheduled_completion < today_str))
         )).scalar() or 0
@@ -6368,8 +6458,8 @@ async def api_alerts(request: Request):
         # Critical/High POA&Ms
         crit_ct = (await session.execute(
             _ps(select(func.count(PoamItem.id))
-                .where(PoamItem.status.in_(["open","in_progress"]))
-                .where(PoamItem.severity.in_(["Critical","High"])))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
+                .where(PoamItem.severity.in_(_CRIT_HIGH_SEVS)))
         )).scalar() or 0
         if crit_ct:
             alerts.append({
@@ -6384,7 +6474,7 @@ async def api_alerts(request: Request):
         crit_risk_ct = (await session.execute(
             _rs(select(func.count(Risk.id))
                 .where(Risk.status != "closed")
-                .where(Risk.risk_level.in_(["Critical","High"])))
+                .where(Risk.risk_level.in_(_CRIT_HIGH_SEVS)))
         )).scalar() or 0
         if crit_risk_ct:
             alerts.append({
@@ -6428,7 +6518,7 @@ async def api_alerts(request: Request):
         # POA&Ms due this week
         due_soon_ct = (await session.execute(
             _ps(select(func.count(PoamItem.id))
-                .where(PoamItem.status.in_(["open","in_progress"]))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
                 .where(PoamItem.scheduled_completion.isnot(None))
                 .where(PoamItem.scheduled_completion >= today_str)
                 .where(PoamItem.scheduled_completion <= week_str))
@@ -6467,7 +6557,7 @@ async def api_ato_expiry_alerts(request: Request):
     Admin-only. Called daily by bsv-ato-alerts.timer.
     Dedupe: one alert per system per threshold window per day (via SystemSettings key).
     """
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user or not _is_admin(request):
         raise HTTPException(status_code=403)
 
@@ -6569,7 +6659,7 @@ async def api_poam_overdue_alerts(request: Request):
     Dedupe: one alert per poam_id per escalation tier per day.
     Admin-only. Called daily by bsv-ato-alerts.timer.
     """
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user or not _is_admin(request):
         raise HTTPException(status_code=403)
 
@@ -6580,7 +6670,7 @@ async def api_poam_overdue_alerts(request: Request):
     async with SessionLocal() as session:
         overdue_items = (await session.execute(
             select(PoamItem)
-            .where(PoamItem.status.in_(["open", "in_progress"]))
+            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
             .where(PoamItem.scheduled_completion.isnot(None))
             .where(PoamItem.scheduled_completion < today_str)
             .order_by(PoamItem.scheduled_completion.asc())
@@ -6639,7 +6729,7 @@ async def api_audit_check(request: Request):
     Dedupe: alert_key = event_type + user + day, stored in SystemSettings.
     Admin-only. Called daily by bsv-ato-alerts.timer.
     """
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user or not _is_admin(request):
         raise HTTPException(status_code=403)
 
@@ -6727,7 +6817,7 @@ async def api_audit_check(request: Request):
 @app.get("/api/feeds")
 async def api_feeds(request: Request):
     """Return merged advisory feed items as JSON. Sources loaded from DB. Filtered by user's systems."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -6762,7 +6852,7 @@ async def api_feeds(request: Request):
 @app.get("/api/ticker")
 async def api_ticker(request: Request):
     """Security advisory ticker feed — 60-minute cached, combines internal alerts + CISA KEV."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -6779,7 +6869,7 @@ async def api_ticker(request: Request):
     async with SessionLocal() as session:
         overdue_ct = (await session.execute(
             select(func.count(PoamItem.id))
-            .where(PoamItem.status.in_(["open","in_progress"]))
+            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
             .where(PoamItem.scheduled_completion.isnot(None))
             .where(PoamItem.scheduled_completion < today_str)
         )).scalar() or 0
@@ -6788,8 +6878,8 @@ async def api_ticker(request: Request):
 
         crit_ct = (await session.execute(
             select(func.count(PoamItem.id))
-            .where(PoamItem.status.in_(["open","in_progress"]))
-            .where(PoamItem.severity.in_(["Critical","High"]))
+            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
+            .where(PoamItem.severity.in_(_CRIT_HIGH_SEVS))
         )).scalar() or 0
         if crit_ct:
             items.append({"text": f"{crit_ct} Critical/High severity weakness{'es' if crit_ct!=1 else ''} open — priority remediation required", "level": "high"})
@@ -6854,7 +6944,7 @@ async def api_ticker(request: Request):
 @app.get("/api/quiz/status")
 async def api_quiz_status(request: Request):
     """Daily quiz status for the sidebar widget — streak, done, score."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         return JSONResponse({"done": False, "score": 0, "passed": False, "streak": 0, "question_count": 15})
 
@@ -6894,7 +6984,7 @@ async def api_quiz_status(request: Request):
 
 @app.get("/rmf", response_class=HTMLResponse)
 async def rmf_overview(request: Request, show_all: bool = False):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -6935,7 +7025,7 @@ async def rmf_overview(request: Request, show_all: bool = False):
 
 @app.get("/rmf/{system_id}", response_class=HTMLResponse)
 async def rmf_system(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -6981,7 +7071,7 @@ async def rmf_update_step(request: Request, system_id: str, step: str,
                           target_date: str = Form(""),
                           actual_date: str = Form(""),
                           evidence: str = Form("")):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     if step not in _RMF_STEP_KEYS:
@@ -7110,7 +7200,7 @@ async def admin_add_user(request: Request,
                          role: str = Form("employee")):
     if not _effective_is_admin(request):
         raise HTTPException(status_code=403)
-    admin = request.headers.get("Remote-User", "")
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
     valid_roles = {
         "employee", "auditor", "bcdr", "system_owner", "isso", "issm", "sca", "ao",
         "ciso", "pen_tester", "data_owner", "pmo", "incident_responder",
@@ -7238,7 +7328,7 @@ async def admin_provision_user(
         if not await _can_provision(request, _ps):
             raise HTTPException(status_code=403, detail="Provisioning requires Executive tier or Admin.")
 
-    admin      = request.headers.get("Remote-User", "")
+    admin      = request.headers.get(_REMOTE_USER_HDR, "")
     username   = username.strip().lower()
     role       = role if role in {"employee","auditor","bcdr","system_owner","isso","issm","sca","ao"} else "employee"
     email      = email.strip()
@@ -7321,7 +7411,8 @@ async def admin_provision_user(
         }
         # Write atomically via temp file
         tmp_yml = users_yml.with_suffix(".yml.tmp")
-        tmp_yml.write_text(_yaml.dump(users_data, default_flow_style=False, allow_unicode=True))
+        async with aiofiles.open(tmp_yml, "w") as _f:
+            await _f.write(_yaml.dump(users_data, default_flow_style=False, allow_unicode=True))
         tmp_yml.replace(users_yml)
         log.info("Provision: wrote Authelia user %s (Authelia will reload via watch)", username)
     except Exception as e:
@@ -7337,7 +7428,8 @@ async def admin_provision_user(
             # Append a new employee entry before the 'quiz:' section
             new_entry = f'  - username: "{username}"\n    name: "{dname}"\n    email: "{email}"\n'
             cfg_text  = cfg_text.replace("\nquiz:", f"\n{new_entry}\nquiz:")
-            cfg_path.write_text(cfg_text)
+            async with aiofiles.open(cfg_path, "w") as _f:
+                await _f.write(cfg_text)
             # Reload in-process config
             import importlib as _importlib
             import app.main as _self
@@ -7393,7 +7485,7 @@ async def admin_provision_credential(request: Request, token: str):
 async def admin_set_role(request: Request, username: str, role: str = Form(...)):
     if not _effective_is_admin(request):
         raise HTTPException(status_code=403)
-    admin = request.headers.get("Remote-User", "")
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
     effective_role = _verify_shell(request.cookies.get("bsv_role_shell", "")) or "admin"
     valid_roles = {
         "employee", "auditor", "bcdr", "system_owner", "isso", "issm", "sca", "ao",
@@ -7424,7 +7516,7 @@ async def admin_set_role(request: Request, username: str, role: str = Form(...))
 async def admin_bulk_role(request: Request):
     if not _effective_is_admin(request):
         raise HTTPException(status_code=403)
-    admin = request.headers.get("Remote-User", "")
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
     body = await request.json()
     usernames = body.get("usernames", [])
     role = body.get("role", "")
@@ -7449,7 +7541,7 @@ async def admin_bulk_role(request: Request):
 async def admin_bulk_freeze(request: Request):
     if not _effective_is_admin(request):
         raise HTTPException(status_code=403)
-    admin = request.headers.get("Remote-User", "")
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
     body = await request.json()
     usernames = body.get("usernames", [])
     async with SessionLocal() as session:
@@ -7469,7 +7561,7 @@ async def admin_bulk_freeze(request: Request):
 async def admin_freeze_user(request: Request, username: str):
     if not _effective_is_admin(request):
         raise HTTPException(status_code=403)
-    admin = request.headers.get("Remote-User", "")
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
     effective_role = _verify_shell(request.cookies.get("bsv_role_shell", "")) or "admin"
     async with SessionLocal() as session:
         profile = await session.get(UserProfile, username)
@@ -7487,7 +7579,7 @@ async def admin_freeze_user(request: Request, username: str):
 async def admin_unfreeze_user(request: Request, username: str):
     if not _effective_is_admin(request):
         raise HTTPException(status_code=403)
-    admin = request.headers.get("Remote-User", "")
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
     effective_role = _verify_shell(request.cookies.get("bsv_role_shell", "")) or "admin"
     async with SessionLocal() as session:
         profile = await session.get(UserProfile, username)
@@ -7526,7 +7618,7 @@ async def admin_remove_confirm_page(request: Request, username: str):
 async def admin_remove_user(request: Request, username: str):
     if not _effective_is_admin(request):
         raise HTTPException(status_code=403)
-    admin = request.headers.get("Remote-User", "")
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
     effective_role = _verify_shell(request.cookies.get("bsv_role_shell", "")) or "admin"
     form  = await request.form()
     reason = str(form.get("removal_reason", "Termination")).strip() or "Termination"
@@ -7562,7 +7654,7 @@ async def admin_remove_user(request: Request, username: str):
 async def admin_restore_user(request: Request, username: str):
     if not _is_admin(request):
         raise HTTPException(status_code=403)
-    admin = request.headers.get("Remote-User", "")
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
     async with SessionLocal() as session:
         profile = await session.get(UserProfile, username)
         if not profile:
@@ -7599,7 +7691,7 @@ async def admin_reservation_override(request: Request, resv_id: int):
     """Grant override on a reservation — allows re-use before hold expires. Principal tier only."""
     if not _effective_is_admin(request):
         raise HTTPException(status_code=403)
-    admin = request.headers.get("Remote-User", "")
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
     async with SessionLocal() as session:
         profile = await session.get(UserProfile, admin)
         if not profile or profile.company_tier != "principal":
@@ -7751,7 +7843,7 @@ async def admin_system_settings_save(
 ):
     if not _effective_is_admin(request):
         raise HTTPException(status_code=403)
-    admin = request.headers.get("Remote-User", "dan")
+    admin = request.headers.get(_REMOTE_USER_HDR, "dan")
     for key, val in [
         ("chat_enabled",       chat_enabled),
         ("chat_visible_count", chat_visible_count),
@@ -7872,7 +7964,7 @@ async def admin_ssp_upload(
     if not _is_admin(request):
         raise HTTPException(status_code=403)
 
-    user = request.headers.get("Remote-User", "dan")
+    user = request.headers.get(_REMOTE_USER_HDR, "dan")
     suffix = Path(file.filename or "upload").suffix.lower()
     if suffix not in _SSP_ALLOWED:
         raise HTTPException(400, f"File type '{suffix}' not allowed. Use: {', '.join(_SSP_ALLOWED)}")
@@ -7968,7 +8060,7 @@ async def admin_ssp_pdf(request: Request, review_id: str):
         log.exception(
             "SSP PDF [%s] FAILED | review_id=%s | user=%s | system=%r | "
             "findings=%d | analysis_json_bytes=%d | exc=%s",
-            req_id, review_id, request.headers.get("Remote-User", ""),
+            req_id, review_id, request.headers.get(_REMOTE_USER_HDR, ""),
             rev.system_name, len(findings), _analysis_size, _pdf_exc,
         )
         ctx = {
@@ -8245,7 +8337,7 @@ async def audit_export(request: Request, format: str = "csv", days: str = "90"):
         entries = list(rows.scalars().all())
 
     today_str = date.today().isoformat()
-    admin_user = request.headers.get("Remote-User", "unknown")
+    admin_user = request.headers.get(_REMOTE_USER_HDR, "unknown")
     async with SessionLocal() as session:
         await _log_audit(session, admin_user, "EXPORT", "audit_log", "bulk",
                          {"format": format, "days": days_int, "count": len(entries)})
@@ -8305,7 +8397,7 @@ _BUNDLE_SCAN_DIRS: list = [
 @app.post("/admin/bundle/daily")
 async def admin_bundle_daily(request: Request):
     """Build a zip of today's work products and email it to the requesting user."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     if not _is_admin(request):
@@ -8316,7 +8408,7 @@ async def admin_bundle_daily(request: Request):
     today = date.today()
     date_label = today.strftime("%m-%d-%Y")
     zip_name   = today.strftime("%m%d%y") + "_workproducts.zip"
-    bundle_dir = Path("data/bundles")
+    bundle_dir = _BUNDLE_DIR
     bundle_dir.mkdir(parents=True, exist_ok=True)
     zip_path   = bundle_dir / zip_name
 
@@ -8414,7 +8506,7 @@ async def admin_bundle_daily(request: Request):
 @app.get("/reports", response_class=HTMLResponse)
 async def reports_center(request: Request):
     """Aggregated reporting center — all downloadable/viewable reports."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     is_adm = _is_admin(request)
@@ -8538,7 +8630,7 @@ def _ato_next_version(current: str) -> str:
 @app.get("/ato", response_class=HTMLResponse)
 async def ato_dashboard(request: Request, show_all: bool = False):
     """ATO Package dashboard — matrix of all systems x all doc types."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -8612,7 +8704,7 @@ async def ato_dashboard(request: Request, show_all: bool = False):
 @app.get("/ato/{system_id}", response_class=HTMLResponse)
 async def ato_system(request: Request, system_id: str):
     """Per-system ATO package — list of all 19 doc types with status."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -8654,7 +8746,7 @@ async def ato_system(request: Request, system_id: str):
 @app.get("/ato/{system_id}/{doc_type}", response_class=HTMLResponse)
 async def ato_document(request: Request, system_id: str, doc_type: str):
     """ATO document detail — content editor + workflow + history."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     if doc_type not in ATO_DOC_TYPES:
@@ -8735,7 +8827,7 @@ async def ato_save(request: Request, system_id: str, doc_type: str,
                    assigned_to: str = Form(""),
                    due_date: str = Form("")):
     """Save draft content (create document if doesn't exist yet)."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     if doc_type not in ATO_DOC_TYPES:
@@ -8790,7 +8882,7 @@ async def ato_workflow_action(request: Request, system_id: str, doc_type: str,
                               action: str = Form(...),
                               comment: str = Form("")):
     """Execute a workflow transition: submit | approve | reject | finalize | revise."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     if doc_type not in ATO_DOC_TYPES:
@@ -8942,7 +9034,7 @@ async def ato_workflow_action(request: Request, system_id: str, doc_type: str,
 @app.post("/ato/{system_id}/{doc_type}/generate")
 async def ato_generate(request: Request, system_id: str, doc_type: str):
     """Generate an ATO document from existing system data and save as draft."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     if doc_type not in _GENERATABLE_DOCS:
@@ -9080,11 +9172,12 @@ async def ato_generate(request: Request, system_id: str, doc_type: str):
             }
 
         # ── Store generated file ──
-        gen_dir = Path("data/ato_generated") / system_id
+        gen_dir = _safe_subpath(_ATO_GENERATED_DIR, system_id)
         gen_dir.mkdir(parents=True, exist_ok=True)
         gen_file = gen_dir / f"{doc_type}.json"
         gen_content = json.dumps(generated, indent=2, default=str)
-        gen_file.write_text(gen_content)
+        async with aiofiles.open(gen_file, "w") as _f:
+            await _f.write(gen_content)
 
         # ── Upsert AtoDocument ──
         doc = (await session.execute(
@@ -9125,7 +9218,7 @@ async def ato_generate(request: Request, system_id: str, doc_type: str):
 async def ato_upload(request: Request, system_id: str, doc_type: str,
                      file: UploadFile = File(...)):
     """Upload an external file for an ATO document (signed letters, 3PAO reports, etc.)."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     if doc_type not in ATO_DOC_TYPES:
@@ -9144,12 +9237,13 @@ async def ato_upload(request: Request, system_id: str, doc_type: str,
         if not sys_obj:
             raise HTTPException(status_code=404)
 
-        upload_dir = Path("data/ato_uploads") / system_id / doc_type
+        upload_dir = _safe_subpath(_ATO_UPLOAD_DIR, f"{system_id}/{doc_type}")
         upload_dir.mkdir(parents=True, exist_ok=True)
         safe_name = f"{doc_type}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}{ext}"
         dest = upload_dir / safe_name
         contents = await file.read()
-        dest.write_bytes(contents)
+        async with aiofiles.open(dest, "wb") as _f:
+            await _f.write(contents)
 
         doc = (await session.execute(
             select(AtoDocument)
@@ -9214,13 +9308,13 @@ def _issm_productivity_score(pkg_count: int, max_packages: int,
 
 @app.get("/issm/dashboard", response_class=HTMLResponse)
 async def issm_dashboard(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
     async with SessionLocal() as session:
         role = await _get_user_role(request, session)
-        _require_role(role, ["admin", "ao", "issm"])
+        _require_role(role, ["admin", "ao", "ciso", "issm"])
 
         # All ISSOs
         isso_profiles = list((await session.execute(
@@ -9229,75 +9323,91 @@ async def issm_dashboard(request: Request):
 
         today_str       = date.today().isoformat()
         thirty_days_ago = [(date.today() - timedelta(days=i)).isoformat() for i in range(30)]
+        isso_usernames  = [isso.remote_user for isso in isso_profiles]
+
+        # ── Bulk pre-fetch: assignments, system details, POAM counts, quiz rows ──
+        assign_rows = (await session.execute(
+            select(SystemAssignment.remote_user, SystemAssignment.system_id)
+            .where(SystemAssignment.remote_user.in_(isso_usernames))
+        )).all()
+        isso_sys_map: dict = {}
+        for _ru, _sid in assign_rows:
+            isso_sys_map.setdefault(_ru, []).append(_sid)
+
+        _all_sys_ids = list({sid for sids in isso_sys_map.values() for sid in sids})
+
+        sys_detail_map: dict = {}
+        open_by_sys:    dict = {}
+        overdue_by_sys: dict = {}
+        if _all_sys_ids:
+            _sdr = (await session.execute(
+                select(System.id, System.name, System.auth_status,
+                       System.confidentiality_impact, System.integrity_impact,
+                       System.availability_impact)
+                .where(System.id.in_(_all_sys_ids))
+            )).all()
+            sys_detail_map = {r[0]: r for r in _sdr}
+
+            _ob = (await session.execute(
+                select(PoamItem.system_id, func.count(PoamItem.id))
+                .where(PoamItem.system_id.in_(_all_sys_ids))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
+                .group_by(PoamItem.system_id)
+            )).all()
+            open_by_sys = dict(_ob)
+
+            _odd = (await session.execute(
+                select(PoamItem.system_id, func.count(PoamItem.id))
+                .where(PoamItem.system_id.in_(_all_sys_ids))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
+                .where(PoamItem.scheduled_completion.isnot(None))
+                .where(PoamItem.scheduled_completion < today_str)
+                .group_by(PoamItem.system_id)
+            )).all()
+            overdue_by_sys = dict(_odd)
+
+        # Quiz rows for all ISSOs in one query
+        _quiz_all = list((await session.execute(
+            select(DailyQuizActivity)
+            .where(DailyQuizActivity.remote_user.in_(isso_usernames))
+            .where(DailyQuizActivity.quiz_date.in_(thirty_days_ago))
+        )).scalars().all())
+        quiz_by_user: dict = {}
+        for _qr in _quiz_all:
+            quiz_by_user.setdefault(_qr.remote_user, []).append(_qr)
+
+        # ── Build isso_data from pre-fetched data (no per-ISSO queries) ──────────
         isso_data = []
         for isso in isso_profiles:
-            sys_ids = list((await session.execute(
-                select(SystemAssignment.system_id)
-                .where(SystemAssignment.remote_user == isso.remote_user)
-            )).scalars().all())
+            sys_ids = isso_sys_map.get(isso.remote_user, [])
 
-            open_poams    = 0
-            overdue_poams = 0
-            systems_info  = []
-            if sys_ids:
-                open_poams = (await session.execute(
-                    select(func.count(PoamItem.id))
-                    .where(PoamItem.system_id.in_(sys_ids))
-                    .where(PoamItem.status.in_(["open", "in_progress"]))
-                )).scalar() or 0
+            open_poams    = sum(open_by_sys.get(sid, 0) for sid in sys_ids)
+            overdue_poams = sum(overdue_by_sys.get(sid, 0) for sid in sys_ids)
 
-                overdue_poams = (await session.execute(
-                    select(func.count(PoamItem.id))
-                    .where(PoamItem.system_id.in_(sys_ids))
-                    .where(PoamItem.status.in_(["open", "in_progress"]))
-                    .where(PoamItem.scheduled_completion.isnot(None))
-                    .where(PoamItem.scheduled_completion < today_str)
-                )).scalar() or 0
-
-                sys_rows = (await session.execute(
-                    select(System.id, System.name, System.auth_status,
-                           System.confidentiality_impact, System.integrity_impact, System.availability_impact)
-                    .where(System.id.in_(sys_ids))
-                    .order_by(System.name)
-                )).all()
-
-                for sr in sys_rows:
-                    # Open + overdue POA&Ms per system
-                    s_open = (await session.execute(
-                        select(func.count(PoamItem.id))
-                        .where(PoamItem.system_id == sr[0])
-                        .where(PoamItem.status.in_(["open", "in_progress"]))
-                    )).scalar() or 0
-                    s_over = (await session.execute(
-                        select(func.count(PoamItem.id))
-                        .where(PoamItem.system_id == sr[0])
-                        .where(PoamItem.status.in_(["open", "in_progress"]))
-                        .where(PoamItem.scheduled_completion.isnot(None))
-                        .where(PoamItem.scheduled_completion < today_str)
-                    )).scalar() or 0
+            systems_info = []
+            for sid in sys_ids:
+                sr = sys_detail_map.get(sid)
+                if sr:
                     systems_info.append({
                         "id": sr[0], "name": sr[1], "auth_status": sr[2],
                         "c": sr[3], "i": sr[4], "a": sr[5],
-                        "open_poams": s_open, "overdue_poams": s_over,
+                        "open_poams":    open_by_sys.get(sid, 0),
+                        "overdue_poams": overdue_by_sys.get(sid, 0),
                     })
+            systems_info.sort(key=lambda x: x.get("name") or "")
 
-            max_pkg = isso.max_packages or 10
+            max_pkg   = isso.max_packages or 10
             pkg_count = len(sys_ids)
             prod_score = _issm_productivity_score(pkg_count, max_pkg, open_poams, overdue_poams)
 
-            # Quiz metrics — last 30 days
-            quiz_rows = list((await session.execute(
-                select(DailyQuizActivity)
-                .where(DailyQuizActivity.remote_user == isso.remote_user)
-                .where(DailyQuizActivity.quiz_date.in_(thirty_days_ago))
-            )).scalars().all())
+            quiz_rows     = quiz_by_user.get(isso.remote_user, [])
             quiz_attempts = len(quiz_rows)
             quiz_accuracy = round(sum(r.score for r in quiz_rows) / quiz_attempts) if quiz_attempts else None
             quiz_streak   = 0
             _qmap = {r.quiz_date: r for r in quiz_rows}
             for _qd in thirty_days_ago:
-                _qr = _qmap.get(_qd)
-                if _qr and _qr.passed:
+                _qr2 = _qmap.get(_qd)
+                if _qr2 and _qr2.passed:
                     quiz_streak += 1
                 else:
                     break
@@ -9327,7 +9437,7 @@ async def issm_dashboard(request: Request):
 
 @app.get("/ciso/dashboard", response_class=HTMLResponse)
 async def ciso_dashboard(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -9360,12 +9470,12 @@ async def ciso_dashboard(request: Request):
         # POAM totals
         total_open_poams = (await session.execute(
             select(func.count(PoamItem.id))
-            .where(PoamItem.status.in_(["open", "in_progress"]))
+            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
         )).scalar() or 0
 
         total_overdue_poams = (await session.execute(
             select(func.count(PoamItem.id))
-            .where(PoamItem.status.in_(["open", "in_progress"]))
+            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
             .where(PoamItem.scheduled_completion.isnot(None))
             .where(PoamItem.scheduled_completion < today_str)
         )).scalar() or 0
@@ -9376,31 +9486,42 @@ async def ciso_dashboard(request: Request):
             .where(Risk.status == "open")
         )).scalar() or 0
 
-        # Per-system summary rows (limited to essentials)
-        sys_summaries = []
-        for s in systems:
-            open_p = (await session.execute(
-                select(func.count(PoamItem.id))
-                .where(PoamItem.system_id == s.id)
-                .where(PoamItem.status.in_(["open", "in_progress"]))
-            )).scalar() or 0
-            overdue_p = (await session.execute(
-                select(func.count(PoamItem.id))
-                .where(PoamItem.system_id == s.id)
-                .where(PoamItem.status.in_(["open", "in_progress"]))
+        # Per-system summary rows — bulk GROUP BY (eliminates N+1)
+        _sys_ids_ciso = [s.id for s in systems]
+        _ciso_open:    dict = {}
+        _ciso_overdue: dict = {}
+        if _sys_ids_ciso:
+            _co = (await session.execute(
+                select(PoamItem.system_id, func.count(PoamItem.id))
+                .where(PoamItem.system_id.in_(_sys_ids_ciso))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
+                .group_by(PoamItem.system_id)
+            )).all()
+            _ciso_open = dict(_co)
+
+            _cod = (await session.execute(
+                select(PoamItem.system_id, func.count(PoamItem.id))
+                .where(PoamItem.system_id.in_(_sys_ids_ciso))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
                 .where(PoamItem.scheduled_completion.isnot(None))
                 .where(PoamItem.scheduled_completion < today_str)
-            )).scalar() or 0
-            sys_summaries.append({
+                .group_by(PoamItem.system_id)
+            )).all()
+            _ciso_overdue = dict(_cod)
+
+        sys_summaries = [
+            {
                 "id":            s.id,
                 "name":          s.name,
                 "abbreviation":  s.abbreviation or "",
                 "auth_status":   s.auth_status or "not_authorized",
                 "auth_expiry":   s.auth_expiry or "",
                 "overall_impact": s.overall_impact or "Low",
-                "open_poams":    open_p,
-                "overdue_poams": overdue_p,
-            })
+                "open_poams":    _ciso_open.get(s.id, 0),
+                "overdue_poams": _ciso_overdue.get(s.id, 0),
+            }
+            for s in systems
+        ]
 
         ctx = await _full_ctx(request, session,
                               systems=sys_summaries,
@@ -9417,7 +9538,7 @@ async def ciso_dashboard(request: Request):
 @app.post("/admin/users/{username}/max-packages")
 async def set_max_packages(username: str, request: Request):
     """Admin: update max ISSO package limit for a user."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user or not _is_admin(request):
         raise HTTPException(status_code=403)
     form = await request.form()
@@ -9447,7 +9568,7 @@ async def sca_workspace(request: Request):
         if not _is_admin(request) and role not in ("sca", "isso"):
             raise HTTPException(status_code=403)
 
-        user = request.headers.get("Remote-User", "")
+        user = request.headers.get(_REMOTE_USER_HDR, "")
         sys_ids = await _user_system_ids(request, session)
 
         systems_res = await session.execute(
@@ -9530,7 +9651,7 @@ async def ao_decisions(request: Request):
             pc_res = await session.execute(
                 select(PoamItem.system_id, func.count(PoamItem.id))
                 .where(PoamItem.system_id.in_(all_sys_ids))
-                .where(PoamItem.status.in_(["open", "in_progress"]))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
                 .group_by(PoamItem.system_id)
             )
             poam_counts = dict(pc_res.all())
@@ -9581,7 +9702,7 @@ async def ao_record_decision(request: Request, system_id: str):
         if not system:
             raise HTTPException(status_code=404, detail="System not found")
 
-        ao = request.headers.get("Remote-User", "")
+        ao = request.headers.get(_REMOTE_USER_HDR, "")
         now_utc = datetime.now(timezone.utc)
 
         system.ato_decision  = decision
@@ -9620,10 +9741,11 @@ async def ao_record_decision(request: Request, system_id: str):
                 "generated_at":         now_utc.isoformat(),
             }, indent=2, default=str)
 
-            add_dir = Path("data/ato_generated") / system_id
+            add_dir = _safe_subpath(_ATO_GENERATED_DIR, system_id)
             add_dir.mkdir(parents=True, exist_ok=True)
             add_file = add_dir / "ADD.json"
-            add_file.write_text(add_content)
+            async with aiofiles.open(add_file, "w") as _f:
+                await _f.write(add_content)
 
             add_doc = (await session.execute(
                 select(AtoDocument)
@@ -9701,7 +9823,7 @@ async def system_owner_dashboard(request: Request):
             pc_res = await session.execute(
                 select(PoamItem.system_id, func.count(PoamItem.id))
                 .where(PoamItem.system_id.in_(sys_ids))
-                .where(PoamItem.status.in_(["open", "in_progress"]))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
                 .group_by(PoamItem.system_id)
             )
             poam_counts = dict(pc_res.all())
@@ -9740,7 +9862,7 @@ async def bcdr_dashboard(request: Request):
         if not _is_admin(request) and role not in ("bcdr", "system_owner"):
             raise HTTPException(status_code=403)
 
-        user = request.headers.get("Remote-User", "")
+        user = request.headers.get(_REMOTE_USER_HDR, "")
 
         # Pending sign-offs for this user
         my_signoffs_res = await session.execute(
@@ -9755,7 +9877,7 @@ async def bcdr_dashboard(request: Request):
         # Open BCDR events
         open_events_res = await session.execute(
             select(BcdrEvent)
-            .where(BcdrEvent.status.in_(["open", "in_progress"]))
+            .where(BcdrEvent.status.in_(POAM_OPEN_STATUSES))
             .order_by(BcdrEvent.triggered_at.desc())
             .limit(30)
         )
@@ -9824,7 +9946,7 @@ async def bcdr_create_event(request: Request):
         except (ValueError, TypeError):
             target_rpo = 1
 
-        triggered_by = request.headers.get("Remote-User", "")
+        triggered_by = request.headers.get(_REMOTE_USER_HDR, "")
 
         event = BcdrEvent(
             system_id    = system_id or None,
@@ -9861,7 +9983,7 @@ async def bcdr_create_event(request: Request):
 
 @app.post("/bcdr/events/{event_id}/signoff")
 async def bcdr_signoff(request: Request, event_id: int):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=403)
 
@@ -9932,7 +10054,7 @@ async def create_system_team(request: Request, system_id: str):
             name        = body.get("name", "New Team"),
             team_type   = body.get("team_type", "general"),
             description = body.get("description", ""),
-            created_by  = request.headers.get("Remote-User", ""),
+            created_by  = request.headers.get(_REMOTE_USER_HDR, ""),
         )
         session.add(team)
         await session.flush()
@@ -9954,7 +10076,7 @@ async def add_team_member(request: Request, system_id: str, team_id: int):
             team_id      = team_id,
             remote_user  = body.get("remote_user", ""),
             role_in_team = body.get("role_in_team", "member"),
-            assigned_by  = request.headers.get("Remote-User", ""),
+            assigned_by  = request.headers.get(_REMOTE_USER_HDR, ""),
         )
         session.add(membership)
         await session.commit()
@@ -10005,7 +10127,7 @@ def _obs_scope_filter(is_admin: bool, role: str, sys_ids: list):
 
 @app.get("/observations", response_class=HTMLResponse)
 async def observations_list(request: Request, page: int = 1, per_page: int = 10):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10083,7 +10205,7 @@ async def observations_list(request: Request, page: int = 1, per_page: int = 10)
 
 @app.get("/observations/new", response_class=HTMLResponse)
 async def observation_new_form(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10109,7 +10231,7 @@ async def observation_new_form(request: Request):
 
 @app.post("/observations")
 async def observation_create(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10149,7 +10271,7 @@ async def observation_create(request: Request):
 
 @app.get("/observations/{obs_id}", response_class=HTMLResponse)
 async def observation_detail(request: Request, obs_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10203,7 +10325,7 @@ async def observation_detail(request: Request, obs_id: str):
 
 @app.post("/observations/{obs_id}/update")
 async def observation_update(request: Request, obs_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10252,7 +10374,7 @@ async def observation_update(request: Request, obs_id: str):
 @app.post("/observations/{obs_id}/promote")
 async def observation_promote(request: Request, obs_id: str):
     """Promote an open observation to a POA&M item."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10304,7 +10426,7 @@ async def observation_promote(request: Request, obs_id: str):
 @app.get("/api/observations/summary")
 async def observations_api_summary(request: Request):
     """JSON summary of observation counts for sidebar badge. Scoped to user's systems."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         return JSONResponse({"open": 0, "promoted": 0, "critical": 0, "high": 0})
 
@@ -10342,7 +10464,7 @@ async def observations_api_summary(request: Request):
 
 @app.get("/systems/{system_id}/inventory", response_class=HTMLResponse)
 async def system_inventory(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10374,7 +10496,7 @@ async def system_inventory(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/inventory")
 async def inventory_add(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10413,7 +10535,7 @@ async def inventory_add(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/inventory/{item_id}/delete")
 async def inventory_delete(request: Request, system_id: str, item_id: int):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10442,7 +10564,7 @@ async def inventory_delete(request: Request, system_id: str, item_id: int):
 
 @app.get("/systems/{system_id}/connections", response_class=HTMLResponse)
 async def system_connections(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10473,7 +10595,7 @@ async def system_connections(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/connections")
 async def connection_add(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10512,7 +10634,7 @@ async def connection_add(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/connections/{conn_id}/delete")
 async def connection_delete(request: Request, system_id: str, conn_id: int):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10540,7 +10662,7 @@ async def connection_delete(request: Request, system_id: str, conn_id: int):
 
 @app.get("/systems/{system_id}/artifacts", response_class=HTMLResponse)
 async def system_artifacts(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10578,7 +10700,7 @@ async def system_artifacts(request: Request, system_id: str):
 @app.post("/systems/{system_id}/artifacts")
 async def artifact_create(request: Request, system_id: str,
                           file: UploadFile = File(None)):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10595,7 +10717,7 @@ async def artifact_create(request: Request, system_id: str,
         saved_path = None
 
         if file and file.filename:
-            art_dir = Path("uploads") / system_id / "artifacts"
+            art_dir = _safe_subpath(_ARTIFACT_DIR, system_id) / "artifacts"
             art_dir.mkdir(parents=True, exist_ok=True)
             suffix = Path(file.filename).suffix
             save_name = f"{uuid.uuid4()}{suffix}"
@@ -10635,7 +10757,7 @@ async def artifact_create(request: Request, system_id: str,
 
 @app.post("/systems/{system_id}/artifacts/{art_id}/approve")
 async def artifact_approve(request: Request, system_id: str, art_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10670,7 +10792,7 @@ async def artifact_approve(request: Request, system_id: str, art_id: str):
 
 @app.get("/systems/{system_id}/artifacts/{art_id}/download")
 async def artifact_download(request: Request, system_id: str, art_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10697,7 +10819,7 @@ async def artifact_download(request: Request, system_id: str, art_id: str):
 
 @app.get("/systems/{system_id}/eis-assessment", response_class=HTMLResponse)
 async def eis_assessment_form(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10716,7 +10838,7 @@ async def eis_assessment_form(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/eis-assessment")
 async def eis_assessment_submit(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -10758,7 +10880,7 @@ async def eis_assessment_submit(request: Request, system_id: str):
 
 @app.websocket("/ws/admin-chat")
 async def ws_admin_chat(websocket: WebSocket):
-    user = websocket.headers.get("Remote-User", "")
+    user = websocket.headers.get(_REMOTE_USER_HDR, "")
     if not _is_admin_user(user):
         await websocket.close(code=4003)
         return
@@ -10881,7 +11003,7 @@ async def ws_admin_chat(websocket: WebSocket):
 
 @app.get("/api/admin-chat/history/{room:path}")
 async def api_chat_history(request: Request, room: str, before: int = 0):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not _is_admin_user(user):
         raise HTTPException(status_code=403)
     if room != "@group" and user not in room.split(":"):
@@ -10909,7 +11031,7 @@ async def api_chat_history(request: Request, room: str, before: int = 0):
 
 @app.get("/api/admin-chat/unread")
 async def api_chat_unread(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not _is_admin_user(user):
         raise HTTPException(status_code=403)
 
@@ -10945,7 +11067,7 @@ async def api_chat_unread(request: Request):
 
 @app.post("/api/profile/theme")
 async def api_set_theme(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     body  = await request.json()
@@ -10960,7 +11082,7 @@ async def api_set_theme(request: Request):
 
 @app.post("/api/admin-chat/status")
 async def api_chat_status(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not _is_admin_user(user):
         raise HTTPException(status_code=403)
     body     = await request.json()
@@ -10976,7 +11098,7 @@ async def api_chat_status(request: Request):
 @app.get("/api/admin-chat/users")
 async def api_chat_users(request: Request):
     """Return all configured admin users with their live presence status."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not _is_admin_user(user):
         raise HTTPException(status_code=403)
     admin_usernames = list(CONFIG.get("app", {}).get("admin_users", ["dan"]))
@@ -11028,7 +11150,7 @@ async def exit_view_as(request: Request):
 @app.get("/chat/popup/{room:path}", response_class=HTMLResponse)
 async def chat_popup(request: Request, room: str):
     """Standalone pop-out chat window for a specific room."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not _is_admin_user(user):
         raise HTTPException(status_code=403)
     if room == "@group":
@@ -11049,7 +11171,7 @@ async def chat_popup(request: Request, room: str):
 
 @app.get("/pen-tester/dashboard", response_class=HTMLResponse)
 async def pen_tester_dashboard(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as session:
@@ -11092,7 +11214,7 @@ async def pen_tester_dashboard(request: Request):
 
 @app.get("/sca/dashboard", response_class=HTMLResponse)
 async def sca_role_dashboard(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as session:
@@ -11154,7 +11276,7 @@ async def sca_role_dashboard(request: Request):
 
 @app.get("/auditor/dashboard", response_class=HTMLResponse)
 async def auditor_dashboard(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as session:
@@ -11211,7 +11333,7 @@ async def auditor_dashboard(request: Request):
 
 @app.get("/incident-responder/dashboard", response_class=HTMLResponse)
 async def incident_responder_dashboard(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as session:
@@ -11250,7 +11372,7 @@ async def incident_responder_dashboard(request: Request):
 
 @app.get("/data-owner/dashboard", response_class=HTMLResponse)
 async def data_owner_dashboard(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as session:
@@ -11282,7 +11404,7 @@ async def data_owner_dashboard(request: Request):
 
 @app.get("/pmo/dashboard", response_class=HTMLResponse)
 async def pmo_dashboard(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as session:
@@ -11470,7 +11592,7 @@ def _normalize_sys_rows(raw_rows: list[dict]) -> tuple[list[dict], list[str], li
 
 @app.get("/admin/ingest", response_class=HTMLResponse)
 async def admin_ingest_home(request: Request, committed: str = ""):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as session:
@@ -11494,7 +11616,7 @@ async def admin_ingest_upload(
     ingest_type: str = Form(...),
     file: UploadFile = File(...),
 ):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as session:
@@ -11543,7 +11665,7 @@ async def admin_ingest_upload(
 
 @app.get("/admin/ingest/preview/{job_id}", response_class=HTMLResponse)
 async def admin_ingest_preview(request: Request, job_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as session:
@@ -11563,7 +11685,7 @@ async def admin_ingest_preview(request: Request, job_id: str):
 
 @app.post("/admin/ingest/commit/{job_id}")
 async def admin_ingest_commit(request: Request, job_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     async with SessionLocal() as session:
@@ -11676,7 +11798,7 @@ async def admin_ingest_commit(request: Request, job_id: str):
 @app.get("/admin/ingest/template/{ingest_type}")
 async def admin_ingest_template_download(request: Request, ingest_type: str):
     """Download a blank CSV template for users or systems ingestion."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     if ingest_type == "users":
@@ -11756,7 +11878,7 @@ def _parse_nist_atom_entry(entry_text: str) -> Optional[dict]:
 @app.post("/admin/feeds/nist/ingest")
 async def admin_nist_ingest(request: Request):
     """Fetch and store NIST CSRC publications Atom feed."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     if not _is_admin(request):
@@ -11824,7 +11946,7 @@ async def admin_nist_ingest(request: Request):
 async def admin_nvd_ingest(request: Request, days: int = 30):
     """Fetch NVD CVEs from the last N days and store them locally.
     Uses the NVD CVE 2.0 REST API. Admin only."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     if not _is_admin(request):
@@ -11936,7 +12058,7 @@ async def admin_nvd_ingest(request: Request, days: int = 30):
 
 @app.get("/systems/{system_id}/parameters", response_class=HTMLResponse)
 async def system_parameters(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -11974,7 +12096,7 @@ async def system_parameter_upsert(
     source:          str = Form("org_policy"),
     notes:           str = Form(""),
 ):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
@@ -12293,7 +12415,7 @@ async def _upsert_auto_fail_event(
 @app.post("/admin/autofail/evaluate")
 async def admin_autofail_evaluate(request: Request, system_id: str = ""):
     """Run auto-fail checks for one system (or all). Admin only."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     if not _is_admin(request):
@@ -12316,7 +12438,7 @@ async def admin_autofail_evaluate(request: Request, system_id: str = ""):
 @app.get("/admin/autofail", response_class=HTMLResponse)
 async def admin_autofail_view(request: Request, system_id: str = ""):
     """View recent auto-fail events. Admin only."""
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
     if not _is_admin(request):
@@ -12371,6 +12493,10 @@ ROLE_TASK_CONFIGS: dict = {
     "bcdr_coordinator":   [4, 8],
     "bcdr":               [4, 8],          # alias — matches _VALID_SHELL_ROLES key
     "data_owner":         [5, 7, 8],
+    # Executive / oversight roles — read metrics + daily notes
+    "ao":                 [6, 8],
+    "aodr":               [6, 8],
+    "ciso":               [1, 6, 8],
 }
 
 FEDERAL_HOLIDAYS_2026: set = {
@@ -12900,6 +13026,10 @@ async def _generate_system_report(report_id: int, system_id: str, report_type: s
     from reportlab.lib.enums import TA_CENTER, TA_LEFT
     import io
 
+    if report_type not in _REPORT_TYPE_ALLOWLIST:
+        log.error("_generate_system_report: invalid report_type %r — aborting", report_type)
+        return
+
     try:
         async with SessionLocal() as s:
             sys_row = await s.get(System, system_id)
@@ -12910,7 +13040,7 @@ async def _generate_system_report(report_id: int, system_id: str, report_type: s
             today  = date.today().strftime("%Y%m%d")
             fname  = f"{sysidx}.{report_type.upper()}.{today}.pdf"
 
-            dest_dir = _REPORT_DIR / system_id
+            dest_dir = _safe_subpath(_REPORT_DIR, system_id)
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest = dest_dir / fname
 
@@ -13042,7 +13172,7 @@ async def _generate_system_report(report_id: int, system_id: str, report_type: s
 
 @app.get("/systems/{system_id}/daily", response_class=HTMLResponse)
 async def system_daily_hub(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13093,7 +13223,7 @@ async def system_daily_hub(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/daily/save")
 async def system_daily_save(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     form = await request.form()
@@ -13136,7 +13266,7 @@ async def system_daily_save(request: Request, system_id: str):
 
 @app.get("/systems/{system_id}/daily/history", response_class=HTMLResponse)
 async def system_daily_history(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13162,7 +13292,7 @@ async def system_daily_history(request: Request, system_id: str):
 
 @app.get("/systems/{system_id}/daily/logbook/{log_date}", response_class=HTMLResponse)
 async def system_daily_logbook_view(request: Request, system_id: str, log_date: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13193,7 +13323,7 @@ async def system_daily_logbook_view(request: Request, system_id: str, log_date: 
 
 @app.get("/systems/{system_id}/daily/change-review", response_class=HTMLResponse)
 async def system_change_review_get(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13216,7 +13346,7 @@ async def system_change_review_get(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/daily/change-review")
 async def system_change_review_post(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     form = await request.form()
@@ -13244,7 +13374,7 @@ async def system_change_review_post(request: Request, system_id: str):
 
 @app.get("/systems/{system_id}/daily/backup-check", response_class=HTMLResponse)
 async def system_backup_check_get(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13267,7 +13397,7 @@ async def system_backup_check_get(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/daily/backup-check")
 async def system_backup_check_post(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     form = await request.form()
@@ -13308,7 +13438,7 @@ async def system_backup_check_post(request: Request, system_id: str):
 
 @app.get("/systems/{system_id}/daily/access-spotcheck", response_class=HTMLResponse)
 async def system_access_spotcheck_get(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13331,7 +13461,7 @@ async def system_access_spotcheck_get(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/daily/access-spotcheck")
 async def system_access_spotcheck_post(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     form = await request.form()
@@ -13369,7 +13499,7 @@ async def system_access_spotcheck_post(request: Request, system_id: str):
 
 @app.get("/systems/{system_id}/rotation", response_class=HTMLResponse)
 async def system_rotation(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13394,7 +13524,7 @@ async def system_rotation(request: Request, system_id: str):
 @app.post("/systems/{system_id}/rotation/complete")
 async def system_rotation_complete(request: Request, system_id: str,
                                     background_tasks: BackgroundTasks):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     form = await request.form()
@@ -13451,7 +13581,7 @@ async def system_rotation_complete(request: Request, system_id: str,
 
 @app.post("/systems/{system_id}/rotation/pause")
 async def system_rotation_pause(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13466,7 +13596,7 @@ async def system_rotation_pause(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/rotation/resume")
 async def system_rotation_resume(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13481,7 +13611,7 @@ async def system_rotation_resume(request: Request, system_id: str):
 
 @app.get("/systems/{system_id}/rotation/history", response_class=HTMLResponse)
 async def system_rotation_history(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13508,7 +13638,7 @@ async def system_rotation_history(request: Request, system_id: str):
 
 @app.get("/systems/{system_id}/rotation/calendar", response_class=HTMLResponse)
 async def system_rotation_calendar(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13545,7 +13675,7 @@ async def system_rotation_calendar(request: Request, system_id: str):
 
 @app.get("/systems/{system_id}/vendors", response_class=HTMLResponse)
 async def system_vendors(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13566,7 +13696,7 @@ async def system_vendors(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/vendors")
 async def system_vendors_post(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     form = await request.form()
@@ -13595,7 +13725,7 @@ async def system_vendors_post(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/vendors/{vid}")
 async def system_vendor_update(request: Request, system_id: str, vid: int):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     form = await request.form()
@@ -13621,7 +13751,7 @@ async def system_vendor_update(request: Request, system_id: str, vid: int):
 
 @app.get("/systems/{system_id}/interconnections", response_class=HTMLResponse)
 async def system_interconnections(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13641,7 +13771,7 @@ async def system_interconnections(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/interconnections")
 async def system_interconnections_post(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     form = await request.form()
@@ -13670,7 +13800,7 @@ async def system_interconnections_post(request: Request, system_id: str):
 
 @app.get("/systems/{system_id}/dataflows", response_class=HTMLResponse)
 async def system_dataflows(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13690,7 +13820,7 @@ async def system_dataflows(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/dataflows")
 async def system_dataflows_post(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     form = await request.form()
@@ -13719,7 +13849,7 @@ async def system_dataflows_post(request: Request, system_id: str):
 
 @app.get("/systems/{system_id}/privacy-assessments", response_class=HTMLResponse)
 async def system_privacy_assessments(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13739,7 +13869,7 @@ async def system_privacy_assessments(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/privacy-assessments")
 async def system_privacy_assessments_post(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     form = await request.form()
@@ -13768,7 +13898,7 @@ async def system_privacy_assessments_post(request: Request, system_id: str):
 
 @app.get("/systems/{system_id}/restore-tests", response_class=HTMLResponse)
 async def system_restore_tests(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13788,7 +13918,7 @@ async def system_restore_tests(request: Request, system_id: str):
 
 @app.post("/systems/{system_id}/restore-tests")
 async def system_restore_tests_post(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     form = await request.form()
@@ -13818,7 +13948,7 @@ async def system_restore_tests_post(request: Request, system_id: str):
 
 @app.get("/systems/{system_id}/reports", response_class=HTMLResponse)
 async def system_reports(request: Request, system_id: str):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:
@@ -13838,11 +13968,13 @@ async def system_reports(request: Request, system_id: str):
 @app.post("/systems/{system_id}/reports/generate")
 async def system_reports_generate(request: Request, system_id: str,
                                    background_tasks: BackgroundTasks):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     form = await request.form()
     report_type = form.get("report_type", "executive_summary")
+    if report_type not in _REPORT_TYPE_ALLOWLIST:
+        raise HTTPException(status_code=400, detail=f"Unknown report type: '{report_type}'")
     async with SessionLocal() as session:
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(403)
@@ -13864,7 +13996,7 @@ async def system_reports_generate(request: Request, system_id: str,
 
 @app.get("/systems/{system_id}/reports/{rid}/download")
 async def system_report_download(request: Request, system_id: str, rid: int):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     from fastapi.responses import FileResponse
@@ -13891,7 +14023,7 @@ async def system_report_download(request: Request, system_id: str, rid: int):
 
 @app.get("/issm/daily", response_class=HTMLResponse)
 async def issm_daily_portfolio(request: Request):
-    user = request.headers.get("Remote-User", "")
+    user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(401)
     async with SessionLocal() as session:

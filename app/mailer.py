@@ -21,6 +21,13 @@ log = logging.getLogger("blacksite.mailer")
 
 _SYSTEM_EMAIL_CONF = "/etc/blacksite/email.conf"
 
+_HEADER_STRIP = str.maketrans("", "", "\r\n\t")
+
+
+def _sanitize_header(value: str) -> str:
+    """Strip CR/LF/tab from email header values to prevent header injection."""
+    return str(value).translate(_HEADER_STRIP).strip()
+
 
 def _load_system_email_creds() -> tuple:
     """
@@ -197,9 +204,9 @@ def send_report(
     )
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"]    = from_addr
-    msg["To"]      = to_addr
+    msg["Subject"] = _sanitize_header(subject)
+    msg["From"]    = _sanitize_header(from_addr)
+    msg["To"]      = _sanitize_header(to_addr)
     msg.attach(MIMEText(html_body, "html"))
 
     if attachment_path and Path(attachment_path).exists():
@@ -357,9 +364,9 @@ def forward_assessment(
         subject += " ★"
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"]    = from_addr
-    msg["To"]      = employee_email
+    msg["Subject"] = _sanitize_header(subject)
+    msg["From"]    = _sanitize_header(from_addr)
+    msg["To"]      = _sanitize_header(employee_email)
     msg.attach(MIMEText(html_body, "html"))
 
     return _smtp_send(config, msg)
@@ -443,9 +450,9 @@ def send_welcome_email(
 </html>"""
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"[{app_name}] Your account has been created"
-    msg["From"]    = from_addr
-    msg["To"]      = recipient_email
+    msg["Subject"] = _sanitize_header(f"[{app_name}] Your account has been created")
+    msg["From"]    = _sanitize_header(from_addr)
+    msg["To"]      = _sanitize_header(recipient_email)
     msg.attach(MIMEText(html_body, "html"))
 
     return _smtp_send(config, msg)
@@ -504,9 +511,9 @@ def send_bundle(
 </html>"""
 
     msg = MIMEMultipart("mixed")
-    msg["Subject"] = f"[{app_name}] Daily Work Bundle — {date_label} ({file_count} items)"
-    msg["From"]    = from_addr
-    msg["To"]      = recipient_email
+    msg["Subject"] = _sanitize_header(f"[{app_name}] Daily Work Bundle — {date_label} ({file_count} items)")
+    msg["From"]    = _sanitize_header(from_addr)
+    msg["To"]      = _sanitize_header(recipient_email)
     msg.attach(MIMEText(html_body, "html"))
 
     if zip_path.exists():

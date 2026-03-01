@@ -555,7 +555,7 @@ class SystemTeam(Base):
     team_type   = Column(String, default="general")       # general|recovery|response|bcdr
     description = Column(String, nullable=True)
     created_by  = Column(String, nullable=True)
-    created_at  = Column(DateTime, default=datetime.utcnow)
+    created_at  = Column(DateTime, default=_now)
 
 
 class TeamMembership(Base):
@@ -567,7 +567,7 @@ class TeamMembership(Base):
     remote_user  = Column(String, nullable=False)
     role_in_team = Column(String, default="member")       # lead|member|observer
     assigned_by  = Column(String, nullable=True)
-    assigned_at  = Column(DateTime, default=datetime.utcnow)
+    assigned_at  = Column(DateTime, default=_now)
 
 
 class BcdrEvent(Base):
@@ -581,7 +581,7 @@ class BcdrEvent(Base):
     title        = Column(String, nullable=True)
     status       = Column(String, default="open")         # open|in_progress|closed
     triggered_by = Column(String, nullable=True)
-    triggered_at = Column(DateTime, default=datetime.utcnow)
+    triggered_at = Column(DateTime, default=_now)
     target_rto   = Column(Integer, nullable=True)         # hours
     target_rpo   = Column(Integer, nullable=True)         # hours
     closed_at    = Column(DateTime, nullable=True)
@@ -809,6 +809,23 @@ async def _migrate_db(engine):
         "CREATE INDEX IF NOT EXISTS ix_ato_documents_system_id        ON ato_documents (system_id)",
         "CREATE INDEX IF NOT EXISTS ix_ato_doc_versions_document_id   ON ato_document_versions (document_id)",
         "CREATE INDEX IF NOT EXISTS ix_ato_workflow_events_document_id ON ato_workflow_events (document_id)",
+        # Phase 25 — Daily Workflow indexes
+        "CREATE INDEX IF NOT EXISTS ix_daily_logbooks_sys_date        ON daily_logbooks (system_id, log_date)",
+        "CREATE INDEX IF NOT EXISTS ix_daily_logbooks_user_sys        ON daily_logbooks (remote_user, system_id)",
+        "CREATE INDEX IF NOT EXISTS ix_dw_completions_rotation        ON deep_work_completions (rotation_id)",
+        "CREATE INDEX IF NOT EXISTS ix_dw_completions_user_sys        ON deep_work_completions (remote_user, system_id)",
+        "CREATE INDEX IF NOT EXISTS ix_change_review_sys_date         ON change_review_records (system_id, review_date)",
+        "CREATE INDEX IF NOT EXISTS ix_backup_checks_sys              ON backup_check_records (system_id)",
+        "CREATE INDEX IF NOT EXISTS ix_access_spot_checks_sys         ON access_spot_checks (system_id)",
+        "CREATE INDEX IF NOT EXISTS ix_vendors_system_id              ON vendors (system_id)",
+        "CREATE INDEX IF NOT EXISTS ix_interconnections_system_id     ON interconnection_records (system_id)",
+        "CREATE INDEX IF NOT EXISTS ix_data_flows_system_id           ON data_flow_records (system_id)",
+        "CREATE INDEX IF NOT EXISTS ix_privacy_assessments_sys        ON privacy_assessments (system_id)",
+        "CREATE INDEX IF NOT EXISTS ix_restore_tests_sys              ON restore_test_records (system_id)",
+        "CREATE INDEX IF NOT EXISTS ix_generated_reports_sys_status   ON generated_reports (system_id, status)",
+        # Unique constraints backfilled for existing DBs (safe on new installs — IF NOT EXISTS)
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_dw_completion_day_date ON deep_work_completions (rotation_id, rotation_day, completed_date)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_change_review_user_sys_date ON change_review_records (remote_user, system_id, review_date)",
     ]
     # Phase 10: new tables (CREATE TABLE IF NOT EXISTS is idempotent)
     new_tables = [
@@ -1485,6 +1502,11 @@ class DeepWorkCompletion(Base):
     evidence_name  = Column(String, nullable=True)
     created_at     = Column(DateTime, default=_now)
 
+    __table_args__ = (
+        UniqueConstraint("rotation_id", "rotation_day", "completed_date",
+                         name="uq_dw_completion_day_date"),
+    )
+
 
 class ChangeReviewRecord(Base):
     """Phase 25 — Task 2: Daily change control review record."""
@@ -1502,6 +1524,11 @@ class ChangeReviewRecord(Base):
     obs_id          = Column(String, ForeignKey("observations.id"), nullable=True)
     notes           = Column(Text, nullable=True)
     created_at      = Column(DateTime, default=_now)
+
+    __table_args__ = (
+        UniqueConstraint("remote_user", "system_id", "review_date",
+                         name="uq_change_review_user_sys_date"),
+    )
 
 
 class BackupCheckRecord(Base):

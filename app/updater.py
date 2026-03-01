@@ -42,17 +42,24 @@ def save_meta(meta_path: Path, data: dict):
     meta_path.write_text(json.dumps(data, indent=2))
 
 
-def latest_remote_sha(timeout: int = 10) -> Optional[str]:
+def latest_remote_sha(timeout: int = 10, retries: int = 3) -> Optional[str]:
     """Return the latest git SHA for the catalog file, or None on error."""
-    try:
-        r = requests.get(GITHUB_API_URL, timeout=timeout,
-                         headers={"Accept": "application/vnd.github+json"})
-        r.raise_for_status()
-        commits = r.json()
-        if commits:
-            return commits[0]["sha"]
-    except Exception as e:
-        log.warning("Could not check remote NIST SHA: %s", e)
+    import time as _time
+    last_err: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            r = requests.get(GITHUB_API_URL, timeout=timeout,
+                             headers={"Accept": "application/vnd.github+json"})
+            r.raise_for_status()
+            commits = r.json()
+            if commits:
+                return commits[0]["sha"]
+            return None
+        except Exception as e:
+            last_err = e
+            if attempt < retries:
+                _time.sleep(2 ** (attempt - 1))   # 1s, 2s backoff
+    log.warning("Could not check remote NIST SHA after %d attempts: %s", retries, last_err)
     return None
 
 

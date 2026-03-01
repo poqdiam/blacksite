@@ -24,7 +24,8 @@ from typing import Optional
 log = logging.getLogger("blacksite.parser")
 
 # Minimum useful text threshold — files below this are likely not SSPs
-MIN_TEXT_CHARS = 200
+MIN_TEXT_CHARS  = 200
+_MAX_PARSE_SIZE = 20 * 1024 * 1024   # 20 MB — reject oversized files before extraction
 # If fewer than this many control IDs are found, warn (not abandon)
 MIN_CONTROLS_WARNING = 3
 
@@ -154,6 +155,15 @@ def _extract_csv(path: Path) -> str:
 
 def extract_text(path: Path) -> str:
     """Dispatch to the correct extractor based on file suffix."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = 0
+    if size > _MAX_PARSE_SIZE:
+        raise ValueError(
+            f"File '{path.name}' is {size // (1024*1024)} MB; "
+            f"maximum supported size is {_MAX_PARSE_SIZE // (1024*1024)} MB."
+        )
     suffix = path.suffix.lower()
     if suffix == ".docx":
         return _extract_docx(path)

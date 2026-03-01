@@ -10,6 +10,8 @@ from collections import defaultdict
 from difflib import SequenceMatcher
 from typing import List
 
+_BOILERPLATE_THRESHOLD = 0.80   # similarity ratio above which narratives are flagged as copy-paste
+_COVERAGE_GAP_THRESHOLD = 0.50  # fraction of NOT_FOUND controls that triggers a family gap warning
 
 # NIST 800-53r5 Priority 1 controls (highest criticality)
 _P1_CONTROLS = {
@@ -129,7 +131,7 @@ def analyze_assessment(assessment, controls: list) -> dict:
     boilerplate_ids: set[str] = set()
     for i, (id_a, text_a) in enumerate(narratives):
         for id_b, text_b in narratives[i + 1:]:
-            if _similarity(text_a, text_b) > 0.80:
+            if _similarity(text_a, text_b) > _BOILERPLATE_THRESHOLD:
                 boilerplate_ids.add(id_a)
                 boilerplate_ids.add(id_b)
 
@@ -144,7 +146,7 @@ def analyze_assessment(assessment, controls: list) -> dict:
     coverage_gaps: list[dict] = []
     for family, grades in family_grades.items():
         not_found_ct = grades.count("NOT_FOUND")
-        if not_found_ct / len(grades) > 0.50:
+        if not_found_ct / len(grades) > _COVERAGE_GAP_THRESHOLD:
             coverage_gaps.append({
                 "family":    family,
                 "not_found": not_found_ct,

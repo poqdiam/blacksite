@@ -28,11 +28,12 @@ import xml.etree.ElementTree as ET
 
 log = logging.getLogger("blacksite.rss")
 
-CACHE_DIR         = Path("static/feed_cache")
-CACHE_TTL         = 3600   # seconds (1 hour)
-MAX_ITEMS         = 40     # items per feed fetch
-FETCH_TIMEOUT     = 8      # seconds
-BACKOFF_THRESHOLD = 3      # skip fetch if consecutive errors >= this
+CACHE_DIR             = Path("static/feed_cache")
+CACHE_TTL             = 3600         # seconds (1 hour)
+MAX_ITEMS             = 40           # items per feed fetch
+FETCH_TIMEOUT         = 8            # seconds
+BACKOFF_THRESHOLD     = 3            # skip fetch if consecutive errors >= this
+MAX_CACHE_FILE_BYTES  = 512 * 1024   # 512 KB — refuse to write oversized cache files
 
 
 def _cache_path(feed_key: str) -> Path:
@@ -131,7 +132,12 @@ def _get_cached(feed_key: str, url: str) -> tuple[list[dict], Optional[str]]:
         items = _fetch_feed(url)
         if items:
             try:
-                path.write_text(json.dumps(items))
+                payload = json.dumps(items)
+                if len(payload.encode()) <= MAX_CACHE_FILE_BYTES:
+                    path.write_text(payload)
+                else:
+                    log.warning("Feed cache for '%s' exceeds %d KB — skipping write.",
+                                feed_key, MAX_CACHE_FILE_BYTES // 1024)
             except Exception:
                 pass
         return items, None

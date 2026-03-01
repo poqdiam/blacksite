@@ -35,10 +35,13 @@ _STOP_WORDS = {
 }
 
 
+_MAX_KEYWORDS = 100   # cap to prevent runaway scoring on pathological inputs
+
+
 def _keywords(text: str) -> list[str]:
     """
     Extract meaningful keywords from a NIST control statement.
-    Returns unique lowercase tokens ≥4 chars, excluding stop words.
+    Returns unique lowercase tokens ≥4 chars, excluding stop words (capped at _MAX_KEYWORDS).
     """
     tokens = re.findall(r'[a-zA-Z]{4,}', text.lower())
     seen = set()
@@ -47,6 +50,8 @@ def _keywords(text: str) -> list[str]:
         if t not in _STOP_WORDS and t not in seen:
             seen.add(t)
             out.append(t)
+            if len(out) >= _MAX_KEYWORDS:
+                break
     return out
 
 
