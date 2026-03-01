@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Confirm Remove User{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/admin">Admin</a>
+  <span class="sep">›</span>
+  <a href="/admin/users">User Management</a>
+  <span class="sep">›</span>
+  <span>Remove User</span>
+</div>
+
+<div style="max-width:520px;margin:40px auto">
+  <div class="card" style="border-color:rgba(244,67,54,0.4);background:rgba(244,67,54,0.04);padding:32px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+      <span style="font-size:1.6em">⚠</span>
+      <div>
+        <h2 style="margin:0;color:var(--red)">Remove User</h2>
+        <p style="margin:4px 0 0;font-size:0.85em;color:var(--muted)">This will deactivate the account. The user will be archived for 365 days.</p>
+      </div>
+    </div>
+
+    <div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:16px 20px;margin-bottom:24px">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+        <span style="font-size:0.7em;color:var(--muted);text-transform:uppercase;letter-spacing:1px;min-width:80px">Username</span>
+        <span style="font-family:var(--mono);color:var(--text)">{{ profile.remote_user }}</span>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+        <span style="font-size:0.7em;color:var(--muted);text-transform:uppercase;letter-spacing:1px;min-width:80px">Role</span>
+        <span style="color:var(--text)">{{ profile.role or 'employee' }}</span>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span style="font-size:0.7em;color:var(--muted);text-transform:uppercase;letter-spacing:1px;min-width:80px">Systems</span>
+        <span style="color:{% if assign_ct > 0 %}var(--yellow){% else %}var(--muted){% endif %}">
+          {{ assign_ct }} assignment{{ 's' if assign_ct != 1 }}
+        </span>
+      </div>
+    </div>
+
+    {% if assign_ct > 0 %}
+    <div style="background:rgba(255,179,0,0.08);border:1px solid rgba(255,179,0,0.25);border-radius:6px;padding:12px 16px;margin-bottom:20px;font-size:0.82em;color:var(--yellow)">
+      This user is assigned to {{ assign_ct }} system{{ 's' if assign_ct != 1 }}.
+      Assignments will remain but the user will lose access.
+    </div>
+    {% endif %}
+
+    <form method="post" action="/admin/users/{{ profile.remote_user }}/remove/confirm">
+      <div class="form-group" style="margin-bottom:20px">
+        <label class="form-label" style="color:var(--muted);font-size:0.78em;text-transform:uppercase;letter-spacing:1px">
+          Removal Reason <span style="color:var(--red)">*</span>
+        </label>
+        <select name="removal_reason" class="form-control" required
+                style="background:rgba(0,0,0,0.3);border-color:rgba(244,67,54,0.3);color:var(--text)">
+          <option value="Termination">Termination — Employment ended</option>
+          <option value="Role Elimination">Role Elimination — Position no longer exists</option>
+          <option value="Security Violation">Security Violation — Policy or security breach</option>
+          <option value="Contractor Offboarding">Contractor Offboarding — Contract concluded</option>
+          <option value="Account Compromise">Account Compromise — Credentials believed compromised</option>
+        </select>
+        <p style="font-size:0.75em;color:var(--muted);margin-top:6px">
+          This reason will be recorded in the audit log and shadow archive.
+        </p>
+      </div>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <button type="submit" class="btn"
+                style="background:rgba(244,67,54,0.15);color:var(--red);border:1px solid rgba(244,67,54,0.4);padding:10px 20px;font-weight:700">
+          Yes, Remove User
+        </button>
+        <a href="/admin/users" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

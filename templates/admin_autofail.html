@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Auto-Fail Events{% endblock %}
+
+{% block head %}
+<style>
+  .af-trigger { font-size: 0.72em; font-family: var(--mono); text-transform: uppercase; letter-spacing: 1px;
+                padding: 2px 7px; border-radius: 3px; }
+  .af-parameter_drift  { background: rgba(255,179,0,0.12);  color: var(--yellow); }
+  .af-review_overdue   { background: rgba(244,67,54,0.12);  color: var(--red); }
+  .af-document_expired { background: rgba(244,67,54,0.12);  color: var(--red); }
+  .af-evidence_stale   { background: rgba(158,158,158,0.12);color: var(--grey); }
+  .af-config_drift     { background: rgba(255,179,0,0.12);  color: var(--yellow); }
+  .af-patch_sla_breach { background: rgba(244,67,54,0.18);  color: var(--red); font-weight:700; }
+  .af-governance_drift { background: rgba(157,78,221,0.15); color: #b06eff; }
+  .sev-critical { color:#f44336;font-weight:700 }
+  .sev-high     { color:#ff7043;font-weight:600 }
+  .sev-moderate { color:var(--yellow) }
+  .sev-low      { color:var(--muted) }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="section-header" style="margin-bottom:4px">Auto-Fail Events</div>
+    <div style="font-size:0.82em;color:var(--muted)">System-detected control failures · {{ events|length }} records</div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <form method="GET" action="/admin/autofail" style="display:flex;gap:6px">
+      <select name="system_id" onchange="this.form.submit()"
+              style="background:var(--surface);border:1px solid var(--border);color:var(--text);
+                     padding:5px 8px;border-radius:4px;font-size:0.8em">
+        <option value="">All Systems</option>
+        {% for s in systems %}
+        <option value="{{ s.id }}" {% if filter_system == s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    <button class="btn btn-primary btn-sm" onclick="runEvaluate()" id="evalBtn">▶ Run Evaluation</button>
+  </div>
+</div>
+
+<div id="evalFeedback" style="font-size:0.8em;color:var(--muted);margin-bottom:14px;min-height:1.2em"></div>
+
+{# ── Stats strip ──────────────────────────────────────────────────────────── #}
+{% set open_ct   = events | selectattr('status','equalto','open')   | list | length %}
+{% set total_ct  = events | length %}
+<div class="stats" style="margin-bottom:24px">
+  <div class="stat"><div class="stat-value">{{ total_ct }}</div><div class="stat-label">Total Events</div></div>
+  <div class="stat"><div class="stat-value" style="color:var(--red)">{{ open_ct }}</div><div class="stat-label">Open</div></div>
+  <div class="stat"><div class="stat-value" style="color:var(--green)">{{ total_ct - open_ct }}</div><div class="stat-label">Resolved</div></div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--red)">
+      {{ events | selectattr('severity','in',['Critical','High']) | list | length }}
+    </div>
+    <div class="stat-label">Critical/High</div>
+  </div>
+</div>
+
+{# ── Events table ─────────────────────────────────────────────────────────── #}
+<div class="card" style="padding:0;overflow:hidden">
+  {% if events %}
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Trigger</th>
+        <th>System</th>
+        <th>Title</th>
+        <th>Severity</th>
+        <th>POA&amp;M</th>
+        <th>Status</th>
+        <th>Detected</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in events %}
+      <tr>
+        <td class="mono" style="font-size:0.72em;color:var(--muted)">#{{ e.id }}</td>
+        <td><span class="af-trigger af-{{ e.trigger_type }}">{{ e.trigger_type | replace('_',' ') }}</span></td>
+        <td style="font-size:0.82em;color:var(--text)">
+          {% set sys_name = systems | selectattr('id','equalto',e.system_id) | map(attribute='abbreviation') | first %}
+          {{ sys_name or e.system_id[:8] }}
+        </td>
+        <td style="font-size:0.82em;max-width:320px;word-break:break-word">{{ e.title }}</td>
+        <td>
+          <span class="sev-{{ e.severity | lower }}">{{ e.severity }}</span>
+        </td>
+        <td>
+          {% if e.poam_id %}
+          <a href="/poam/{{ e.poam_id }}" class="mono" style="font-size:0.78em;color:var(--cyan)">↗</a>
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if e.status == 'open' %}<span class="badge badge-processing">Open</span>
+          {% elif e.status == 'resolved' %}<span class="badge badge-complete">Resolved</span>
+          {% else %}<span class="badge">{{ e.status }}</span>{% endif %}
+        </td>
+        <td style="font-size:0.78em;color:var(--muted);white-space:nowrap">
+          {{ e.created_at.strftime('%Y-%m-%d') if e.created_at else '—' }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:40px;text-align:center;color:var(--muted)">
+    No auto-fail events. Run evaluation to detect issues.
+  </div>
+  {% endif %}
+</div>
+
+{# ── Feed ingest section ───────────────────────────────────────────────────── #}
+<div class="card" style="margin-top:24px;padding:20px 24px">
+  <div class="card-title" style="margin-bottom:12px">Standards Feeds</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <button class="btn btn-ghost btn-sm" onclick="ingestFeed('nist')" id="nistBtn">↻ Ingest NIST Publications</button>
+    <button class="btn btn-ghost btn-sm" onclick="ingestFeed('nvd')"  id="nvdBtn">↻ Ingest NVD CVEs (30d)</button>
+  </div>
+  <div id="feedFeedback" style="font-size:0.78em;color:var(--muted);margin-top:10px;min-height:1.2em"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function runEvaluate() {
+  const btn = document.getElementById('evalBtn');
+  const fb  = document.getElementById('evalFeedback');
+  btn.disabled = true; btn.textContent = 'Running…';
+  const sysId = new URLSearchParams(window.location.search).get('system_id') || '';
+  try {
+    const r = await fetch('/admin/autofail/evaluate?system_id=' + encodeURIComponent(sysId), { method: 'POST' });
+    const j = await r.json();
+    fb.textContent = `✓ Evaluation complete — ${j.events} event(s) created/updated. Refreshing…`;
+    fb.style.color = 'var(--green)';
+    setTimeout(() => window.location.reload(), 1200);
+  } catch(e) {
+    fb.textContent = 'Evaluation error: ' + e;
+    fb.style.color = 'var(--red)';
+    btn.disabled = false; btn.textContent = '▶ Run Evaluation';
+  }
+}
+
+async function ingestFeed(type) {
+  const btn = document.getElementById(type + 'Btn');
+  const fb  = document.getElementById('feedFeedback');
+  btn.disabled = true; btn.textContent = 'Fetching…';
+  try {
+    const r = await fetch('/admin/feeds/' + type + '/ingest', { method: 'POST' });
+    const j = await r.json();
+    fb.textContent = `✓ ${type.toUpperCase()} ingest: ${j.created} new, ${j.updated} updated.`;
+    fb.style.color = 'var(--green)';
+  } catch(e) {
+    fb.textContent = type.toUpperCase() + ' ingest failed: ' + e;
+    fb.style.color = 'var(--red)';
+  }
+  btn.disabled = false;
+  btn.textContent = type === 'nist' ? '↻ Ingest NIST Publications' : '↻ Ingest NVD CVEs (30d)';
+}
+</script>
+{% endblock %}

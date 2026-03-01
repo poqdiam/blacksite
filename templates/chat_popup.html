@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chat — {{ room_title }}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #0f0f1a;
+    --surface:     #14141f;
+    --border:      #1e1e30;
+    --text:        #e0e0f0;
+    --muted:       #6b6b8a;
+    --cyan:        #00ffcc;
+    --red:         #f44336;
+    --chat-online: #76ff03;
+    --chat-away:   #f44336;
+    --chat-offline:#3a3a4a;
+    --chat-own:       rgba(0,40,24,1);
+    --chat-own-text:  var(--cyan);
+    --chat-other:     rgba(20,20,37,1);
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+  }
+
+  #popup-wrap {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* Header */
+  #popup-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    height: 40px;
+    min-height: 40px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85em;
+    font-weight: 600;
+    user-select: none;
+  }
+  #popup-header .conn-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #555; flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .status-dot {
+    display: inline-block;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--chat-offline);
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .status-dot.status-online  { background: var(--chat-online) !important; }
+  .status-dot.status-away    { background: var(--chat-away)   !important; }
+  .status-dot.status-offline { background: var(--chat-offline); }
+
+  /* Message body */
+  #popup-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  #popup-body::-webkit-scrollbar { width: 4px; }
+  #popup-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Message bubbles */
+  .msg-wrap { display: flex; flex-direction: column; max-width: 85%; }
+  .msg-wrap.own   { align-self: flex-end;   align-items: flex-end; }
+  .msg-wrap.other { align-self: flex-start; align-items: flex-start; }
+
+  .msg-sender { font-size: 0.68em; color: var(--muted); margin-bottom: 2px; }
+
+  .msg-bubble {
+    padding: 6px 10px;
+    border-radius: 12px;
+    font-size: 0.83em;
+    line-height: 1.45;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+  .msg-wrap.own   .msg-bubble { background: var(--chat-own);   border-radius: 12px 12px 4px 12px; color: var(--chat-own-text); }
+  .msg-wrap.other .msg-bubble { background: var(--chat-other); border-radius: 12px 12px 12px 4px; color: var(--text); }
+
+  .msg-time { font-size: 0.65em; color: var(--muted); margin-top: 2px; }
+
+  /* Typing */
+  #popup-typing {
+    font-size: 0.72em;
+    color: var(--muted);
+    font-style: italic;
+    padding: 0 10px 4px;
+    min-height: 18px;
+  }
+
+  /* Input row */
+  #popup-input-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  #popup-input-row textarea {
+    flex: 1;
+    resize: none;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.82em;
+    padding: 5px 8px;
+    line-height: 1.4;
+    max-height: 80px;
+    overflow-y: auto;
+    outline: none;
+    font-family: inherit;
+  }
+  #popup-input-row textarea:focus { border-color: var(--cyan); }
+  #popup-input-row button {
+    background: none;
+    border: none;
+    color: var(--cyan);
+    cursor: pointer;
+    font-size: 1.1em;
+    padding: 4px 6px;
+    flex-shrink: 0;
+    line-height: 1;
+    opacity: 0.8;
+    transition: opacity 0.15s;
+  }
+  #popup-input-row button:hover { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="popup-wrap">
+  <div id="popup-header">
+    <span class="conn-dot" id="connDot" title="connecting"></span>
+    <span class="status-dot status-offline" id="peerDot" title="offline"></span>
+    <span id="roomLabel">{{ room_title }}</span>
+    <span style="flex:1"></span>
+    <span style="font-size:0.72em;color:var(--muted)">BLACKSITE SECURE CHAT</span>
+  </div>
+
+  <div id="popup-body"></div>
+  <div id="popup-typing"></div>
+
+  <div id="popup-input-row">
+    <textarea id="msgInput" rows="1" placeholder="Message…"></textarea>
+    <button id="sendBtn" title="Send">➤</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  "use strict";
+
+  const ROOM       = {{ room_json|safe }};
+  const MY_USER    = {{ me_json|safe }};
+
+  let ws = null;
+  let lastMsgId = 0;
+  let reconnectDelay = 1000;
+  let reconnectTimer = null;
+  let typingTimer    = null;
+  const MAX_DELAY = 30000;
+
+  const bodyEl    = document.getElementById("popup-body");
+  const typingEl  = document.getElementById("popup-typing");
+  const input     = document.getElementById("msgInput");
+  const sendBtn   = document.getElementById("sendBtn");
+  const connDot   = document.getElementById("connDot");
+  const peerDot   = document.getElementById("peerDot");
+
+  // Determine peer username for DM rooms
+  const isDM   = ROOM !== "@group";
+  const peer   = isDM ? ROOM.split(":").find(u => u !== MY_USER) : null;
+
+  function _connState(state) {
+    connDot.style.background =
+      state === "open"  ? "#76ff03" :
+      state === "error" ? "#f44336" : "#555";
+    connDot.title = state;
+  }
+
+  function _fmtTime(iso) {
+    if (!iso) return "";
+    try { return new Date(iso).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}); }
+    catch { return ""; }
+  }
+
+  function _renderMsg(msg) {
+    const isOwn = msg.from_user === MY_USER;
+    const wrap  = document.createElement("div");
+    wrap.className = `msg-wrap ${isOwn ? "own" : "other"}`;
+    if (!isOwn) {
+      const s = document.createElement("div");
+      s.className = "msg-sender";
+      s.textContent = msg.from_user;
+      wrap.appendChild(s);
+    }
+    const b = document.createElement("div");
+    b.className = "msg-bubble";
+    b.textContent = msg.body;
+    const t = document.createElement("div");
+    t.className = "msg-time";
+    t.textContent = _fmtTime(msg.sent_at);
+    wrap.append(b, t);
+    bodyEl.appendChild(wrap);
+    bodyEl.scrollTop = bodyEl.scrollHeight;
+    lastMsgId = Math.max(lastMsgId, msg.id || 0);
+  }
+
+  function doSend() {
+    const body = input.value.trim();
+    if (!body || !ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({type: "message", room: ROOM, body}));
+    input.value = "";
+    input.style.height = "auto";
+  }
+
+  sendBtn.addEventListener("click", doSend);
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doSend(); }
+  });
+  input.addEventListener("input", () => {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 80) + "px";
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({type: "typing", room: ROOM}));
+    }
+  });
+
+  async function loadHistory() {
+    try {
+      const res = await fetch("/api/admin-chat/history/" + encodeURIComponent(ROOM));
+      if (!res.ok) return;
+      const msgs = await res.json();
+      msgs.forEach(_renderMsg);
+      if (msgs.length && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({type: "read", room: ROOM, last_id: lastMsgId}));
+      }
+    } catch {}
+  }
+
+  function connect() {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(`${proto}//${location.host}/ws/admin-chat`);
+    _connState("connecting");
+
+    ws.addEventListener("open", () => {
+      reconnectDelay = 1000;
+      clearTimeout(reconnectTimer);
+      _connState("open");
+      loadHistory();
+    });
+
+    ws.addEventListener("message", evt => {
+      let data;
+      try { data = JSON.parse(evt.data); } catch { return; }
+
+      if (data.type === "presence" && peer) {
+        const u = data.users.find(u => u.username === peer);
+        const status = u ? u.status : "offline";
+        peerDot.className = `status-dot status-${status}`;
+        peerDot.title = u && u.away_msg ? `Away: ${u.away_msg}` : status;
+
+      } else if (data.type === "message" && data.room === ROOM) {
+        _renderMsg(data);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({type: "read", room: ROOM, last_id: lastMsgId}));
+        }
+
+      } else if (data.type === "typing" && data.room === ROOM && data.from_user !== MY_USER) {
+        typingEl.textContent = `${data.from_user} is typing…`;
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => { typingEl.textContent = ""; }, 3000);
+      }
+    });
+
+    ws.addEventListener("close", evt => {
+      _connState("closed");
+      if (evt.code === 4003) return;
+      reconnectTimer = setTimeout(() => {
+        reconnectDelay = Math.min(reconnectDelay * 2, MAX_DELAY);
+        connect();
+      }, reconnectDelay);
+    });
+
+    ws.addEventListener("error", () => _connState("error"));
+  }
+
+  connect();
+})();
+</script>
+</body>
+</html>

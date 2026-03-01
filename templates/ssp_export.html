@@ -711,9 +711,164 @@
     </div>
   </div>
 
+  {# ══════════════════════════════════════════════════════════════════════════
+     APPENDICES
+     Rendered in two modes:
+       controls  → Appendix Registry table (title, doc ID, version, date, owner, storage ref)
+       full      → Appendix Registry table PLUS each appendix embedded or linked inline
+  ═══════════════════════════════════════════════════════════════════════════ #}
+  {% if appendix_items %}
+  <div class="ssp-section section-break">
+    <div class="ssp-section-title" style="margin-bottom:18px">Appendices</div>
+
+    {# ── Appendix Registry (both modes) ─────────────────────────────────── #}
+    <h3 style="font-size:0.9em;letter-spacing:1px;text-transform:uppercase;
+               color:#444;margin-bottom:10px">
+      Appendix Registry
+      {% if ssp_mode == 'controls' %}
+        <span style="font-size:0.8em;font-weight:400;color:#888;letter-spacing:0;text-transform:none">
+          — reference listing only; files not embedded in this output mode
+        </span>
+      {% else %}
+        <span style="font-size:0.8em;font-weight:400;color:#888;letter-spacing:0;text-transform:none">
+          — embedded copies follow the registry
+        </span>
+      {% endif %}
+    </h3>
+
+    <table class="data-table" style="width:100%;border-collapse:collapse;font-size:0.82em;margin-bottom:20px">
+      <thead>
+        <tr style="background:#f5f5f5;text-align:left">
+          <th style="padding:8px 10px;border:1px solid #ccc;white-space:nowrap">Label</th>
+          <th style="padding:8px 10px;border:1px solid #ccc;white-space:nowrap">Document ID</th>
+          <th style="padding:8px 10px;border:1px solid #ccc">Title</th>
+          <th style="padding:8px 10px;border:1px solid #ccc;white-space:nowrap">Type</th>
+          <th style="padding:8px 10px;border:1px solid #ccc;white-space:nowrap">Version</th>
+          <th style="padding:8px 10px;border:1px solid #ccc;white-space:nowrap">Date</th>
+          <th style="padding:8px 10px;border:1px solid #ccc">Owner</th>
+          <th style="padding:8px 10px;border:1px solid #ccc">Storage Reference</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in appendix_items %}
+        <tr style="border-bottom:1px solid #e0e0e0">
+          <td style="padding:7px 10px;border:1px solid #ddd;white-space:nowrap;font-weight:600">
+            {{ item.label }}
+          </td>
+          <td style="padding:7px 10px;border:1px solid #ddd;font-family:'Courier New',monospace;font-size:0.9em;white-space:nowrap">
+            {{ item.doc_id }}
+          </td>
+          <td style="padding:7px 10px;border:1px solid #ddd">{{ item.title }}</td>
+          <td style="padding:7px 10px;border:1px solid #ddd;white-space:nowrap;
+                     text-transform:uppercase;font-size:0.85em;color:#555">
+            {{ item.doc_type | replace('_', ' ') }}
+          </td>
+          <td style="padding:7px 10px;border:1px solid #ddd;white-space:nowrap">{{ item.version }}</td>
+          <td style="padding:7px 10px;border:1px solid #ddd;white-space:nowrap">{{ item.date }}</td>
+          <td style="padding:7px 10px;border:1px solid #ddd">{{ item.owner }}</td>
+          <td style="padding:7px 10px;border:1px solid #ddd;font-family:'Courier New',monospace;
+                     font-size:0.85em;word-break:break-all">
+            {% if item.has_file %}
+              {{ item.storage_ref }}
+              {% if not item.embeddable %}
+                <span style="color:#888;font-style:italic;font-family:sans-serif"> (binary — not embeddable)</span>
+              {% endif %}
+            {% else %}
+              <span style="color:#999;font-style:italic">No file on record</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {# ── Embedded appendices (Full Report mode only) ─────────────────────── #}
+    {% if ssp_mode == 'full' %}
+      {% for item in appendix_items %}
+        {% if item.content_b64 %}
+        <div class="section-break" style="margin-bottom:32px;page-break-before:always">
+          <div style="border-top:2px solid #1a1a2e;padding-top:20px;margin-bottom:16px">
+            <span style="font-size:0.75em;letter-spacing:1px;text-transform:uppercase;color:#888">
+              {{ item.label }} · {{ item.doc_id }}
+            </span>
+            <div style="font-size:1.05em;font-weight:700;color:#111;margin-top:4px">
+              {{ item.title }}
+            </div>
+            <div style="font-size:0.78em;color:#888;margin-top:2px">
+              Type: {{ item.doc_type | replace('_', ' ') | upper }} &nbsp;·&nbsp;
+              Version: {{ item.version }} &nbsp;·&nbsp;
+              Date: {{ item.date }} &nbsp;·&nbsp;
+              Owner: {{ item.owner }}
+            </div>
+          </div>
+
+          {% if item.content_mime == 'application/pdf' %}
+          <object
+            data="data:application/pdf;base64,{{ item.content_b64 }}"
+            type="application/pdf"
+            style="width:100%;height:900px;border:1px solid #ddd;border-radius:4px">
+            <div style="padding:20px;background:#f5f5f5;border:1px solid #ddd;font-size:0.85em;color:#555">
+              PDF viewer not available in this browser.
+              File: <code>{{ item.storage_ref }}</code>
+            </div>
+          </object>
+
+          {% elif item.content_mime in ('image/png', 'image/jpeg', 'image/jpg') %}
+          <img src="data:{{ item.content_mime }};base64,{{ item.content_b64 }}"
+               alt="{{ item.title }}"
+               style="max-width:100%;border:1px solid #ddd;border-radius:4px;display:block">
+
+          {% elif item.content_mime == 'text/plain' %}
+          <pre style="background:#f8f8f8;border:1px solid #ddd;border-radius:4px;
+                      padding:16px;font-size:0.82em;white-space:pre-wrap;word-wrap:break-word;
+                      max-height:600px;overflow-y:auto;font-family:'Courier New',monospace">{{ item.content_b64 | b64decode | default('(content unavailable)') }}</pre>
+          {% endif %}
+
+        </div>
+        {% elif item.has_file %}
+        <div style="margin-bottom:20px;padding:14px 16px;background:#fafafa;
+                    border:1px solid #e0e0e0;border-radius:4px;font-size:0.83em">
+          <strong>{{ item.label }} — {{ item.title }}</strong><br>
+          <span style="color:#888">
+            {{ item.doc_id }} · {{ item.doc_type | replace('_', ' ') | upper }}
+            · {{ item.storage_ref }}
+          </span><br>
+          <span style="color:#999;font-style:italic">
+            File format ({{ item.content_mime }}) cannot be embedded in this HTML document.
+            Locate the file at the storage reference above.
+          </span>
+        </div>
+        {% else %}
+        <div style="margin-bottom:20px;padding:14px 16px;background:#fff8e1;
+                    border:1px solid #ffe082;border-radius:4px;font-size:0.83em">
+          <strong>{{ item.label }} — {{ item.title }}</strong><br>
+          <span style="color:#999;font-style:italic">
+            No file uploaded for this document. Record exists in system registry only.
+          </span>
+        </div>
+        {% endif %}
+      {% endfor %}
+    {% endif %}{# end full mode #}
+
+  </div>
+  {% else %}
+  {# No appendix items — controls-only note #}
+  {% if ssp_mode == 'controls' %}
+  <div class="ssp-section">
+    <div class="ssp-section-title">Appendices</div>
+    <div style="padding:16px;background:#f8f9fa;border:1px solid #ddd;border-radius:4px;
+                font-size:0.85em;color:#666">
+      No approved ATO documents or evidence artifacts are associated with this system.
+      Appendices will appear here once documents are uploaded and approved in the BLACKSITE platform.
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}{# end appendix_items #}
+
   {# ── Footer ───────────────────────────────────────────────────────────── #}
   <div class="doc-footer">
     Generated by BLACKSITE GRC Platform &middot; {{ brand }} &middot; {{ generated_at }}
+    {% if ssp_mode == 'full' %}&middot; Full Report{% elif ssp_mode == 'controls' %}&middot; Controls Only{% endif %}
     <br>
     NIST SP 800-53 Rev 5 &middot; FIPS 199 &middot; NIST SP 800-18
   </div>

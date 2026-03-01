@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — {% if obs %}{{ obs.title }}{% else %}New Observation{% endif %}{% endblock %}
+
+{% block head %}
+<style>
+  .detail-grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
+  @media (max-width: 860px) { .detail-grid { grid-template-columns: 1fr; } }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+  .sev-critical { background:rgba(244,67,54,.15);  color:var(--red);    border-radius:3px;padding:2px 8px;font-size:.72em;font-weight:700; }
+  .sev-high     { background:rgba(255,107,53,.15); color:#ff6b35;       border-radius:3px;padding:2px 8px;font-size:.72em;font-weight:700; }
+  .sev-moderate { background:rgba(255,179,0,.15);  color:var(--yellow); border-radius:3px;padding:2px 8px;font-size:.72em;font-weight:700; }
+  .sev-low      { background:rgba(0,200,83,.15);   color:var(--green);  border-radius:3px;padding:2px 8px;font-size:.72em;font-weight:700; }
+  .sev-info     { background:rgba(158,158,158,.1); color:var(--grey);   border-radius:3px;padding:2px 8px;font-size:.72em;font-weight:700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/observations">Observations</a>
+  <span class="sep">/</span>
+  <span>{% if obs %}{{ obs.title[:60] }}{% else %}New{% endif %}</span>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:14px;margin-bottom:22px;flex-wrap:wrap">
+  <h1 style="margin:0">{% if obs %}Edit Observation{% else %}New Observation{% endif %}</h1>
+  {% if obs %}
+  {% set sev = (obs.severity or 'Info') | lower %}
+  <span class="sev-{{ sev }}">{{ obs.severity or 'Info' }}</span>
+  <span style="font-size:.82em;color:var(--muted)">{{ (obs.status or 'open') | replace('_',' ') | title }}</span>
+  {% endif %}
+</div>
+
+<div class="detail-grid">
+
+  {# ── Left: Edit form ── #}
+  <div>
+    <div class="card" style="padding:22px">
+      <form method="post" action="{% if obs %}/observations/{{ obs.id }}/update{% else %}/observations{% endif %}">
+        <div style="display:grid;gap:14px">
+
+          <div>
+            <label class="form-label">Title <span style="color:var(--red)">*</span></label>
+            <input type="text" name="title" class="form-control" required
+                   value="{{ obs.title if obs else '' }}" placeholder="Brief finding description">
+          </div>
+
+          <div class="form-row">
+            <div>
+              <label class="form-label">System</label>
+              <select name="system_id" class="form-control">
+                <option value="">— No System —</option>
+                {% for s in systems %}
+                <option value="{{ s.id }}"
+                  {% if obs and obs.system_id == s.id %}selected
+                  {% elif not obs and prefill_system_id == s.id %}selected{% endif %}>
+                  {{ s.name }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Source</label>
+              <select name="source" class="form-control">
+                {% for src in ['assessment','scan','audit','pentest','self_report','threat_intel'] %}
+                <option value="{{ src }}" {% if obs and obs.source == src %}selected{% endif %}>
+                  {{ src | replace('_',' ') | title }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div>
+              <label class="form-label">Observation Type</label>
+              <select name="obs_type" class="form-control">
+                {% for ot in ['finding','shortcoming','deviation','risk_indicator'] %}
+                <option value="{{ ot }}" {% if obs and obs.obs_type == ot %}selected{% endif %}>
+                  {{ ot | replace('_',' ') | title }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="form-label">Severity</label>
+              <select name="severity" class="form-control">
+                {% for sv in ['Critical','High','Moderate','Low','Info'] %}
+                <option value="{{ sv }}" {% if (obs.severity if obs else 'Moderate') == sv %}selected{% endif %}>{{ sv }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label">Description</label>
+            <textarea name="description" class="form-control" style="min-height:100px;resize:vertical"
+                      placeholder="Detailed description of the finding…">{{ obs.description if obs else '' }}</textarea>
+          </div>
+
+          <div>
+            <label class="form-label">Related Controls <span style="color:var(--muted);font-weight:400">(comma-separated, e.g. ac-1, ac-2)</span></label>
+            <input type="text" name="control_ids" class="form-control"
+                   value="{{ ctrl_list | join(', ') if ctrl_list is defined and ctrl_list else '' }}"
+                   placeholder="ac-1, sc-8, ia-2">
+          </div>
+
+          <div>
+            <label class="form-label">Scope Tags <span style="color:var(--muted);font-weight:400">(comma-separated)</span></label>
+            <input type="text" name="scope_tags" class="form-control"
+                   value="{{ scope_list | join(', ') if scope_list is defined and scope_list else '' }}"
+                   placeholder="environment:prod, component:db">
+          </div>
+
+          <div class="form-row">
+            <div>
+              <label class="form-label">Assigned To</label>
+              <input type="text" name="assigned_to" class="form-control"
+                     value="{{ obs.assigned_to if obs else '' }}" placeholder="username">
+            </div>
+            <div>
+              <label class="form-label">Due Date</label>
+              <input type="date" name="due_date" class="form-control"
+                     value="{{ obs.due_date if obs else '' }}">
+            </div>
+          </div>
+
+          {% if obs %}
+          <div>
+            <label class="form-label">Status</label>
+            <select name="status" class="form-control">
+              {% for st in ['open','promoted','closed','false_positive'] %}
+              <option value="{{ st }}" {% if obs.status == st %}selected{% endif %}>
+                {{ st | replace('_',' ') | title }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
+
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button type="submit" class="btn btn-primary">
+              {% if obs %}Save Changes{% else %}Create Observation{% endif %}
+            </button>
+            <a href="/observations" class="btn btn-ghost">Cancel</a>
+          </div>
+
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# ── Right: Action cards ── #}
+  <aside>
+
+    {% if obs and obs.status == 'open' %}
+    <div class="card" style="padding:18px;margin-bottom:14px;border-color:rgba(0,255,204,.25)">
+      <div class="card-title" style="color:var(--cyan)">Promote to POA&amp;M</div>
+      <p style="font-size:.82em;color:var(--muted);margin-bottom:14px">
+        Creates a Plan of Action &amp; Milestones item from this observation and
+        marks it as promoted.
+      </p>
+      <form method="post" action="/observations/{{ obs.id }}/promote"
+            onsubmit="return confirm('Promote this observation to a POA&M item?')">
+        <button type="submit" class="btn btn-primary btn-sm" style="width:100%">
+          → Promote to POA&amp;M
+        </button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if obs and obs.promoted_to_poam and promoted_poam %}
+    <div class="card" style="padding:18px;margin-bottom:14px;border-color:rgba(0,255,204,.2)">
+      <div class="card-title">Linked POA&amp;M Item</div>
+      <a href="/poam/{{ promoted_poam.id }}"
+         style="font-size:.88em;font-weight:600;color:var(--cyan)">
+        {{ promoted_poam.weakness_name[:60] }}
+      </a>
+      <div style="font-size:.75em;color:var(--muted);margin-top:4px">
+        Status: {{ (promoted_poam.status or '—') | replace('_',' ') | title }}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if obs and ctrl_list %}
+    <div class="card" style="padding:18px;margin-bottom:14px">
+      <div class="card-title">Linked Controls</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        {% for ctrl in ctrl_list %}
+        <a href="/controls/{{ ctrl }}"
+           class="mono"
+           style="font-size:.78em;color:var(--cyan);background:rgba(0,255,204,.07);
+                  padding:3px 8px;border-radius:3px;border:1px solid rgba(0,255,204,.15)">
+          {{ ctrl }}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if obs %}
+    <div class="card" style="padding:18px">
+      <div class="card-title">Audit Trail</div>
+      <div style="display:grid;gap:6px;font-size:.8em">
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--muted)">Created by</span>
+          <span class="mono">{{ obs.created_by or '—' }}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--muted)">Created at</span>
+          <span class="mono">{{ obs.created_at.strftime('%Y-%m-%d %H:%M') if obs.created_at else '—' }}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--muted)">Updated at</span>
+          <span class="mono">{{ obs.updated_at.strftime('%Y-%m-%d %H:%M') if obs.updated_at else '—' }}</span>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </aside>
+</div>
+{% endblock %}

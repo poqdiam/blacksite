@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Rotation: {{ system.name }}{% endblock %}
+
+{% block head %}
+<style>
+  .rot-day-badge {
+    display:inline-flex;align-items:center;justify-content:center;
+    width:48px;height:48px;border-radius:50%;
+    background:var(--cyan);color:#000;
+    font-size:1.1em;font-weight:900;margin-right:12px;flex-shrink:0;
+  }
+  .rot-instructions {
+    background:var(--bg);border:1px solid var(--border);border-radius:6px;
+    padding:16px;font-size:0.88em;line-height:1.7;white-space:pre-wrap;
+    margin-bottom:16px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+  <div>
+    <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">
+      <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a> /
+      <a href="/systems/{{ system.id }}/daily" style="color:var(--muted)">Daily Ops</a> / Rotation
+    </div>
+    <h1 style="font-size:1.3em;margin:0">Deep Work Rotation</h1>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/systems/{{ system.id }}/rotation/calendar" class="btn btn-ghost btn-sm">Calendar View</a>
+    <a href="/systems/{{ system.id }}/rotation/history" class="btn btn-ghost btn-sm">History</a>
+    {% if rotation.paused %}
+    <form method="post" action="/systems/{{ system.id }}/rotation/resume" style="display:inline">
+      <button type="submit" class="btn btn-primary btn-sm">Resume Rotation</button>
+    </form>
+    {% else %}
+    <form method="post" action="/systems/{{ system.id }}/rotation/pause" style="display:inline"
+          onsubmit="return confirm('Pause rotation?')">
+      <button type="submit" class="btn btn-ghost btn-sm">Pause</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if rotation.paused %}
+<div style="padding:12px 16px;background:rgba(255,193,7,0.1);border:1px solid rgba(255,193,7,0.3);border-radius:6px;margin-bottom:16px;font-size:0.88em;color:var(--yellow)">
+  ⏸ Rotation is paused. Current day is held at Day {{ rotation.current_day }}. Resume when ready.
+</div>
+{% endif %}
+
+{% if is_holiday %}
+<div style="padding:12px 16px;background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);border-radius:6px;margin-bottom:16px;font-size:0.88em;color:var(--red)">
+  🏛 Federal Holiday — no obligation to complete today's rotation item.
+</div>
+{% endif %}
+
+<div class="card" style="padding:24px;margin-bottom:16px">
+  <div style="display:flex;align-items:flex-start;margin-bottom:16px">
+    <div class="rot-day-badge">{{ rotation.current_day }}</div>
+    <div>
+      <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase">
+        Day {{ rotation.current_day }} of 25 — {{ current_item.get('duration_min', 90) }} min deep work
+      </div>
+      <h2 style="font-size:1.1em;margin:4px 0 0">{{ current_item.get('title', '—') }}</h2>
+    </div>
+  </div>
+
+  <div class="rot-instructions">{{ current_item.get('instructions', '') }}</div>
+
+  {% if current_item.get('report_type') %}
+  <div style="padding:8px 12px;background:rgba(0,188,212,0.1);border:1px solid rgba(0,188,212,0.3);border-radius:4px;font-size:0.8em;color:var(--cyan);margin-bottom:16px">
+    📄 Completing this day auto-generates a <strong>{{ current_item.report_type.replace('_',' ').title() }}</strong> report.
+  </div>
+  {% endif %}
+
+  {% if not rotation.paused %}
+  <form method="post" action="/systems/{{ system.id }}/rotation/complete">
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:0.75em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">
+        Evidence Label: {{ current_item.get('evidence_label', 'Evidence description') }}
+      </label>
+      <input type="text" name="evidence_name" placeholder="Brief description of evidence..."
+             style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px;color:var(--text);font-size:0.88em">
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:0.75em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Notes</label>
+      <textarea name="notes" rows="3" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px;color:var(--text);font-size:0.88em;resize:vertical"></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">
+      Mark Complete → Advance to Day {{ ((rotation.current_day % 25) + 1) }}
+    </button>
+  </form>
+  {% endif %}
+</div>
+
+{% if rotation.last_work_date %}
+<div style="font-size:0.78em;color:var(--muted)">Last work date: {{ rotation.last_work_date }}</div>
+{% endif %}
+{% endblock %}

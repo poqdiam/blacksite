@@ -136,6 +136,59 @@
             </select>
           </div>
 
+          {# ── Authorization Type ── #}
+          <div>
+            <label class="form-label">Authorization Type</label>
+            <div style="display:grid;gap:8px;margin-top:6px" id="auth-type-radios">
+              {% for at_val, at_label, at_desc in [
+                ('ATO',  'ATO — Full Authorization',         'Standard Authorization to Operate. No expiry enforced by this system.'),
+                ('ATP',  'ATP — Authority to Proceed',       '1-year maximum. Full ATO must be obtained before expiry.'),
+                ('IATO', 'IATO — Interim ATO',               '6-month maximum. Development systems only. Cannot be used for authorized systems.'),
+                ('EIS',  'EIS — External IT System',         'System is outside the authorization boundary. No AO decision will be recorded.'),
+              ] %}
+              <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;
+                            background:var(--surface);border:1px solid var(--border);border-radius:6px;
+                            cursor:pointer;transition:border-color .15s"
+                     id="lbl-{{ at_val }}"
+                     onclick="selectAuthType('{{ at_val }}')">
+                <input type="radio" name="authorization_type" value="{{ at_val }}"
+                       {% if at_val == 'ATO' %}checked{% endif %}
+                       style="margin-top:3px;accent-color:var(--cyan)"
+                       onchange="selectAuthType('{{ at_val }}')">
+                <div>
+                  <div style="font-size:.88em;font-weight:700;color:var(--text)">{{ at_label }}</div>
+                  <div style="font-size:.78em;color:var(--muted);margin-top:2px">{{ at_desc }}</div>
+                </div>
+              </label>
+              {% endfor %}
+            </div>
+
+            {# Helper text blocks #}
+            <div id="hint-ATO"  class="auth-hint" style="display:block;margin-top:10px;padding:10px 14px;border-radius:5px;background:rgba(0,255,204,.05);border:1px solid rgba(0,255,204,.15);font-size:.82em;color:var(--muted)">
+              <strong style="color:var(--cyan)">ATO</strong> — Full federal Authorization to Operate.
+              No system-enforced expiry. Renewal driven by agency policy (typically 3 years).
+            </div>
+            <div id="hint-ATP"  class="auth-hint" style="display:none;margin-top:10px;padding:10px 14px;border-radius:5px;background:rgba(255,179,0,.05);border:1px solid rgba(255,179,0,.2);font-size:.82em;color:var(--muted)">
+              <strong style="color:var(--yellow)">ATP</strong> — Authority to Proceed.
+              Maximum 12-month term. System must achieve full ATO before term expires.
+              <span class="mono" style="color:var(--yellow)">term_expires_at</span> will be set automatically.
+            </div>
+            <div id="hint-IATO" class="auth-hint" style="display:none;margin-top:10px;padding:10px 14px;border-radius:5px;background:rgba(255,107,53,.05);border:1px solid rgba(255,107,53,.2);font-size:.82em;color:var(--muted)">
+              <strong style="color:#ff6b35">IATO</strong> — Interim ATO.
+              Maximum 6-month term. For development systems only.
+              {% if system.auth_status == 'authorized' %}
+              <div style="color:var(--red);font-weight:700;margin-top:6px">
+                ⚠ Warning: this system is currently Authorized. IATO is not appropriate for already-authorized systems.
+              </div>
+              {% endif %}
+            </div>
+            <div id="hint-EIS"  class="auth-hint" style="display:none;margin-top:10px;padding:10px 14px;border-radius:5px;background:rgba(0,200,83,.04);border:1px solid rgba(0,200,83,.2);font-size:.82em;color:var(--muted)">
+              <strong style="color:var(--cyan)">EIS</strong> — External IT System.
+              This system is outside the authorization boundary. No AO authorization decision
+              will be recorded. The system will be flagged as EIS and excluded from the AO decision queue.
+            </div>
+          </div>
+
           <div>
             <label class="form-label">Package Notes <span style="color:var(--muted)">(optional)</span></label>
             <textarea name="package_notes" class="form-control" style="min-height:100px;resize:vertical"
@@ -228,4 +281,29 @@
   </aside>
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function selectAuthType(val) {
+  // Update radio
+  document.querySelectorAll('input[name="authorization_type"]').forEach(r => {
+    r.checked = (r.value === val);
+  });
+  // Update border highlight
+  ['ATO','ATP','IATO','EIS'].forEach(v => {
+    const lbl = document.getElementById('lbl-' + v);
+    if (lbl) {
+      lbl.style.borderColor = v === val ? 'var(--cyan)' : 'var(--border)';
+      lbl.style.background  = v === val ? 'rgba(0,255,204,0.04)' : 'var(--surface)';
+    }
+  });
+  // Show/hide hint blocks
+  document.querySelectorAll('.auth-hint').forEach(el => el.style.display = 'none');
+  const hint = document.getElementById('hint-' + val);
+  if (hint) hint.style.display = 'block';
+}
+// Init on load
+selectAuthType('ATO');
+</script>
 {% endblock %}

@@ -10,7 +10,7 @@
 {% endblock %}
 
 {% block content %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/static/vendor/chart.umd.min.js"></script>
 
 {# ── Breadcrumb ──────────────────────────────────────────────────────────── #}
 <div class="breadcrumb">
@@ -48,8 +48,6 @@
   {{ assessment.uploaded_at.strftime('%Y-%m-%d %H:%M UTC') if assessment.uploaded_at else '' }}
   &nbsp;·&nbsp;
   {{ controls|length }} controls evaluated
-  &nbsp;·&nbsp;
-  <a href="/quiz/{{ assessment_id }}" style="color:var(--cyan)">Take full quiz →</a>
 </p>
 
 {# ── System linkage ───────────────────────────────────────────────────────── #}
@@ -84,9 +82,8 @@
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:28px">
 
   {% set score_panels = [
-    ("SSP Score",      assessment.ssp_score,      "chartSSP",     "#00ffcc"),
-    ("Quiz Score",     assessment.quiz_score,      "chartQuiz",    "#00ffcc"),
-    ("Combined",       assessment.combined_score,  "chartCombined","#ffd700"),
+    ("SSP Score",  assessment.ssp_score,     "chartSSP",     "#00ffcc"),
+    ("Combined",   assessment.combined_score,"chartCombined","#ffd700"),
   ] %}
   {% for label, val, cid, color in score_panels %}
   <div class="card" style="padding:20px;text-align:center">
@@ -409,6 +406,20 @@
   {# Close last family group #}
   {% if ns.last_family != '' %}</div></details>{% endif %}
 
+  {# Family-level pagination nav (shown when many families are visible) #}
+  <div id="family-page-nav" style="display:none;align-items:center;justify-content:center;gap:8px;padding:14px;border-top:1px solid var(--border)">
+    <button onclick="changeFamilyPage(-1)" class="btn btn-ghost btn-sm">← Prev</button>
+    <span id="family-page-label" style="font-size:0.85em;color:var(--muted)"></span>
+    <button onclick="changeFamilyPage(1)" class="btn btn-ghost btn-sm">Next →</button>
+    <span style="font-size:0.8em;color:var(--muted);margin-left:8px">Families per page:</span>
+    <select id="families-per-page" onchange="setFamiliesPerPage(this.value)"
+            style="font-size:0.8em;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 6px">
+      <option value="5">5</option>
+      <option value="10" selected>10</option>
+      <option value="20">20</option>
+      <option value="9999">All</option>
+    </select>
+  </div>
 </div>
 
 {# ── Methodology provenance ───────────────────────────────────────────────── #}
@@ -471,49 +482,6 @@
   </div>
 </details>
 
-{# ── Quiz results ────────────────────────────────────────────────────────── #}
-<details class="card" style="padding:20px;margin-bottom:28px">
-  <summary style="font-size:0.85em;font-weight:700;letter-spacing:1px;
-                  text-transform:uppercase;cursor:pointer;list-style:none">
-    Quiz Results
-    {% if assessment.quiz_score %}
-    — <span style="color:var(--cyan)">{{ assessment.quiz_score|round(1) }}%</span>
-    {% else %}
-    — <a href="/quiz/{{ assessment_id }}" style="color:var(--cyan);font-weight:400">
-        Take quiz →</a>
-    {% endif %}
-  </summary>
-  {% if quiz_detail and quiz_detail[0].selected %}
-  <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
-    {% for q in quiz_detail %}
-    <div style="padding:12px;border-radius:6px;background:var(--surface);
-                border-left:3px solid {% if q.is_correct %}var(--green){% else %}var(--red){% endif %}">
-      <div style="font-size:0.85em;font-weight:600;margin-bottom:6px">
-        {{ loop.index }}. {{ q.question }}
-      </div>
-      <div style="font-size:0.8em">
-        {% for letter, text in q.choices.items() %}
-        <div style="padding:2px 0;
-          {% if letter == q.correct %}color:var(--green);font-weight:700
-          {% elif letter == q.selected and not q.is_correct %}color:var(--red)
-          {% else %}color:var(--muted){% endif %}">
-          {% if letter == q.selected %}▶ {% else %}&nbsp;&nbsp;{% endif %}
-          {{ letter }}. {{ text }}
-        </div>
-        {% endfor %}
-        <div style="margin-top:6px;font-size:0.82em;color:#555;font-style:italic">
-          {{ q.explanation }}
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <p style="color:var(--muted);margin-top:12px">
-    Quiz not yet taken. <a href="/quiz/{{ assessment_id }}" style="color:var(--cyan)">Take the assessment quiz →</a>
-  </p>
-  {% endif %}
-</details>
 
 {% endblock %}
 
@@ -649,24 +617,73 @@ makeDonut('chartCombined', {{ assessment.combined_score|round(1) }}, '#ffd700');
   });
 })();
 
+// ── Family pagination ─────────────────────────────────────────────────────
+let _familyPage = 0;
+let _familiesPerPage = 10;
+let _activeGrade = 'ALL';
+
+function _updateFamilyPagination() {
+  const allFamilies = Array.from(document.querySelectorAll('.family-group'));
+  // Filter to only currently visible families (grade filter applied)
+  const visible = allFamilies.filter(fg => fg.style.display !== 'none' || _activeGrade === 'ALL');
+  const total = visible.length;
+  const totalPages = Math.ceil(total / _familiesPerPage);
+  const nav = document.getElementById('family-page-nav');
+  const label = document.getElementById('family-page-label');
+
+  if (total <= _familiesPerPage || _familiesPerPage >= 9999) {
+    // No pagination needed
+    if (nav) nav.style.display = 'none';
+    visible.forEach(fg => fg.style.display = '');
+    return;
+  }
+
+  if (nav) nav.style.display = 'flex';
+  _familyPage = Math.max(0, Math.min(_familyPage, totalPages - 1));
+  if (label) label.textContent = `${_familyPage + 1} / ${totalPages}`;
+
+  visible.forEach((fg, i) => {
+    fg.style.display = (i >= _familyPage * _familiesPerPage && i < (_familyPage + 1) * _familiesPerPage)
+      ? '' : 'none';
+  });
+}
+
+function changeFamilyPage(delta) {
+  _familyPage += delta;
+  _updateFamilyPagination();
+}
+
+function setFamiliesPerPage(val) {
+  _familiesPerPage = parseInt(val) || 10;
+  _familyPage = 0;
+  _updateFamilyPagination();
+}
+
 // ── Filter controls by grade ───────────────────────────────────────────────
 function filterGrade(grade) {
+  _activeGrade = grade;
+  _familyPage = 0;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   if (grade === 'ALL') {
     document.querySelector('.filter-btn').classList.add('active');
-    document.querySelectorAll('.ctrl-card').forEach(el => el.closest('details.ctrl-card').style.display = '');
+    document.querySelectorAll('.ctrl-card').forEach(el => el.style.display = '');
     document.querySelectorAll('.family-group').forEach(fg => fg.style.display = '');
   } else {
     document.querySelectorAll('.ctrl-card').forEach(el => {
       el.style.display = el.dataset.grade === grade ? '' : 'none';
     });
-    // Show/hide family groups based on whether they have visible children
     document.querySelectorAll('.family-group').forEach(fg => {
       const visible = fg.querySelectorAll(`.ctrl-card[data-grade="${grade}"]`);
       fg.style.display = visible.length ? '' : 'none';
     });
   }
+  _updateFamilyPagination();
 }
+
+// Init on load
+document.addEventListener('DOMContentLoaded', function() {
+  _updateFamilyPagination();
+});
 
 // ── Link assessment to system ──────────────────────────────────────────────
 async function linkSystem() {

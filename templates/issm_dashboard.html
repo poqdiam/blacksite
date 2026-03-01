@@ -1,0 +1,536 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — ISSM Dashboard{% endblock %}
+
+{% block head %}
+<style>
+  /* ── Productivity score ring ──────────────────────────────────────────── */
+  .prod-ring {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 0.88em; font-weight: 900;
+    flex-shrink: 0;
+    border: 3px solid;
+    transition: border-color 0.2s;
+  }
+  .prod-ring-high   { border-color: var(--green);  color: var(--green); }
+  .prod-ring-mid    { border-color: var(--yellow); color: var(--yellow); }
+  .prod-ring-low    { border-color: var(--red);    color: var(--red); }
+
+  /* ── ISSO row card ────────────────────────────────────────────────────── */
+  .isso-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .isso-row:last-child { border-bottom: none; }
+  .isso-row:hover { background: rgba(255,255,255,0.03); }
+
+  .isso-info { flex: 1; min-width: 0; }
+  .isso-name { font-size: 0.88em; font-weight: 700; color: var(--text); }
+  .isso-email { font-size: 0.72em; color: var(--muted); margin-top: 1px; }
+
+  .isso-metrics {
+    display: flex;
+    gap: 16px;
+    flex-shrink: 0;
+    align-items: center;
+  }
+  .isso-metric { text-align: center; }
+  .isso-metric-val { font-size: 1.1em; font-weight: 900; line-height: 1; }
+  .isso-metric-lbl { font-size: 0.62em; color: var(--muted); letter-spacing: 0.5px;
+                     text-transform: uppercase; margin-top: 2px; }
+
+  /* Package capacity bar */
+  .pkg-bar-wrap { min-width: 100px; }
+  .pkg-bar-label {
+    font-size: 0.68em; color: var(--muted);
+    display: flex; justify-content: space-between; margin-bottom: 4px;
+  }
+  .pkg-bar-track {
+    height: 5px; background: var(--border); border-radius: 3px; overflow: hidden;
+  }
+  .pkg-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+
+  /* Overload badge */
+  .badge-overload {
+    font-size: 0.62em; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--red); background: rgba(244,67,54,0.12);
+    border: 1px solid rgba(244,67,54,0.3);
+    border-radius: 3px; padding: 2px 6px;
+    white-space: nowrap;
+  }
+
+  /* ── Detail modal ─────────────────────────────────────────────────────── */
+  .detail-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    z-index: 1000;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 60px 16px;
+    overflow-y: auto;
+  }
+  .detail-overlay.open { display: flex; }
+
+  .detail-modal {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    width: 680px;
+    max-width: 96vw;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    overflow: hidden;
+  }
+
+  .detail-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .detail-header-info { flex: 1; }
+  .detail-title { font-size: 1.1em; font-weight: 900; color: var(--text); margin-bottom: 3px; }
+  .detail-subtitle { font-size: 0.78em; color: var(--muted); }
+
+  .detail-score-section {
+    padding: 16px 24px;
+    background: rgba(0,0,0,0.2);
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .detail-stat { text-align: center; }
+  .detail-stat-val { font-size: 1.4em; font-weight: 900; line-height: 1; }
+  .detail-stat-lbl { font-size: 0.65em; color: var(--muted); text-transform: uppercase;
+                     letter-spacing: 0.5px; margin-top: 3px; }
+
+  .detail-body { padding: 20px 24px; }
+  .detail-section-title {
+    font-size: 0.7em; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 12px; margin-top: 16px;
+  }
+  .detail-section-title:first-child { margin-top: 0; }
+
+  /* Issues list */
+  .issue-item {
+    display: flex;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 8px;
+  }
+  .issue-icon { font-size: 1.2em; flex-shrink: 0; margin-top: 1px; }
+  .issue-body {}
+  .issue-title { font-size: 0.82em; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+  .issue-desc  { font-size: 0.75em; color: var(--muted); line-height: 1.5; }
+
+  /* System mini list */
+  .sys-mini {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.82em;
+  }
+  .sys-mini:last-child { border-bottom: none; }
+  .sys-mini-name { flex: 1; font-weight: 600; color: var(--text); }
+  .sys-mini-poam { font-family: var(--mono); font-size: 0.85em; }
+
+  /* Package limit control */
+  .pkg-limit-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-top: 12px;
+  }
+  .pkg-limit-control label { font-size: 0.78em; color: var(--muted); flex-shrink: 0; }
+  .pkg-limit-control input[type=range] {
+    flex: 1; accent-color: var(--cyan);
+    cursor: pointer;
+  }
+  .pkg-limit-val { font-family: var(--mono); font-size: 0.88em; font-weight: 700;
+                   color: var(--cyan); min-width: 24px; text-align: center; flex-shrink: 0; }
+  .pkg-limit-save { flex-shrink: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Breadcrumb ────────────────────────────────────────────────────────── #}
+<div class="breadcrumb">
+  <a href="{% if is_admin %}/admin{% else %}/systems{% endif %}">
+    {% if is_admin %}Dashboard{% else %}Systems{% endif %}
+  </a>
+  <span class="sep">›</span>
+  <span>ISSM Dashboard</span>
+</div>
+
+{# ── Page header ───────────────────────────────────────────────────────── #}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:28px">
+  <div>
+    <h1 style="margin:0">ISSM Dashboard</h1>
+    <p class="text-muted" style="margin-top:4px;font-size:0.85em">
+      ISSO productivity tracking · Package limits · Overdue items
+    </p>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/systems" class="btn btn-ghost btn-sm">Systems</a>
+    <a href="/poam"    class="btn btn-ghost btn-sm">POA&amp;M</a>
+  </div>
+</div>
+
+{# ── Org summary stats ─────────────────────────────────────────────────── #}
+<div class="stats" style="margin-bottom:28px">
+  <div class="stat">
+    <div class="stat-value">{{ isso_data | length }}</div>
+    <div class="stat-label">Active ISSOs</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:{% if isso_data | selectattr('overloaded') | list | length > 0 %}var(--red){% else %}var(--green){% endif %}">
+      {{ isso_data | selectattr('overloaded') | list | length }}
+    </div>
+    <div class="stat-label">Overloaded</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--yellow)">{{ isso_data | sum(attribute='open_poams') }}</div>
+    <div class="stat-label">Total Open POA&amp;Ms</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--red)">{{ isso_data | sum(attribute='overdue_poams') }}</div>
+    <div class="stat-label">Overdue POA&amp;Ms</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{{ isso_data | sum(attribute='pkg_count') }}</div>
+    <div class="stat-label">Total Packages</div>
+  </div>
+</div>
+
+{# ── ISSO roster ───────────────────────────────────────────────────────── #}
+{% if isso_data %}
+<div class="card" style="padding:0;overflow:hidden">
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+    <span class="card-title" style="margin:0">ISSO Roster</span>
+    <span style="font-size:0.72em;color:var(--muted)">Click row to see detailed gaps &amp; missing work</span>
+  </div>
+
+  {# Table header #}
+  <div style="display:grid;grid-template-columns:52px 1fr 120px 90px 90px 90px 75px 80px 24px;
+              gap:0;padding:8px 20px;border-bottom:1px solid var(--border);
+              font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#444">
+    <div>Score</div>
+    <div>ISSO</div>
+    <div>Packages</div>
+    <div style="text-align:center">Open POA&Ms</div>
+    <div style="text-align:center">Overdue</div>
+    <div style="text-align:center">Quiz/30d</div>
+    <div style="text-align:center">Accuracy</div>
+    <div style="text-align:center">Status</div>
+    <div></div>
+  </div>
+
+  {% for isso in isso_data %}
+  {% set score = isso.prod_score %}
+  {% set ring_class = 'prod-ring-high' if score >= 70 else ('prod-ring-mid' if score >= 40 else 'prod-ring-low') %}
+  {% set pkg_pct = [(isso.pkg_count / isso.max_packages * 100) | int, 100] | min %}
+  {% set bar_color = 'var(--green)' if pkg_pct < 80 else ('var(--yellow)' if pkg_pct < 100 else 'var(--red)') %}
+
+  <div class="isso-row" onclick="openIssoDet('{{ isso.remote_user }}')"
+       id="isso-row-{{ isso.remote_user }}">
+
+    {# Productivity score ring #}
+    <div class="prod-ring {{ ring_class }}">{{ score }}</div>
+
+    {# Name + email #}
+    <div class="isso-info">
+      <div class="isso-name">{{ isso.display_name }}</div>
+      <div class="isso-email">{{ isso.remote_user }}{% if isso.email %} · {{ isso.email }}{% endif %}</div>
+    </div>
+
+    {# Package capacity bar #}
+    <div class="pkg-bar-wrap">
+      <div class="pkg-bar-label">
+        <span>{{ isso.pkg_count }} / {{ isso.max_packages }}</span>
+        <span style="color:{{ bar_color }}">{{ pkg_pct }}%</span>
+      </div>
+      <div class="pkg-bar-track">
+        <div class="pkg-bar-fill" style="width:{{ pkg_pct }}%;background:{{ bar_color }}"></div>
+      </div>
+    </div>
+
+    {# Open POA&Ms #}
+    <div class="isso-metric" style="text-align:center;min-width:70px">
+      <div class="isso-metric-val" style="color:{% if isso.open_poams > 0 %}var(--yellow){% else %}var(--green){% endif %}">
+        {{ isso.open_poams }}</div>
+      <div class="isso-metric-lbl">Open POA&amp;Ms</div>
+    </div>
+
+    {# Overdue #}
+    <div class="isso-metric" style="text-align:center;min-width:70px">
+      <div class="isso-metric-val" style="color:{% if isso.overdue_poams > 0 %}var(--red){% else %}var(--green){% endif %}">
+        {{ isso.overdue_poams }}</div>
+      <div class="isso-metric-lbl">Overdue</div>
+    </div>
+
+    {# Quiz attempts/30d #}
+    <div class="isso-metric" style="text-align:center;min-width:70px">
+      <div class="isso-metric-val" style="color:{% if isso.quiz_attempts >= 20 %}var(--green){% elif isso.quiz_attempts >= 10 %}var(--yellow){% else %}var(--muted){% endif %}">
+        {{ isso.quiz_attempts }}</div>
+      <div class="isso-metric-lbl">Quiz/30d</div>
+    </div>
+
+    {# Accuracy #}
+    <div class="isso-metric" style="text-align:center;min-width:60px">
+      {% if isso.quiz_accuracy is not none %}
+        <div class="isso-metric-val" style="color:{% if isso.quiz_accuracy >= 75 %}var(--green){% elif isso.quiz_accuracy >= 60 %}var(--yellow){% else %}var(--red){% endif %}">
+          {{ isso.quiz_accuracy }}%</div>
+        {% if isso.quiz_streak >= 3 %}
+          <div class="isso-metric-lbl" style="color:var(--yellow)" title="{{ isso.quiz_streak }}-day pass streak">🔥{{ isso.quiz_streak }}d</div>
+        {% else %}
+          <div class="isso-metric-lbl">Accuracy</div>
+        {% endif %}
+      {% else %}
+        <div class="isso-metric-val" style="color:#333">—</div>
+        <div class="isso-metric-lbl">Accuracy</div>
+      {% endif %}
+    </div>
+
+    {# Status badge #}
+    <div style="text-align:center">
+      {% if isso.overloaded %}
+        <span class="badge-overload">Overload</span>
+      {% elif isso.overdue_poams > 0 %}
+        <span class="badge" style="background:rgba(255,107,0,0.12);color:#ff8c42;border:1px solid rgba(255,107,0,0.25);font-size:0.62em">Behind</span>
+      {% elif isso.open_poams > 5 %}
+        <span class="badge" style="background:rgba(255,179,0,0.12);color:var(--yellow);border:1px solid rgba(255,179,0,0.25);font-size:0.62em">Busy</span>
+      {% elif isso.pkg_count == 0 %}
+        <span class="badge" style="background:rgba(158,158,158,0.1);color:var(--muted);border:1px solid var(--border);font-size:0.62em">Unassigned</span>
+      {% else %}
+        <span class="badge" style="background:rgba(0,200,83,0.12);color:var(--green);border:1px solid rgba(0,200,83,0.25);font-size:0.62em">On Track</span>
+      {% endif %}
+    </div>
+
+    <div style="font-size:0.75em;color:var(--muted)">›</div>
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="card" style="text-align:center;padding:60px 24px;color:var(--muted)">
+  <div style="font-size:2em;margin-bottom:16px;opacity:0.3;font-family:var(--mono);color:var(--cyan)">[ ]</div>
+  <div style="font-weight:700;font-size:1em;text-transform:uppercase;letter-spacing:1px;color:var(--text);margin-bottom:8px">
+    No ISSOs Found</div>
+  <p style="font-size:0.85em">Assign users the <strong>isso</strong> role in User Management to populate this dashboard.</p>
+  <a href="/admin/users" class="btn btn-primary btn-sm" style="margin-top:16px">User Management →</a>
+</div>
+{% endif %}
+
+{# ── Hidden ISSO data for JS modal ────────────────────────────────────── #}
+<script id="isso-json" type="application/json">
+{{ isso_data | tojson }}
+</script>
+
+{# ── Detail modal ──────────────────────────────────────────────────────── #}
+<div id="detail-overlay" class="detail-overlay" onclick="closeIssoDetOnOverlay(event)">
+  <div class="detail-modal">
+    <div class="detail-header">
+      <div id="det-ring" class="prod-ring prod-ring-high" style="margin-top:4px">—</div>
+      <div class="detail-header-info">
+        <div class="detail-title" id="det-name">—</div>
+        <div class="detail-subtitle" id="det-sub">—</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="closeIssoDetail()">✕</button>
+    </div>
+
+    <div class="detail-score-section" id="det-scores"></div>
+
+    <div class="detail-body" id="det-body"></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const _issoData = JSON.parse(document.getElementById('isso-json').textContent || '[]');
+const _issoMap  = {};
+_issoData.forEach(function(d){ _issoMap[d.remote_user] = d; });
+
+const AUTH_LABELS = {
+  'authorized': 'ATO', 'in_progress': 'In Progress',
+  'expired': 'Expired', 'not_authorized': 'Not Auth'
+};
+const AUTH_COLORS = {
+  'authorized': 'var(--green)', 'in_progress': 'var(--yellow)',
+  'expired': 'var(--red)', 'not_authorized': 'var(--muted)'
+};
+
+function openIssoDet(username) {
+  const d = _issoMap[username];
+  if (!d) return;
+
+  // Header
+  const score = d.prod_score;
+  const ringCls = score >= 70 ? 'prod-ring-high' : (score >= 40 ? 'prod-ring-mid' : 'prod-ring-low');
+  const ring = document.getElementById('det-ring');
+  ring.textContent = score;
+  ring.className = 'prod-ring ' + ringCls;
+  document.getElementById('det-name').textContent = d.display_name;
+  document.getElementById('det-sub').textContent  = d.remote_user + (d.email ? '  ·  ' + d.email : '');
+
+  // Scores section
+  const pkgPct = Math.min(100, d.max_packages > 0 ? Math.round(d.pkg_count / d.max_packages * 100) : 0);
+  const quizAccStr = d.quiz_accuracy != null ? d.quiz_accuracy + '%' : '—';
+  const quizAccColor = d.quiz_accuracy == null ? 'var(--muted)' : (d.quiz_accuracy >= 75 ? 'var(--green)' : (d.quiz_accuracy >= 60 ? 'var(--yellow)' : 'var(--red)'));
+  const streakBadge = d.quiz_streak >= 3 ? ` <span style="font-size:0.55em;color:var(--yellow)">🔥${d.quiz_streak}d</span>` : '';
+  document.getElementById('det-scores').innerHTML = `
+    <div class="detail-stat">
+      <div class="detail-stat-val" style="color:${pkgPct>=100?'var(--red)':(pkgPct>=80?'var(--yellow)':'var(--cyan)')}">${d.pkg_count}</div>
+      <div class="detail-stat-lbl">Systems (max ${d.max_packages})</div>
+    </div>
+    <div class="detail-stat">
+      <div class="detail-stat-val" style="color:${d.open_poams>0?'var(--yellow)':'var(--green)'}">${d.open_poams}</div>
+      <div class="detail-stat-lbl">Open POA&amp;Ms</div>
+    </div>
+    <div class="detail-stat">
+      <div class="detail-stat-val" style="color:${d.overdue_poams>0?'var(--red)':'var(--green)'}">${d.overdue_poams}</div>
+      <div class="detail-stat-lbl">Overdue POA&amp;Ms</div>
+    </div>
+    <div class="detail-stat">
+      <div class="detail-stat-val" style="color:${quizAccColor}">${quizAccStr}${streakBadge}</div>
+      <div class="detail-stat-lbl">Quiz Accuracy (${d.quiz_attempts} in 30d)</div>
+    </div>`;
+
+  // Body: issues
+  let issuesHtml = '<div class="detail-section-title">Work Requiring Attention</div>';
+  const issues = [];
+
+  if (d.overloaded) {
+    const excess = d.pkg_count - d.max_packages;
+    issues.push({
+      icon: '⚠',
+      title: `Package Overload (+${excess} over limit)`,
+      desc: `This ISSO is assigned ${d.pkg_count} systems but their limit is ${d.max_packages}. `
+          + `Overloaded ISSOs often fail to maintain adequate documentation, control reviews, and POA&M timelines. `
+          + `Consider redistributing ${excess} system${excess!==1?'s':''} to reduce risk of compliance gaps.`
+    });
+  }
+  if (d.overdue_poams > 0) {
+    issues.push({
+      icon: '⏰',
+      title: `${d.overdue_poams} Overdue POA&M Item${d.overdue_poams!==1?'s':''}`,
+      desc: `Overdue POA&Ms indicate missed remediation deadlines. Per NIST SP 800-53A, scheduled completion dates `
+          + `represent contractual commitments to the AO. Each overdue item requires an updated milestone with `
+          + `justification. Escalation may be required if overdue by more than 30 days.`
+    });
+  }
+  if (d.open_poams > 0) {
+    issues.push({
+      icon: '⚑',
+      title: `${d.open_poams} Open POA&M Item${d.open_poams!==1?'s':''}`,
+      desc: `Open POA&M items represent known weaknesses requiring active remediation tracking. `
+          + `Each item should have an assigned owner, specific milestones, and a realistic completion date. `
+          + `Review aging open items — those older than 90 days should be reassessed or escalated.`
+    });
+  }
+
+  // Per-system issues
+  const sysWithIssues = (d.systems || []).filter(s => s.open_poams > 0 || s.auth_status === 'expired' || s.auth_status === 'not_authorized');
+  if (sysWithIssues.length > 0) {
+    issues.push({
+      icon: '⬡',
+      title: `${sysWithIssues.length} System${sysWithIssues.length!==1?'s':''} Need Attention`,
+      desc: 'The following systems have open findings or authorization gaps: '
+          + sysWithIssues.map(s => `${s.name} (${AUTH_LABELS[s.auth_status]||s.auth_status}, ${s.open_poams} open POA&Ms)`).join('; ') + '.'
+    });
+  }
+
+  if (issues.length === 0) {
+    issuesHtml += '<div style="padding:16px;text-align:center;color:var(--green);font-size:0.85em;font-weight:700">✓ No issues found — ISSO is on track.</div>';
+  } else {
+    issues.forEach(function(i) {
+      issuesHtml += `<div class="issue-item"><div class="issue-icon">${i.icon}</div>
+        <div class="issue-body"><div class="issue-title">${i.title}</div>
+        <div class="issue-desc">${i.desc}</div></div></div>`;
+    });
+  }
+
+  // Assigned systems mini list
+  if (d.systems && d.systems.length > 0) {
+    issuesHtml += '<div class="detail-section-title" style="margin-top:20px">Assigned Systems</div>';
+    issuesHtml += '<div style="border:1px solid var(--border);border-radius:6px;overflow:hidden">';
+    d.systems.forEach(function(s) {
+      const ac = AUTH_COLORS[s.auth_status] || 'var(--muted)';
+      const al = AUTH_LABELS[s.auth_status]  || s.auth_status;
+      issuesHtml += `<div class="sys-mini">
+        <div class="sys-mini-name"><a href="/systems/${s.id}" style="color:var(--cyan)">${s.name}</a></div>
+        <span style="font-size:0.72em;color:${ac}">${al}</span>
+        ${s.open_poams>0 ? `<span class="sys-mini-poam" style="color:var(--yellow)">${s.open_poams} open</span>` : ''}
+        ${s.overdue_poams>0 ? `<span class="sys-mini-poam" style="color:var(--red)">${s.overdue_poams} overdue</span>` : ''}
+      </div>`;
+    });
+    issuesHtml += '</div>';
+  }
+
+  // Package limit adjuster (admin only)
+  const isAdmin = document.body.dataset.isAdmin === '1';
+  issuesHtml += `<div class="detail-section-title" style="margin-top:20px">Package Limit</div>
+    <div class="pkg-limit-control">
+      <label>Max packages: <span id="pkg-val-${d.remote_user}" class="pkg-limit-val">${d.max_packages}</span></label>
+      <input type="range" min="1" max="50" value="${d.max_packages}" id="pkg-slider-${d.remote_user}"
+             oninput="document.getElementById('pkg-val-${d.remote_user}').textContent=this.value">
+      <button class="btn btn-primary btn-sm pkg-limit-save"
+              onclick="savePkgLimit('${d.remote_user}', '${d.remote_user}')">Save</button>
+    </div>`;
+
+  document.getElementById('det-body').innerHTML = issuesHtml;
+  document.getElementById('detail-overlay').classList.add('open');
+}
+
+function closeIssoDetail() {
+  document.getElementById('detail-overlay').classList.remove('open');
+}
+function closeIssoDetOnOverlay(e) {
+  if (e.target === document.getElementById('detail-overlay')) closeIssoDetail();
+}
+
+async function savePkgLimit(username, dataUsername) {
+  const slider = document.getElementById('pkg-slider-' + dataUsername);
+  if (!slider) return;
+  const value = parseInt(slider.value);
+  const fd = new FormData();
+  fd.append('max_packages', value);
+  try {
+    const r = await fetch('/admin/users/' + encodeURIComponent(username) + '/max-packages', {
+      method: 'POST', body: fd
+    });
+    const j = await r.json();
+    if (j.status === 'ok') {
+      // Update in-memory data
+      const d = _issoMap[username];
+      if (d) { d.max_packages = j.max_packages; }
+      // Visual feedback
+      const btn = event.target;
+      btn.textContent = '✓';
+      btn.style.color = 'var(--green)';
+      setTimeout(() => { btn.textContent = 'Save'; btn.style.color = ''; }, 1500);
+    }
+  } catch(e) {
+    alert('Failed to save package limit.');
+  }
+}
+</script>
+{% endblock %}

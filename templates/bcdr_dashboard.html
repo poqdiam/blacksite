@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — BCDR Dashboard{% endblock %}
+
+{% block head %}
+<style>
+  .page-header { margin-bottom: 28px; }
+  .page-header h1 { font-size: 1.3em; font-weight: 900; color: var(--text); }
+  .page-header h1 span { color: var(--cyan); }
+  .page-header p  { font-size: 0.82em; color: var(--muted); margin-top: 4px; }
+
+  .section-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; margin-bottom: 20px; overflow: hidden;
+  }
+  .section-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+  .section-head h2 {
+    font-size: 0.88em; font-weight: 700; color: var(--text);
+    letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .section-count { font-size: 0.75em; color: var(--muted); font-family: var(--mono); }
+
+  .signoff-table, .events-table { width: 100%; border-collapse: collapse; font-size: 0.82em; }
+  .signoff-table th, .events-table th {
+    text-align: left; padding: 10px 20px;
+    font-size: 0.72em; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+  .signoff-table td, .events-table td {
+    padding: 9px 20px; border-bottom: 1px solid rgba(255,255,255,0.03);
+    color: var(--text); vertical-align: middle;
+  }
+  .signoff-table tr:last-child td, .events-table tr:last-child td { border-bottom: none; }
+  .signoff-table tr:hover td, .events-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .event-type-badge {
+    display: inline-block; padding: 2px 7px; border-radius: 3px;
+    font-size: 0.7em; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase;
+  }
+  .ev-drill    { background: rgba(0,255,204,0.08);  color: var(--cyan);   border: 1px solid rgba(0,255,204,0.2); }
+  .ev-incident { background: rgba(244,67,54,0.12);  color: var(--red);    border: 1px solid rgba(244,67,54,0.25); }
+  .ev-recovery { background: rgba(255,179,0,0.12);  color: var(--yellow); border: 1px solid rgba(255,179,0,0.25); }
+  .ev-test     { background: rgba(158,158,158,0.1); color: var(--grey);   border: 1px solid rgba(158,158,158,0.2); }
+
+  .status-badge {
+    display: inline-block; padding: 2px 7px; border-radius: 3px;
+    font-size: 0.7em; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase;
+  }
+  .st-open        { background: rgba(255,179,0,0.12); color: var(--yellow); border: 1px solid rgba(255,179,0,0.25); }
+  .st-in_progress { background: rgba(0,255,204,0.08); color: var(--cyan);   border: 1px solid rgba(0,255,204,0.2); }
+  .st-closed      { background: rgba(0,200,83,0.12);  color: var(--green);  border: 1px solid rgba(0,200,83,0.25); }
+
+  .signoff-progress {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .progress-bar-wrap { width: 80px; }
+  .progress-bar-track {
+    height: 5px; background: var(--border); border-radius: 3px; overflow: hidden;
+  }
+  .progress-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; background: var(--cyan); }
+
+  .btn-signoff {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 12px; border-radius: 4px; font-size: 0.78em; font-weight: 700;
+    cursor: pointer; border: 1px solid rgba(0,200,83,0.3);
+    background: rgba(0,200,83,0.08); color: var(--green);
+    transition: background 0.12s;
+  }
+  .btn-signoff:hover { background: rgba(0,200,83,0.18); }
+
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 16px; border-radius: 5px; font-size: 0.82em; font-weight: 700;
+    cursor: pointer; text-decoration: none;
+    border: 1px solid rgba(0,255,204,0.35); background: rgba(0,255,204,0.08); color: var(--cyan);
+    transition: background 0.12s;
+  }
+  .btn-primary:hover { background: rgba(0,255,204,0.15); }
+
+  .empty-note {
+    padding: 28px 20px; text-align: center; color: var(--muted); font-size: 0.82em;
+  }
+
+  /* ── Create Event Modal ─────────────────────────── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.65); z-index: 500;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 28px 30px; width: 480px; max-width: 95vw;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  }
+  .modal-title { font-size: 1em; font-weight: 900; margin-bottom: 20px; color: var(--text); }
+  .form-row { margin-bottom: 14px; }
+  .form-row label { display: block; font-size: 0.78em; font-weight: 700; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .form-row select, .form-row input[type=text], .form-row input[type=number] {
+    width: 100%; background: var(--card); border: 1px solid var(--border);
+    border-radius: 5px; padding: 7px 10px; color: var(--text); font-size: 0.85em;
+    font-family: var(--sans);
+  }
+  .form-row select:focus, .form-row input:focus { outline: none; border-color: rgba(0,255,204,0.4); }
+  .form-row-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+  .btn-cancel {
+    padding: 6px 16px; border-radius: 5px; font-size: 0.82em; font-weight: 700;
+    cursor: pointer; background: var(--card); border: 1px solid var(--border); color: var(--muted);
+    transition: background 0.1s;
+  }
+  .btn-cancel:hover { background: rgba(255,255,255,0.05); }
+  .btn-submit {
+    padding: 6px 16px; border-radius: 5px; font-size: 0.82em; font-weight: 700;
+    cursor: pointer; background: rgba(0,255,204,0.1); border: 1px solid rgba(0,255,204,0.3);
+    color: var(--cyan); transition: background 0.12s;
+  }
+  .btn-submit:hover { background: rgba(0,255,204,0.2); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px">
+  <div class="page-header" style="margin:0">
+    <h1>⚑ <span>BCDR</span> Dashboard</h1>
+    <p>Business Continuity &amp; Disaster Recovery — events, sign-offs, and team coordination.</p>
+  </div>
+  <button class="btn-primary" onclick="document.getElementById('create-modal').classList.add('open')">
+    + Trigger Event
+  </button>
+</div>
+
+{# ── My Pending Sign-offs ── #}
+<div class="section-card">
+  <div class="section-head">
+    <h2>My Pending Sign-offs</h2>
+    <span class="section-count {% if my_signoffs %}signoff-warn{% endif %}">
+      {{ my_signoffs|length }} pending
+    </span>
+  </div>
+  {% if my_signoffs %}
+  <table class="signoff-table">
+    <thead>
+      <tr>
+        <th>Event</th>
+        <th>Type</th>
+        <th>System</th>
+        <th>Triggered</th>
+        <th>Role</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in my_signoffs %}
+      {% set sf = item.signoff %}
+      {% set ev = item.event %}
+      <tr>
+        <td style="font-weight:700">{{ ev.title or 'Untitled' }}</td>
+        <td>
+          <span class="event-type-badge ev-{{ ev.event_type or 'test' }}">{{ ev.event_type or 'test' }}</span>
+        </td>
+        <td style="font-size:0.82em;color:var(--muted)">{{ ev.system_id or '—' }}</td>
+        <td style="font-size:0.75em;color:var(--muted);font-family:var(--mono)">
+          {{ ev.triggered_at.strftime('%Y-%m-%d') if ev.triggered_at else '—' }}
+        </td>
+        <td style="font-size:0.8em;color:var(--muted)">{{ sf.role_in_team or '—' }}</td>
+        <td>
+          <form method="post" action="/bcdr/events/{{ ev.id }}/signoff" style="display:inline">
+            <input type="hidden" name="notes" value="">
+            <button type="submit" class="btn-signoff">✓ Sign Off</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="empty-note">No pending sign-offs — you're all caught up.</div>
+  {% endif %}
+</div>
+
+{# ── Open Events ── #}
+<div class="section-card">
+  <div class="section-head">
+    <h2>Open Events</h2>
+    <span class="section-count">{{ open_events|length }} active</span>
+  </div>
+  {% if open_events %}
+  <table class="events-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>RTO/RPO</th>
+        <th>Triggered</th>
+        <th>Sign-offs</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ev in open_events %}
+      {% set tot  = signoff_totals.get(ev.id, 0) %}
+      {% set done = signoff_done.get(ev.id, 0) %}
+      {% set pct  = ((done / tot * 100) | int) if tot > 0 else 0 %}
+      <tr>
+        <td style="font-weight:700">{{ ev.title or 'Untitled' }}</td>
+        <td>
+          <span class="event-type-badge ev-{{ ev.event_type or 'test' }}">{{ ev.event_type or '—' }}</span>
+        </td>
+        <td>
+          <span class="status-badge st-{{ ev.status }}">{{ ev.status }}</span>
+        </td>
+        <td style="font-size:0.78em;font-family:var(--mono);color:var(--muted)">
+          {% if ev.target_rto %}RTO {{ ev.target_rto }}h{% endif %}
+          {% if ev.target_rto and ev.target_rpo %} / {% endif %}
+          {% if ev.target_rpo %}RPO {{ ev.target_rpo }}h{% endif %}
+          {% if not ev.target_rto and not ev.target_rpo %}—{% endif %}
+        </td>
+        <td style="font-size:0.75em;color:var(--muted);font-family:var(--mono)">
+          {{ ev.triggered_at.strftime('%Y-%m-%d') if ev.triggered_at else '—' }}
+        </td>
+        <td>
+          {% if tot > 0 %}
+          <div class="signoff-progress">
+            <div class="progress-bar-wrap">
+              <div class="progress-bar-track">
+                <div class="progress-bar-fill" style="width:{{ pct }}%"></div>
+              </div>
+            </div>
+            <span style="font-size:0.75em;color:var(--muted);font-family:var(--mono)">{{ done }}/{{ tot }}</span>
+          </div>
+          {% else %}
+            <span style="font-size:0.75em;color:var(--muted)">No required sign-offs</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="empty-note">No open BCDR events.</div>
+  {% endif %}
+</div>
+
+{# ── Create Event Modal ── #}
+<div class="modal-overlay" id="create-modal">
+  <div class="modal-box">
+    <div class="modal-title">⚑ Trigger New BCDR Event</div>
+    <form method="post" action="/bcdr/events">
+      <div class="form-row">
+        <label>System</label>
+        <select name="system_id">
+          <option value="">— No specific system —</option>
+          {% for s in systems_for_modal %}
+          <option value="{{ s.id }}">{{ s.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Team (optional)</label>
+        <select name="team_id">
+          <option value="">— No team —</option>
+          {% for t in teams_for_modal %}
+          <option value="{{ t.id }}">{{ t.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Event Type</label>
+        <select name="event_type">
+          <option value="drill">Drill</option>
+          <option value="test">Test</option>
+          <option value="incident">Incident</option>
+          <option value="recovery">Recovery</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Event Title</label>
+        <input type="text" name="title" placeholder="e.g. Q1 DR Drill" required>
+      </div>
+      <div class="form-row-2col">
+        <div class="form-row">
+          <label>Target RTO (hours)</label>
+          <input type="number" name="target_rto" value="4" min="1" max="168">
+        </div>
+        <div class="form-row">
+          <label>Target RPO (hours)</label>
+          <input type="number" name="target_rpo" value="1" min="0" max="72">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-cancel" onclick="document.getElementById('create-modal').classList.remove('open')">Cancel</button>
+        <button type="submit" class="btn-submit">Trigger Event</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.getElementById('create-modal').addEventListener('click', function(e){
+  if (e.target === this) this.classList.remove('open');
+});
+</script>
+{% endblock %}

@@ -17,26 +17,36 @@
 
 {# ── Stat row ─────────────────────────────────────────────────────────────── #}
 <div class="stats" style="margin-bottom:24px">
-  <div class="stat">
+  <a href="/poam?status=all" class="stat" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
+     title="View all POA&amp;M items">
+    <div class="stat-value">{{ total_all }}</div>
+    <div class="stat-label">All Items</div>
+  </a>
+  <a href="/poam?status=open" class="stat" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
+     title="View all open POA&amp;M items">
     <div class="stat-value">{{ total_open }}</div>
     <div class="stat-label">Open Items</div>
-  </div>
-  <div class="stat">
+  </a>
+  <a href="/poam?status=open&crit_high=1" class="stat" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
+     title="View Critical and High severity open items">
     <div class="stat-value" style="color:var(--red)">{{ crit_high_ct }}</div>
     <div class="stat-label">Critical + High</div>
-  </div>
-  <div class="stat">
+  </a>
+  <a href="/poam?status=open&overdue=1" class="stat" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
+     title="View open items past their scheduled completion date">
     <div class="stat-value" style="color:var(--red)">{{ overdue_ct }}</div>
     <div class="stat-label">Overdue</div>
-  </div>
-  <div class="stat">
+  </a>
+  <a href="/poam?status=open&due_soon=1" class="stat" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
+     title="View open items due within 7 days">
     <div class="stat-value" style="color:var(--yellow)">{{ due_soon_ct }}</div>
     <div class="stat-label">Due This Week</div>
-  </div>
-  <div class="stat">
+  </a>
+  <a href="/poam?status=closed" class="stat" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
+     title="View items closed in the last 30 days">
     <div class="stat-value" style="color:var(--green)">{{ closed_month_ct }}</div>
     <div class="stat-label">Closed This Month</div>
-  </div>
+  </a>
 </div>
 
 {# ── Two-column: Aging + Severity ──────────────────────────────────────────── #}
@@ -68,9 +78,14 @@
     </div>
   </div>
 
-  {# Severity breakdown #}
+  {# Severity breakdown — reflects status filter only, not bottom-form filters #}
   <div class="card" style="padding:20px;margin-bottom:0">
-    <div class="card-title" style="margin-bottom:16px">Severity Breakdown</div>
+    <div class="card-title" style="margin-bottom:16px">
+      Severity Breakdown
+      <span style="font-size:0.8em;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;margin-left:6px">
+        ({{ sev_filter_label if sev_filter_label is defined else 'Active' }})
+      </span>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       {% for level, color, bg in [
           ('Critical',     '#f44336', 'rgba(244,67,54,0.1)'),
@@ -95,10 +110,15 @@
 
 {# ── Filter bar ─────────────────────────────────────────────────────────────── #}
 <form method="get" action="/poam" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
-  <select name="status" class="form-control" style="flex:1;min-width:140px">
-    <option value="open"   {% if status_filter=='open'   %}selected{% endif %}>Open / In Progress</option>
-    <option value="closed" {% if status_filter=='closed' %}selected{% endif %}>Closed</option>
+  <select name="status" class="form-control" style="flex:1;min-width:180px">
+    <option value="open"   {% if status_filter=='open'   %}selected{% endif %}>Active (Open / In Progress / Blocked)</option>
+    <option value="closed" {% if status_filter=='closed' %}selected{% endif %}>Closed / Resolved</option>
     <option value="all"    {% if status_filter=='all'    %}selected{% endif %}>All Statuses</option>
+    {% for s in poam_statuses|default([]) %}
+    <option value="{{ s }}" {% if status_filter==s %}selected{% endif %}>
+      ↳ {{ (poam_status_labels or {})[s] if poam_status_labels is defined else s|replace('_',' ')|title }}
+    </option>
+    {% endfor %}
   </select>
   <select name="severity" class="form-control" style="flex:1;min-width:140px">
     <option value="">All Severities</option>
@@ -115,7 +135,7 @@
   </select>
   {% endif %}
   <button type="submit" class="btn btn-ghost btn-sm">Filter</button>
-  {% if status_filter != 'open' or severity_filter or system_filter %}
+  {% if status_filter != 'open' or severity_filter or system_filter or crit_high_filter or overdue_filter or due_soon_filter %}
   <a href="/poam" class="btn btn-ghost btn-sm" style="color:var(--muted)">✕ Clear</a>
   {% endif %}
 </form>
@@ -164,16 +184,25 @@
         {% set sev_bg = 'rgba(158,158,158,0.1)' %}
       {% endif %}
       {% set st = item.status or 'open' %}
-      {% if st == 'closed' %}
+      {% if st == 'closed_verified' %}
         {% set st_color = 'var(--green)' %}
         {% set st_bg = 'rgba(0,200,83,0.15)' %}
+      {% elif st == 'ready_for_review' %}
+        {% set st_color = '#00cfff' %}
+        {% set st_bg = 'rgba(0,200,255,0.12)' %}
       {% elif st == 'in_progress' %}
         {% set st_color = 'var(--yellow)' %}
         {% set st_bg = 'rgba(255,179,0,0.15)' %}
-      {% elif st == 'risk_accepted' %}
+      {% elif st == 'blocked' %}
+        {% set st_color = '#ff5252' %}
+        {% set st_bg = 'rgba(255,82,82,0.12)' %}
+      {% elif st == 'deferred_waiver' %}
+        {% set st_color = '#ff8c42' %}
+        {% set st_bg = 'rgba(255,140,66,0.12)' %}
+      {% elif st == 'accepted_risk' %}
         {% set st_color = 'var(--cyan)' %}
         {% set st_bg = 'rgba(0,255,204,0.1)' %}
-      {% elif st == 'false_positive' %}
+      {% elif st == 'false_positive' or st == 'draft' %}
         {% set st_color = 'var(--muted)' %}
         {% set st_bg = 'rgba(136,136,136,0.1)' %}
       {% else %}
@@ -181,8 +210,10 @@
         {% set st_bg = 'rgba(158,158,158,0.1)' %}
       {% endif %}
       <tr>
-        <td class="mono" style="font-size:0.75em;color:var(--muted);white-space:nowrap">
-          {{ item.id[:6] }}
+        <td class="mono" style="font-size:0.75em;white-space:nowrap">
+          <a href="/poam/{{ item.id }}" style="color:var(--cyan);text-decoration:none">
+            {{ item.poam_id if item.poam_id else item.id[:6] }}
+          </a>
         </td>
         <td style="font-size:0.82em;color:var(--muted);white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis">
           {% if item.system_id and item.system_id in systems_map %}
@@ -223,9 +254,9 @@
         <td style="white-space:nowrap">
           <span class="badge poam-status-badge" id="st-{{ item.id }}"
                 style="background:{{ st_bg }};color:{{ st_color }};cursor:pointer"
-                title="Click to cycle status"
-                onclick="cyclePoamStatus('{{ item.id }}', '{{ st }}', this)">
-            {{ st | replace('_', ' ') }}
+                title="Click to change status"
+                onclick="openStatusPicker('{{ item.id }}', '{{ st }}', this)">
+            {{ (poam_status_labels or {})[st] if poam_status_labels is defined and st in (poam_status_labels or {}) else st | replace('_', ' ') | title }}
           </span>
         </td>
       </tr>
@@ -235,16 +266,15 @@
   </div>
 
   {# Pagination #}
+  {% set _pqs = "status=" ~ status_filter ~ "&severity=" ~ severity_filter ~ "&system_id=" ~ system_filter ~ "&crit_high=" ~ crit_high_filter ~ "&overdue=" ~ overdue_filter ~ "&due_soon=" ~ due_soon_filter %}
   {% if total_pages > 1 %}
   <div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:14px;border-top:1px solid var(--border)">
     {% if page > 1 %}
-    <a href="/poam?page={{ page-1 }}&status={{ status_filter }}&severity={{ severity_filter }}&system_id={{ system_filter }}"
-       class="btn btn-ghost btn-sm">← Prev</a>
+    <a href="/poam?page={{ page-1 }}&{{ _pqs }}" class="btn btn-ghost btn-sm">← Prev</a>
     {% endif %}
     <span class="text-muted" style="font-size:0.85em">{{ page }} / {{ total_pages }}</span>
     {% if page < total_pages %}
-    <a href="/poam?page={{ page+1 }}&status={{ status_filter }}&severity={{ severity_filter }}&system_id={{ system_filter }}"
-       class="btn btn-ghost btn-sm">Next →</a>
+    <a href="/poam?page={{ page+1 }}&{{ _pqs }}" class="btn btn-ghost btn-sm">Next →</a>
     {% endif %}
   </div>
   {% endif %}
@@ -267,40 +297,57 @@
 
 {% block scripts %}
 <script>
-// Cycle POA&M status inline without page reload
-const STATUS_CYCLE = ['open', 'in_progress', 'closed', 'risk_accepted'];
+// POA&M status picker — click badge to open a select, choose new status
 const STATUS_STYLE = {
-  'open':          {bg:'rgba(158,158,158,0.15)', color:'var(--grey)',   label:'open'},
-  'in_progress':   {bg:'rgba(255,179,0,0.15)',  color:'var(--yellow)', label:'in progress'},
-  'closed':        {bg:'rgba(0,200,83,0.15)',   color:'var(--green)',  label:'closed'},
-  'risk_accepted': {bg:'rgba(0,255,204,0.1)',   color:'var(--cyan)',   label:'risk accepted'},
-  'false_positive':{bg:'rgba(136,136,136,0.1)', color:'var(--muted)', label:'false positive'},
+  'draft':           {bg:'rgba(136,136,136,0.1)',  color:'var(--muted)',   label:'Draft'},
+  'open':            {bg:'rgba(158,158,158,0.15)', color:'var(--grey)',    label:'Open'},
+  'in_progress':     {bg:'rgba(255,179,0,0.15)',   color:'var(--yellow)',  label:'In Progress'},
+  'blocked':         {bg:'rgba(255,82,82,0.12)',   color:'#ff5252',        label:'Blocked'},
+  'ready_for_review':{bg:'rgba(0,200,255,0.12)',   color:'#00cfff',        label:'Ready for Review'},
+  'closed_verified': {bg:'rgba(0,200,83,0.15)',    color:'var(--green)',   label:'Closed Verified'},
+  'deferred_waiver': {bg:'rgba(255,140,66,0.12)',  color:'#ff8c42',        label:'Deferred by Waiver'},
+  'accepted_risk':   {bg:'rgba(0,255,204,0.1)',    color:'var(--cyan)',    label:'Accepted Risk'},
+  'false_positive':  {bg:'rgba(136,136,136,0.1)',  color:'var(--muted)',   label:'False Positive'},
 };
 
-function cyclePoamStatus(itemId, currentStatus, el) {
-  const idx   = STATUS_CYCLE.indexOf(currentStatus);
-  const next  = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
-  const style = STATUS_STYLE[next] || STATUS_STYLE['open'];
-
-  // Optimistic update
-  el.textContent = style.label;
-  el.style.background = style.bg;
-  el.style.color      = style.color;
-  el.setAttribute('onclick', `cyclePoamStatus('${itemId}', '${next}', this)`);
-
-  fetch(`/api/poam/${itemId}/status`, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({status: next})
-  }).catch(function(err){
-    console.error('Status update failed:', err);
-    // Revert on error
-    const prev = STATUS_STYLE[currentStatus] || STATUS_STYLE['open'];
-    el.textContent     = prev.label;
-    el.style.background = prev.bg;
-    el.style.color      = prev.color;
-    el.setAttribute('onclick', `cyclePoamStatus('${itemId}', '${currentStatus}', this)`);
+function openStatusPicker(itemId, currentStatus, el) {
+  // Replace badge with a compact select, pick new status, then restore badge
+  const sel = document.createElement('select');
+  sel.style.cssText = 'font-size:0.72em;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 4px;cursor:pointer';
+  Object.entries(STATUS_STYLE).forEach(([val, s]) => {
+    const opt = document.createElement('option');
+    opt.value = val;
+    opt.textContent = s.label;
+    if (val === currentStatus) opt.selected = true;
+    sel.appendChild(opt);
   });
+  el.replaceWith(sel);
+  sel.focus();
+
+  function applyStatus(newStatus) {
+    const style = STATUS_STYLE[newStatus] || STATUS_STYLE['open'];
+    const badge = document.createElement('span');
+    badge.className = 'badge poam-status-badge';
+    badge.id = 'st-' + itemId;
+    badge.style.background = style.bg;
+    badge.style.color = style.color;
+    badge.style.cursor = 'pointer';
+    badge.title = 'Click to change status';
+    badge.textContent = style.label;
+    badge.setAttribute('onclick', `openStatusPicker('${itemId}', '${newStatus}', this)`);
+    sel.replaceWith(badge);
+
+    if (newStatus !== currentStatus) {
+      fetch(`/api/poam/${itemId}/status`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({status: newStatus})
+      }).catch(() => { badge.style.outline = '2px solid var(--red)'; });
+    }
+  }
+
+  sel.addEventListener('change', () => applyStatus(sel.value));
+  sel.addEventListener('blur',   () => applyStatus(sel.value));
 }
 </script>
 {% endblock %}

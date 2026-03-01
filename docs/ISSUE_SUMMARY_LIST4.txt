@@ -1,0 +1,211 @@
+ISSUE_SUMMARY_LIST4.txt
+BLACKSITE — LIST4 Security + UX Work Order
+Generated: 2026-03-01
+=============================================================
+
+ITEM 1 — SSP Analyzer download report returns 500  [BLOCKER] — DONE
+──────────────────────────────────────────────────────────────
+Status: DONE
+Root cause: Two-layer failure
+  Layer 1 — Python 3.8 / reportlab 4.4.3 incompatibility:
+    reportlab 4.4.3 calls md5(usedforsecurity=False), a Python 3.9+ keyword.
+    Server runs Python 3.8.  Every invocation of _generate_ssp_pdf() raised:
+      TypeError: 'usedforsecurity' is an invalid keyword argument for md5()
+  Layer 2 — Missing error template:
+    The except block in admin_ssp_pdf tried to render "error_pdf.html",
+    which did not exist, causing a secondary TemplateNotFound exception
+    that bypassed the route's own handler and fell to the global 500 handler.
+
+Fix applied:
+  1. Downgraded reportlab: 4.4.3 → 3.6.12 (Python 3.8 compatible)
+       pip install "reportlab==3.6.12"
+  2. Created templates/error_pdf.html — themed error page with:
+       - Event reference displayed as SSP-{req_id}
+       - Truncated error message (no stack trace shown to user)
+       - Retry Download / Back to Review / SSP Analyzer buttons
+       - Diagnostic block: route, timestamp, event ref
+  3. Updated admin_ssp_pdf route (app/main.py ~line 7843) to:
+       - Wrap _generate_ssp_pdf() call in try/except
+       - On exception: generate req_id, log review_id / user / system_name /
+         findings_count / analysis_json_bytes / full traceback
+       - Return TemplateResponse("error_pdf.html", {..., "req_id": req_id}, 500)
+  4. Added hx-boost="false" to PDF download link in admin_ssp_review.html
+     so HTMX does not intercept the binary download response
+  5. Added error state block in admin_ssp_review.html for rev.status == "error"
+
+Verification:
+  curl -s -o /tmp/test.pdf -w "%{http_code} %{size_download}" \
+    -H "Remote-User: dan" http://127.0.0.1:8100/admin/ssp/review/1/pdf
+  Result: 200  76652
+  file /tmp/test.pdf → PDF document, version 1.4 ✓
+
+Files changed:
+  app/main.py            (PDF route, logging, error handler)
+  templates/error_pdf.html         (NEW)
+  templates/admin_ssp_review.html  (hx-boost=false, error state)
+  requirements.txt       (reportlab pinned to 3.6.12)
+
+
+ITEM 2 — SSP Analyzer stays admin-only + leaves sidebar  [HIGH] — DONE
+──────────────────────────────────────────────────────────────
+Status: DONE
+
+Finding:
+  SSP Analyzer route GET /admin/ssp was already guarded with _is_admin() check.
+  The sidebar "Assessment" group (Upload SSP + Assessments links) was redundant
+  and mixed admin tools into the primary workflow sidebar.
+  SSP Analyzer entry point was only in the profile dropdown Admin section (line 1072).
+
+Fix applied:
+  1. Removed entire "Assessment" sidebar group from base.html admin sidebar
+     (lines that rendered "Upload SSP" → /upload and "Assessments" → /admin).
+     Admin tools belong under Admin Tools section, not workflow sidebar.
+  2. SSP Analyzer remains accessible via profile dropdown → Admin Tools → SSP Analyzer.
+  3. Server-side guard _is_admin() on GET /admin/ssp and all /admin/ssp/* routes
+     unchanged and confirmed correct.
+
+Verification:
+  Non-admin (role=isso):  GET /admin/ssp → HTTP 403 ✓
+  Admin (dan):            GET /admin/ssp → HTTP 200 ✓
+  Sidebar for admin user: No "Assessment" group present ✓
+
+Files changed:
+  templates/base.html    (Assessment group removed from admin sidebar)
+
+
+ITEM 3 — Advisory feed source selection  [HIGH] — DONE
+──────────────────────────────────────────────────────────────
+Status: DONE
+
+Feature summary:
+  Admin-selectable feed sources backed by a curated allowlist of 14 reputable
+  cybersecurity publishers.  Sources are stored in the feed_sources DB table
+  and managed via the /admin/feeds admin UI.
+
+Components shipped:
+  - FeedSource model in app/models.py (key PK, name, url, enabled,
+    sort_order, last_fetched, last_error, item_count, error_count)
+  - FEED_ALLOWLIST dict in app/models.py — 14 curated sources, 10 enabled by default
+  - Migration in _migrate_db(): CREATE TABLE feed_sources + INSERT OR IGNORE seed
+  - app/rss_feed.py rewrite:
+      · _item_dedup_key() — by URL; fallback SHA1(title)
+      · _get_cached(feed_key, url) — file cache, 1-hour TTL, stale fallback
+      · get_feed_items(sources, systems, max_items, min_score) — backoff for
+        error_count >= 3; keyword scoring vs registered systems
+      · fetch_one_for_test(url) — cache-bypassing admin test action
+      · Read cap increased 512KB → 2MB (CISA feeds were truncated at 512KB)
+      · _FALLBACK_FEEDS — 3 CISA/SANS entries if DB unavailable
+  - Admin routes in app/main.py:
+      · GET  /admin/feeds           — list with health
+      · POST /admin/feeds/{key}/toggle — enable/disable
+      · POST /admin/feeds/{key}/test   — test fetch + update health stats
+      · POST /admin/feeds/reorder      — sort_order update
+  - templates/admin_feeds.html (NEW)
+  - api_feeds route updated to load enabled sources from DB
+  - "Feed Sources" link added to profile dropdown Admin Tools section
+
+Default enabled sources (10):
+  krebs, darkreading, bleeping, thn, cisa_alerts, cisa_adv, sans, sophos,
+  google, nist
+
+Default disabled (4, can be enabled by admin):
+  govinfo, cso, cisco, secledger
+
+Known issues at deployment:
+  - cisa_adv (CISA Advisories): URL returns HTTP 404 — CISA changed location.
+    Source will backoff after 3 consecutive errors and be skipped.
+  - sophos: timeout on first fetch (intermittent network/server delay).
+
+Verification:
+  curl -s -H "Remote-User: dan" http://127.0.0.1:8100/api/feeds | python3 -c "..."
+  Result:
+    Total items: 25
+    BleepingComputer: 1  |  CISA Alerts: 5  |  Dark Reading: 2
+    Krebs on Security: 1 |  NIST Cybersecurity Insights: 4  |  The Hacker News: 12
+    Unique links: 25 / 25 total (dedup working)
+
+Files changed:
+  app/models.py          (FeedSource model, FEED_ALLOWLIST, migration)
+  app/rss_feed.py        (full rewrite)
+  app/main.py            (admin feeds routes, api_feeds route, FeedSource import)
+  templates/admin_feeds.html        (NEW)
+  templates/base.html    (Feed Sources link in dropdown)
+
+
+ITEM 4 — Sidebar and alert ticker persist across navigation  [HIGH] — DONE
+──────────────────────────────────────────────────────────────
+Status: DONE
+
+Root cause:
+  - initSbAdvisory() and initSbQuiz() were bound to DOMContentLoaded (fires once)
+    which is correct; however no guard prevented re-invocation from code paths
+    that could call them repeatedly.
+  - Sidebar advisory IS outside the HTMX #main-content swap target — it persists
+    across navigation at the DOM level, but the advisory fetch was not TTL-cached,
+    meaning each time code was called it would re-fetch and re-animate.
+  - Sidebar active link was server-rendered in <aside> (not in swap target), so it
+    did not update as the user navigated without a full page reload.
+  - Observation badge fetch was not re-run after HTMX partial swaps.
+
+Fix applied:
+  1. initSbQuiz(): added _bsvQuizReady flag — function returns immediately if
+     already initialised, preventing double-init on any code path.
+  2. initSbAdvisory(): added 15-minute TTL cache:
+       var _bsvAdvFetchedAt = 0;
+       var _bsvAdvCached    = null;
+     If within TTL and cache populated, skips fetch and re-population entirely.
+     Inner element gets data-adv-loaded attribute so even forced re-calls skip
+     re-injection of already-rendered HTML.
+  3. _updateSbActiveLink(): new function that reads window.location.pathname and
+     toggles .active class + cyan outline on .sb-link anchors whose href matches.
+  4. htmx:afterSettle listener:
+       - Calls _updateSbActiveLink() on every partial swap
+       - Re-runs observation badge fetch so count stays current across navigation
+
+Verification:
+  - Navigate dashboard → systems → /poam → /advisories via HTMX links
+  - Advisory ticker does not re-fetch or re-animate within 15-minute window
+  - Active sidebar link updates to match current route on each navigation
+  - Observation badge count refreshes on each navigation without full page reload
+
+Files changed:
+  templates/base.html    (_bsvQuizReady guard, TTL cache vars, _updateSbActiveLink,
+                          htmx:afterSettle listener)
+
+
+ITEM 5 — Side panel and dropdown consolidation  [HIGH] — DONE
+──────────────────────────────────────────────────────────────
+Status: DONE
+
+Before/after summary: see NAV_CLEANUP_PLAN.txt for full mapping.
+
+Changes applied:
+  1. Removed "Assessment" group from admin left sidebar (Upload SSP + Assessments).
+     Admin tools are accessible via Admin Tools section in profile dropdown only.
+  2. Profile dropdown restructured:
+     Before:  Personal | [role-switch section] | GRC (duplicated sidebar) | Admin
+     After:   Identity | [role-switch section] | Admin Tools
+     - "Personal" → "Identity"
+     - "GRC" section (Systems, POAM, Risks, Assessments) removed entirely
+       (fully duplicated sidebar workflow links)
+     - "Admin" → "Admin Tools"
+     - "Upload SSP" removed from dropdown (admin-only, accessible via /admin/ssp)
+  3. "Feed Sources" added to Admin Tools in dropdown.
+  4. All admin-only items hidden from non-admin users in both sidebar and dropdown
+     (guarded by {% if is_admin %} / {% if is_admin and view_mode == 'admin' %}).
+
+Files changed:
+  templates/base.html    (sidebar Assessment group, dropdown restructure)
+
+
+=============================================================
+SUMMARY TABLE
+=============================================================
+Item | Priority | Status | Risk  | Files changed
+-----|----------|--------|-------|------------------------
+1    | BLOCKER  | DONE   | Low   | main.py, error_pdf.html, admin_ssp_review.html, requirements.txt
+2    | HIGH     | DONE   | Low   | base.html
+3    | HIGH     | DONE   | Med   | models.py, rss_feed.py, main.py, admin_feeds.html, base.html
+4    | HIGH     | DONE   | Low   | base.html
+5    | HIGH     | DONE   | Low   | base.html
+=============================================================

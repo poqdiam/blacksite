@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — {{ system.abbreviation or system.name }} · {{ ctrl_id | upper }}{% endblock %}
+
+{% block head %}
+<style>
+  .ws-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 22px 24px;
+    margin-bottom: 16px;
+  }
+  .ws-card-title {
+    font-size: 0.68em;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 14px;
+  }
+  .ctrl-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .ctrl-id-badge {
+    font-family: var(--mono);
+    font-size: 1.4em;
+    font-weight: 900;
+    color: var(--cyan);
+    letter-spacing: 1px;
+  }
+  .ctrl-title-text {
+    font-size: 1.05em;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .ctrl-family-badge {
+    font-size: 0.7em;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 4px;
+    background: rgba(0,255,204,0.08);
+    border: 1px solid rgba(0,255,204,0.2);
+    color: var(--cyan);
+  }
+  .ctrl-statement {
+    font-size: 0.88em;
+    color: var(--text);
+    line-height: 1.75;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .ctrl-nav {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+  .ctrl-nav a {
+    font-size: 0.75em;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    text-decoration: none;
+    font-family: var(--mono);
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .ctrl-nav a:hover { color: var(--cyan); border-color: rgba(0,255,204,0.35); }
+
+  /* ── Impl form ── */
+  .impl-label {
+    display: block;
+    font-size: 0.68em;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 5px;
+    margin-top: 16px;
+  }
+  .impl-label:first-child { margin-top: 0; }
+  .impl-form select,
+  .impl-form input[type=text] {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    color: var(--text);
+    font-size: 0.88em;
+    font-family: var(--mono);
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.15s;
+  }
+  .impl-form select:focus,
+  .impl-form input[type=text]:focus {
+    border-color: rgba(0,255,204,0.4);
+  }
+  .impl-form textarea {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px;
+    color: var(--text);
+    font-size: 0.84em;
+    font-family: var(--mono);
+    min-height: 200px;
+    resize: vertical;
+    box-sizing: border-box;
+    outline: none;
+    line-height: 1.6;
+    transition: border-color 0.15s;
+  }
+  .impl-form textarea:focus {
+    border-color: rgba(0,255,204,0.4);
+  }
+  .impl-row-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 640px) {
+    .impl-row-3 { grid-template-columns: 1fr; }
+  }
+  .last-updated {
+    font-size: 0.75em;
+    color: var(--muted);
+    margin-top: 10px;
+  }
+  .inherited-section { display: none; }
+  .inherited-section.active { display: block; }
+
+  /* Save banner */
+  .save-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: rgba(0,200,83,0.12);
+    border: 1px solid rgba(0,200,83,0.3);
+    border-radius: 6px;
+    margin-bottom: 14px;
+    font-size: 0.85em;
+    color: var(--green);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Breadcrumb ───────────────────────────────────────────────────────────── #}
+<div style="margin-bottom:6px;font-size:0.82em">
+  <a href="/systems" style="color:var(--muted)">Systems</a>
+  <span style="color:var(--border);margin:0 6px">/</span>
+  <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.abbreviation or system.name }}</a>
+  <span style="color:var(--border);margin:0 6px">/</span>
+  <a href="/systems/{{ system.id }}/controls" style="color:var(--muted)">Control Plan</a>
+  <span style="color:var(--border);margin:0 6px">/</span>
+  <span style="color:var(--text)">{{ ctrl_id | upper }} : {{ system.abbreviation or system.name }}</span>
+</div>
+
+{# ── Save confirmation banner ─────────────────────────────────────────────── #}
+{% if request.query_params.get('saved') %}
+<div class="save-banner">
+  ✓ Implementation record saved successfully.
+</div>
+{% endif %}
+
+{# ── NIST Control Definition card ─────────────────────────────────────────── #}
+<div class="ws-card">
+  <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+    <div style="flex:1;min-width:0">
+      <div class="ws-card-title">NIST SP 800-53r5 — Control Definition</div>
+      <div class="ctrl-meta-row">
+        <span class="ctrl-id-badge">{{ ctrl_id | upper }}</span>
+        <span class="ctrl-family-badge">{{ cat_ctrl.family or ctrl_id.split('-')[0] | upper }}</span>
+        <span class="ctrl-title-text">{{ cat_ctrl.title or '—' }}</span>
+      </div>
+    </div>
+    {# Prev / next navigation #}
+    <div class="ctrl-nav">
+      {% if prev_ctrl %}
+      <a href="/systems/{{ system.id }}/workspace/{{ prev_ctrl }}" title="{{ prev_ctrl | upper }}">← {{ prev_ctrl | upper }}</a>
+      {% endif %}
+      {% if next_ctrl %}
+      <a href="/systems/{{ system.id }}/workspace/{{ next_ctrl }}" title="{{ next_ctrl | upper }}">{{ next_ctrl | upper }} →</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Control statement #}
+  <div class="ctrl-statement">{{ cat_ctrl.text or 'No statement available in catalog.' }}</div>
+
+  {# Related controls + catalog link #}
+  <div style="display:flex;gap:16px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);flex-wrap:wrap;align-items:center">
+    <a href="/controls/{{ ctrl_id }}" style="font-size:0.78em;color:var(--cyan)" target="_blank">
+      View in Control Catalog →
+    </a>
+    <a href="/systems/{{ system.id }}/controls?family={{ cat_ctrl.family or ctrl_id.split('-')[0] | upper }}"
+       style="font-size:0.78em;color:var(--muted)">
+      {{ cat_ctrl.family or ctrl_id.split('-')[0] | upper }} family →
+    </a>
+    <span style="font-size:0.72em;color:var(--muted);margin-left:auto">
+      NIST SP 800-53 Rev 5
+    </span>
+  </div>
+</div>
+
+{# ── Implementation Record card ───────────────────────────────────────────── #}
+<div class="ws-card">
+  <div class="ws-card-title">
+    {{ system.abbreviation or system.name }} — Implementation Record
+    {% if not can_edit %}
+    <span style="font-size:0.85em;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:8px">
+      (read-only — your role cannot edit)
+    </span>
+    {% endif %}
+  </div>
+
+  <form method="POST" action="/systems/{{ system.id }}/workspace/{{ ctrl_id }}" class="impl-form">
+
+    <div class="impl-row-3">
+      <div>
+        <label class="impl-label">Implementation Status</label>
+        <select name="status" id="ws-status" {% if not can_edit %}disabled{% endif %}>
+          {% for s, lbl in [
+            ('not_started','Not Started'), ('in_progress','In Progress'),
+            ('implemented','Implemented'), ('planned','Planned'),
+            ('not_applicable','Not Applicable'), ('inherited','Inherited')
+          ] %}
+          <option value="{{ s }}" {% if sc and sc.status == s %}selected{% elif not sc and s == 'not_started' %}selected{% endif %}>
+            {{ lbl }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="impl-label">Implementation Type</label>
+        <select name="implementation_type" id="ws-itype" {% if not can_edit %}disabled{% endif %}>
+          {% for t, lbl in [('system','System'),('hybrid','Hybrid'),('inherited','Inherited')] %}
+          <option value="{{ t }}" {% if sc and sc.implementation_type == t %}selected{% elif not sc and t == 'system' %}selected{% endif %}>
+            {{ lbl }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="impl-label">Responsible Role</label>
+        <input type="text" name="responsible_role"
+               value="{{ sc.responsible_role if sc else '' }}"
+               placeholder="e.g. System Administrator"
+               {% if not can_edit %}readonly{% endif %}>
+      </div>
+    </div>
+
+    {# Inherited From — conditional section #}
+    <div class="inherited-section {% if sc and sc.status == 'inherited' %}active{% endif %}" id="ws-inh-section">
+      <label class="impl-label">Inherited From (System)</label>
+      <select name="inherited_from" {% if not can_edit %}disabled{% endif %}>
+        <option value="">— Select providing system —</option>
+        {% for os in other_systems %}
+        <option value="{{ os.id }}" {% if sc and sc.inherited_from == os.id %}selected{% endif %}>
+          {{ os.name }}{% if os.abbreviation %} ({{ os.abbreviation }}){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      <label class="impl-label" style="margin-top:10px">Provider Narrative</label>
+      <textarea name="inherited_narrative"
+                placeholder="What the providing system implements for this control…"
+                {% if not can_edit %}readonly{% endif %}>{{ sc.inherited_narrative if sc else '' }}</textarea>
+    </div>
+
+    <label class="impl-label">Implementation Narrative</label>
+    <textarea name="narrative"
+              placeholder="Describe how this control is implemented within {{ system.name }}…"
+              {% if not can_edit %}readonly{% endif %}>{{ sc.narrative if sc else '' }}</textarea>
+
+    {% if can_edit %}
+    <div style="display:flex;align-items:center;gap:14px;margin-top:16px">
+      <button type="submit" class="btn btn-primary" style="padding:9px 24px">Save Changes</button>
+      <a href="/systems/{{ system.id }}/controls" class="btn btn-ghost btn-sm">← Back to Control Plan</a>
+    </div>
+    {% else %}
+    <div style="margin-top:14px">
+      <a href="/systems/{{ system.id }}/controls" class="btn btn-ghost btn-sm">← Back to Control Plan</a>
+    </div>
+    {% endif %}
+
+    {# Last updated metadata #}
+    {% if sc and sc.last_updated_by %}
+    <div class="last-updated">
+      Last updated by <strong>{{ sc.last_updated_by }}</strong>
+      {% if sc.last_updated_at %}
+       on {{ sc.last_updated_at.strftime('%Y-%m-%d %H:%M UTC') }}
+      {% endif %}
+    </div>
+    {% elif sc and sc.created_at %}
+    <div class="last-updated">
+      Record created by <strong>{{ sc.created_by or '—' }}</strong>
+      on {{ sc.created_at.strftime('%Y-%m-%d') }}
+    </div>
+    {% else %}
+    <div class="last-updated" style="color:rgba(158,158,158,0.5)">
+      No implementation record yet — fill out the form above to create one.
+    </div>
+    {% endif %}
+
+  </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Show/hide inherited section based on status
+(function() {
+  var statusEl = document.getElementById('ws-status');
+  var inhSec   = document.getElementById('ws-inh-section');
+  if (!statusEl || !inhSec) return;
+
+  function update() {
+    inhSec.classList.toggle('active', statusEl.value === 'inherited');
+  }
+  statusEl.addEventListener('change', update);
+  update();
+})();
+</script>
+{% endblock %}

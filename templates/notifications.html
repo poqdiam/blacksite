@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Notifications{% endblock %}
+
+{% block head %}
+<style>
+  .notif-list { list-style:none; margin:0; padding:0; }
+  .notif-item {
+    display:flex; align-items:flex-start; gap:14px;
+    padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.04);
+    transition:background 0.1s;
+    cursor:default;
+  }
+  .notif-item:last-child { border-bottom:none; }
+  .notif-item:hover { background:rgba(255,255,255,0.02); }
+  .notif-item.unread { background:rgba(0,255,204,0.03); }
+  .notif-item.unread:hover { background:rgba(0,255,204,0.055); }
+
+  .notif-dot {
+    width:8px; height:8px; border-radius:50%;
+    background:var(--cyan); flex-shrink:0; margin-top:6px;
+    transition:opacity 0.3s;
+  }
+  .notif-item:not(.unread) .notif-dot { background:transparent; }
+
+  .notif-body { flex:1; min-width:0; }
+  .notif-title {
+    font-size:0.88em; font-weight:600; color:var(--text);
+    margin-bottom:3px; line-height:1.3;
+  }
+  .notif-item.unread .notif-title { color:#fff; }
+  .notif-msg {
+    font-size:0.8em; color:var(--muted); line-height:1.4;
+    white-space:pre-wrap; word-break:break-word;
+  }
+  .notif-meta {
+    font-size:0.72em; color:var(--muted); margin-top:5px;
+    display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+  }
+  .notif-type-chip {
+    font-size:0.68em; padding:1px 7px; border-radius:10px;
+    background:rgba(255,255,255,0.06); border:1px solid var(--border);
+    color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;
+  }
+  .notif-actions { display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0; }
+  .notif-action-link {
+    font-size:0.75em; color:var(--cyan); text-decoration:none; white-space:nowrap;
+  }
+  .notif-action-link:hover { text-decoration:underline; }
+  .notif-read-btn {
+    font-size:0.7em; color:var(--muted); background:none; border:none;
+    cursor:pointer; padding:0; line-height:1; transition:color 0.1s;
+  }
+  .notif-read-btn:hover { color:var(--text); }
+
+  .notif-empty {
+    padding:60px 24px; text-align:center; color:var(--muted);
+  }
+  .notif-empty-icon { font-size:2.4em; margin-bottom:12px; opacity:0.3; }
+
+  .notif-filter-bar {
+    display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap;
+  }
+  .notif-filter-btn {
+    padding:4px 12px; border-radius:16px; font-size:0.78em; font-weight:600;
+    border:1px solid var(--border); background:var(--surface); color:var(--muted);
+    cursor:pointer; transition:all 0.15s; text-decoration:none;
+  }
+  .notif-filter-btn.active, .notif-filter-btn:hover {
+    border-color:var(--cyan); color:var(--cyan); background:rgba(0,255,204,0.06);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <span>BLACKSITE</span>
+  <span class="sep">›</span>
+  <span>Notifications</span>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+  <div>
+    <h1>Notifications</h1>
+    {% if unread_count > 0 %}
+    <p class="text-muted" style="font-size:0.85em;margin:4px 0 0">
+      <span style="color:var(--cyan)">{{ unread_count }}</span> unread
+    </p>
+    {% else %}
+    <p class="text-muted" style="font-size:0.85em;margin:4px 0 0">All caught up.</p>
+    {% endif %}
+  </div>
+  {% if unread_count > 0 %}
+  <button id="mark-all-btn" onclick="markAllRead()"
+          class="btn btn-ghost btn-sm" style="color:var(--muted)">
+    ✓ Mark all read
+  </button>
+  {% endif %}
+</div>
+
+{# Filter bar #}
+<div class="notif-filter-bar">
+  <a href="/notifications" class="notif-filter-btn {% if not unread_only %}active{% endif %}">All</a>
+  <a href="/notifications?unread=1" class="notif-filter-btn {% if unread_only %}active{% endif %}">Unread</a>
+</div>
+
+{# Notifications list #}
+{% if notifications %}
+<div class="card" style="padding:0;overflow:hidden">
+  <ul class="notif-list" id="notif-list">
+    {% for n in notifications %}
+    <li class="notif-item {% if not n.is_read %}unread{% endif %}" id="notif-{{ n.id }}">
+      <div class="notif-dot"></div>
+      <div class="notif-body">
+        <div class="notif-title">{{ n.title }}</div>
+        {% if n.body %}
+        <div class="notif-msg">{{ n.body }}</div>
+        {% endif %}
+        <div class="notif-meta">
+          <span>{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '' }}</span>
+          {% if n.notif_type %}
+          <span class="notif-type-chip">{{ n.notif_type | replace('_',' ') }}</span>
+          {% endif %}
+          {% if n.is_read and n.read_at %}
+          <span style="opacity:0.5">read {{ n.read_at.strftime('%Y-%m-%d') }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="notif-actions">
+        {% if n.action_url %}
+        <a href="{{ n.action_url }}" class="notif-action-link"
+           onclick="markRead({{ n.id }})">View →</a>
+        {% endif %}
+        {% if not n.is_read %}
+        <button class="notif-read-btn" onclick="markRead({{ n.id }})" title="Mark as read">
+          ✓ read
+        </button>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+
+{% if total_count > notifications|length %}
+<div style="text-align:center;margin-top:14px">
+  <a href="/notifications?limit={{ (notifications|length + 20) }}"
+     style="font-size:0.82em;color:var(--cyan)">
+    Load more ({{ total_count - notifications|length }} remaining) →
+  </a>
+</div>
+{% endif %}
+
+{% else %}
+<div class="card notif-empty">
+  <div class="notif-empty-icon">🔔</div>
+  <div style="font-size:0.9em;font-weight:600;margin-bottom:6px">No notifications</div>
+  <div style="font-size:0.82em">You'll be notified when documents are submitted, reviewed, or approved.</div>
+</div>
+{% endif %}
+
+<script>
+async function markRead(id) {
+  try {
+    await fetch('/api/notifications/' + id + '/read', { method: 'POST' });
+    const el = document.getElementById('notif-' + id);
+    if (el) {
+      el.classList.remove('unread');
+      const dot = el.querySelector('.notif-dot');
+      if (dot) dot.style.background = 'transparent';
+      const btn = el.querySelector('.notif-read-btn');
+      if (btn) btn.remove();
+    }
+    updateBellCount(-1);
+  } catch (e) { console.warn('markRead failed', e); }
+}
+
+async function markAllRead() {
+  try {
+    await fetch('/api/notifications/read-all', { method: 'POST' });
+    document.querySelectorAll('.notif-item.unread').forEach(function(el) {
+      el.classList.remove('unread');
+      const dot = el.querySelector('.notif-dot');
+      if (dot) dot.style.background = 'transparent';
+      const btn = el.querySelector('.notif-read-btn');
+      if (btn) btn.remove();
+    });
+    document.getElementById('mark-all-btn')?.remove();
+    updateBellCount(0, true);
+  } catch (e) { console.warn('markAllRead failed', e); }
+}
+
+function updateBellCount(delta, zero) {
+  const bell = document.getElementById('nav-bell');
+  if (!bell) return;
+  const badge = bell.querySelector('span');
+  if (zero) { if (badge) badge.remove(); return; }
+  if (!badge) return;
+  const cur = parseInt(badge.textContent) || 0;
+  const next = Math.max(0, cur + delta);
+  if (next === 0) badge.remove();
+  else badge.textContent = next > 99 ? '99+' : next;
+}
+</script>
+{% endblock %}

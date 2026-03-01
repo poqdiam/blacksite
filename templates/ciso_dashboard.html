@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — CISO Dashboard{% endblock %}
+
+{% block head %}
+<style>
+  /* ── Summary stat tiles ──────────────────────────────────────────────────── */
+  .ciso-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .ciso-stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 14px;
+    text-align: center;
+  }
+  .ciso-stat-val {
+    font-size: 2em;
+    font-weight: 900;
+    font-family: var(--mono);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .ciso-stat-lbl {
+    font-size: 0.68em;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+
+  /* ── Authorization breakdown bar ────────────────────────────────────────── */
+  .auth-bar-wrap {
+    display: flex;
+    height: 10px;
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 10px 0 14px;
+    gap: 2px;
+  }
+  .auth-bar-seg { height: 100%; border-radius: 3px; transition: width 0.3s; }
+
+  /* ── System table ────────────────────────────────────────────────────────── */
+  .csys-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84em;
+  }
+  .csys-table th {
+    text-align: left;
+    color: var(--muted);
+    font-size: 0.72em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .csys-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    vertical-align: middle;
+  }
+  .csys-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .csys-table tr:last-child td { border-bottom: none; }
+
+  /* Auth status pill */
+  .auth-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75em;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .ap-authorized   { background: rgba(0,200,83,0.15);  color: var(--green); }
+  .ap-in_progress  { background: rgba(255,179,0,0.15); color: var(--yellow); }
+  .ap-expired      { background: rgba(244,67,54,0.15); color: var(--red); }
+  .ap-not_authorized { background: rgba(100,100,120,0.15); color: var(--muted); }
+
+  /* Impact badge */
+  .impact-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 0.72em;
+    font-weight: 700;
+  }
+  .ib-High     { background: rgba(244,67,54,0.15); color: var(--red); }
+  .ib-Moderate { background: rgba(255,179,0,0.15); color: var(--yellow); }
+  .ib-Low      { background: rgba(0,200,83,0.15);  color: var(--green); }
+
+  /* POAM counts */
+  .poam-num { font-family: var(--mono); font-weight: 700; }
+  .poam-overdue { color: var(--red); }
+
+  /* Section heading row */
+  .section-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 24px 0 10px;
+  }
+  .section-hdr h2 {
+    font-size: 0.8em;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0;
+  }
+  .section-hdr a { font-size: 0.78em; color: var(--cyan); text-decoration: none; }
+
+  /* Breakdown legend chips */
+  .legend-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .legend-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78em;
+    color: var(--muted);
+  }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:1100px;margin:0 auto;padding:24px 16px">
+
+  {# ── Page header ────────────────────────────────────────────────────────── #}
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div>
+      <h1 style="font-size:1.3em;margin:0;font-weight:900">CISO Dashboard</h1>
+      <div style="font-size:0.78em;color:var(--muted);margin-top:2px">
+        Org-wide security posture — {{ system_count }} active system{{ 's' if system_count != 1 }}
+      </div>
+    </div>
+    <a href="/systems" class="btn btn-ghost btn-sm" style="font-size:0.8em">System Catalog →</a>
+  </div>
+
+  {# ── Top stat tiles ──────────────────────────────────────────────────────── #}
+  <div class="ciso-stats">
+    <div class="ciso-stat">
+      <div class="ciso-stat-val" style="color:var(--cyan)">{{ system_count }}</div>
+      <div class="ciso-stat-lbl">Total Systems</div>
+    </div>
+    <div class="ciso-stat">
+      <div class="ciso-stat-val" style="color:var(--green)">{{ auth_counts.authorized }}</div>
+      <div class="ciso-stat-lbl">Authorized</div>
+    </div>
+    <div class="ciso-stat">
+      <div class="ciso-stat-val" style="color:var(--yellow)">{{ auth_counts.in_progress }}</div>
+      <div class="ciso-stat-lbl">In Progress</div>
+    </div>
+    <div class="ciso-stat">
+      <div class="ciso-stat-val" style="color:var(--red)">{{ auth_counts.expired }}</div>
+      <div class="ciso-stat-lbl">Expired ATO</div>
+    </div>
+    <div class="ciso-stat">
+      <div class="ciso-stat-val" style="color:var(--muted)">{{ auth_counts.not_authorized }}</div>
+      <div class="ciso-stat-lbl">Not Authorized</div>
+    </div>
+    <div class="ciso-stat">
+      <div class="ciso-stat-val" style="color:{% if total_overdue_poams > 0 %}var(--red){% else %}var(--text){% endif %}">
+        {{ total_open_poams }}
+      </div>
+      <div class="ciso-stat-lbl">Open POA&amp;Ms</div>
+    </div>
+    <div class="ciso-stat">
+      <div class="ciso-stat-val" style="color:{% if total_overdue_poams > 0 %}var(--red){% else %}var(--green){% endif %}">
+        {{ total_overdue_poams }}
+      </div>
+      <div class="ciso-stat-lbl">Overdue POA&amp;Ms</div>
+    </div>
+    <div class="ciso-stat">
+      <div class="ciso-stat-val" style="color:{% if total_open_risks > 0 %}var(--yellow){% else %}var(--green){% endif %}">
+        {{ total_open_risks }}
+      </div>
+      <div class="ciso-stat-lbl">Open Risks</div>
+    </div>
+  </div>
+
+  {# ── Authorization breakdown ─────────────────────────────────────────────── #}
+  <div class="card" style="margin-bottom:16px;padding:20px 24px">
+    <div style="font-size:0.75em;text-transform:uppercase;letter-spacing:0.7px;color:var(--muted);margin-bottom:12px">
+      Authorization Status Distribution
+    </div>
+    {% set total = system_count if system_count > 0 else 1 %}
+    <div class="auth-bar-wrap">
+      {% if auth_counts.authorized > 0 %}
+      <div class="auth-bar-seg" style="width:{{ (auth_counts.authorized / total * 100)|round(1) }}%;background:var(--green)"></div>
+      {% endif %}
+      {% if auth_counts.in_progress > 0 %}
+      <div class="auth-bar-seg" style="width:{{ (auth_counts.in_progress / total * 100)|round(1) }}%;background:var(--yellow)"></div>
+      {% endif %}
+      {% if auth_counts.expired > 0 %}
+      <div class="auth-bar-seg" style="width:{{ (auth_counts.expired / total * 100)|round(1) }}%;background:var(--red)"></div>
+      {% endif %}
+      {% if auth_counts.not_authorized > 0 %}
+      <div class="auth-bar-seg" style="width:{{ (auth_counts.not_authorized / total * 100)|round(1) }}%;background:#444"></div>
+      {% endif %}
+    </div>
+    <div class="legend-row">
+      <div class="legend-chip">
+        <div class="legend-dot" style="background:var(--green)"></div>
+        Authorized ({{ auth_counts.authorized }})
+      </div>
+      <div class="legend-chip">
+        <div class="legend-dot" style="background:var(--yellow)"></div>
+        In Progress ({{ auth_counts.in_progress }})
+      </div>
+      <div class="legend-chip">
+        <div class="legend-dot" style="background:var(--red)"></div>
+        Expired ({{ auth_counts.expired }})
+      </div>
+      <div class="legend-chip">
+        <div class="legend-dot" style="background:#444"></div>
+        Not Authorized ({{ auth_counts.not_authorized }})
+      </div>
+    </div>
+
+    {# FIPS 199 classification #}
+    <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
+      <div style="font-size:0.75em;text-transform:uppercase;letter-spacing:0.7px;color:var(--muted);margin-bottom:10px">
+        FIPS 199 Classification
+      </div>
+      <div class="auth-bar-wrap">
+        {% if impact_counts.High > 0 %}
+        <div class="auth-bar-seg" style="width:{{ (impact_counts.High / total * 100)|round(1) }}%;background:var(--red)"></div>
+        {% endif %}
+        {% if impact_counts.Moderate > 0 %}
+        <div class="auth-bar-seg" style="width:{{ (impact_counts.Moderate / total * 100)|round(1) }}%;background:var(--yellow)"></div>
+        {% endif %}
+        {% if impact_counts.Low > 0 %}
+        <div class="auth-bar-seg" style="width:{{ (impact_counts.Low / total * 100)|round(1) }}%;background:var(--green)"></div>
+        {% endif %}
+      </div>
+      <div class="legend-row">
+        <div class="legend-chip">
+          <div class="legend-dot" style="background:var(--red)"></div>
+          High ({{ impact_counts.High }})
+        </div>
+        <div class="legend-chip">
+          <div class="legend-dot" style="background:var(--yellow)"></div>
+          Moderate ({{ impact_counts.Moderate }})
+        </div>
+        <div class="legend-chip">
+          <div class="legend-dot" style="background:var(--green)"></div>
+          Low ({{ impact_counts.Low }})
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Per-system detail table ──────────────────────────────────────────────── #}
+  <div class="section-hdr">
+    <h2>System-by-System Posture</h2>
+    <a href="/posture">Full Posture View →</a>
+  </div>
+
+  <div class="card" style="padding:0;overflow:hidden">
+    <table class="csys-table">
+      <thead>
+        <tr>
+          <th>System</th>
+          <th>Classification</th>
+          <th>Auth Status</th>
+          <th>Auth Expiry</th>
+          <th style="text-align:right">Open POA&amp;Ms</th>
+          <th style="text-align:right">Overdue</th>
+          <th style="text-align:right">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in systems %}
+        <tr>
+          <td>
+            <a href="/systems/{{ s.id }}" style="color:var(--text);text-decoration:none;font-weight:700">
+              {{ s.name }}
+            </a>
+            <span style="font-size:0.72em;color:var(--muted);margin-left:6px">{{ s.abbreviation }}</span>
+          </td>
+          <td>
+            <span class="impact-badge ib-{{ s.overall_impact }}">{{ s.overall_impact }}</span>
+          </td>
+          <td>
+            {% set status_labels = {
+              'authorized':    'Authorized',
+              'in_progress':   'In Progress',
+              'expired':       'Expired',
+              'not_authorized':'Not Auth'
+            } %}
+            <span class="auth-pill ap-{{ s.auth_status }}">
+              {{ status_labels.get(s.auth_status, s.auth_status|capitalize) }}
+            </span>
+          </td>
+          <td style="color:{% if s.auth_expiry and s.auth_expiry < now.date().isoformat() %}var(--red){% else %}var(--muted){% endif %};font-size:0.82em;font-family:var(--mono)">
+            {{ s.auth_expiry or '—' }}
+          </td>
+          <td style="text-align:right">
+            <span class="poam-num{% if s.open_poams > 0 %} poam-overdue{% endif %}">
+              {{ s.open_poams if s.open_poams > 0 else '—' }}
+            </span>
+          </td>
+          <td style="text-align:right">
+            <span class="poam-num{% if s.overdue_poams > 0 %} poam-overdue{% endif %}">
+              {{ s.overdue_poams if s.overdue_poams > 0 else '—' }}
+            </span>
+          </td>
+          <td style="text-align:right">
+            <a href="/systems/{{ s.id }}/edit" class="btn btn-ghost btn-sm" style="font-size:0.75em;padding:3px 10px">Edit</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" style="text-align:center;color:var(--muted);padding:32px">
+            No active systems.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# ── Quick action links ───────────────────────────────────────────────────── #}
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px">
+    <a href="/poam" class="btn btn-ghost btn-sm">POA&amp;M →</a>
+    <a href="/risks" class="btn btn-ghost btn-sm">Risk Register →</a>
+    <a href="/ato" class="btn btn-ghost btn-sm">ATO Package →</a>
+    <a href="/reports" class="btn btn-ghost btn-sm">Reports →</a>
+  </div>
+
+</div>
+{% endblock %}

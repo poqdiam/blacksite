@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Vendors: {{ system.name }}{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+  <div>
+    <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">
+      <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a> / Vendor & BAA Registry
+    </div>
+    <h1 style="font-size:1.3em;margin:0">Vendor &amp; BAA Registry</h1>
+  </div>
+  <button class="btn btn-primary btn-sm" onclick="document.getElementById('add-vendor-form').style.display='block';this.style.display='none'">
+    + Add Vendor
+  </button>
+</div>
+
+<div id="add-vendor-form" style="display:none" class="card" style="padding:20px;margin-bottom:16px">
+  <h2 style="font-size:0.9em;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:16px">Add Vendor</h2>
+  <form method="post" action="/systems/{{ system.id }}/vendors">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div>
+        <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Vendor Name *</label>
+        <input type="text" name="name" required style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Service Type</label>
+        <select name="service_type" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em">
+          <option value="cloud">Cloud</option>
+          <option value="saas">SaaS</option>
+          <option value="contractor">Contractor</option>
+          <option value="data_processor">Data Processor</option>
+          <option value="other" selected>Other</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Contact Name</label>
+        <input type="text" name="contact_name" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Contact Email</label>
+        <input type="email" name="contact_email" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">BAA Expiry</label>
+        <input type="date" name="baa_expiry" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Status</label>
+        <select name="status" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em">
+          <option value="active" selected>Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="terminated">Terminated</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;margin-bottom:12px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88em">
+        <input type="checkbox" name="handles_ephi" style="accent-color:var(--red)"> Handles ePHI
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88em">
+        <input type="checkbox" name="has_baa" style="accent-color:var(--green)"> BAA in place
+      </label>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Notes</label>
+      <textarea name="notes" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em;resize:vertical"></textarea>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button type="submit" class="btn btn-primary">Add Vendor</button>
+      <button type="button" class="btn btn-ghost" onclick="document.getElementById('add-vendor-form').style.display='none'">Cancel</button>
+    </div>
+  </form>
+</div>
+
+{% if vendors %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table>
+    <thead>
+      <tr>
+        <th>Vendor</th>
+        <th>Type</th>
+        <th>ePHI</th>
+        <th>BAA</th>
+        <th>BAA Expiry</th>
+        <th>Status</th>
+        <th>Contact</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for v in vendors %}
+      <tr>
+        <td style="font-weight:600;font-size:0.88em">{{ v.name }}</td>
+        <td style="font-size:0.8em;color:var(--muted)">{{ v.service_type | replace('_',' ') | title }}</td>
+        <td style="text-align:center">{{ '🔴' if v.handles_ephi else '—' }}</td>
+        <td style="text-align:center">
+          {% if v.handles_ephi %}
+            {{ '✅' if v.has_baa else '🚨' }}
+          {% else %}
+            {{ '✅' if v.has_baa else '—' }}
+          {% endif %}
+        </td>
+        <td class="mono" style="font-size:0.8em;color:{% if v.baa_expiry and v.baa_expiry < today %}var(--red){% elif v.baa_expiry %}var(--text){% else %}var(--muted){% endif %}">
+          {{ v.baa_expiry or '—' }}
+        </td>
+        <td>
+          <span style="font-size:0.75em;padding:2px 6px;border-radius:3px;background:{% if v.status == 'active' %}rgba(76,175,80,0.15){% elif v.status == 'terminated' %}rgba(244,67,54,0.15){% else %}rgba(122,122,154,0.15){% endif %};color:{% if v.status == 'active' %}var(--green){% elif v.status == 'terminated' %}var(--red){% else %}var(--muted){% endif %}">
+            {{ v.status | upper }}
+          </span>
+        </td>
+        <td style="font-size:0.8em;color:var(--muted)">{{ v.contact_name or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="padding:48px;text-align:center">
+  <div style="color:var(--muted);font-size:0.9em">No vendors recorded. Add vendors to track BAA compliance.</div>
+</div>
+{% endif %}
+{% endblock %}

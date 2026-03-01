@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — 403 Access Denied{% endblock %}
+
+{% block content %}
+<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+            min-height:60vh;text-align:center;padding:40px 20px">
+
+  <div style="font-family:var(--mono);font-size:5em;font-weight:900;color:var(--red);
+              line-height:1;margin-bottom:16px;letter-spacing:-2px">403</div>
+
+  <div style="font-size:0.72em;letter-spacing:3px;text-transform:uppercase;
+              color:var(--red);margin-bottom:24px;font-family:var(--mono)">
+    SECURITY CLEARANCE DENIED
+  </div>
+
+  <div style="max-width:480px;margin-bottom:32px">
+    <p style="color:var(--text);font-size:0.95em;margin-bottom:12px">
+      You do not have sufficient clearance to access this resource.
+      {% if user_role is defined and user_role %}
+      Your current role — <span class="mono" style="color:var(--cyan)">{{ user_role | replace('_',' ') | upper }}</span> —
+      does not meet the required authorization level.
+      {% endif %}
+    </p>
+    <p style="color:var(--muted);font-size:0.82em">
+      This access attempt has been logged and forwarded to the SIEM.
+    </p>
+  </div>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+    <a href="/" class="btn btn-ghost">← Return to Dashboard</a>
+    <a href="/help" class="btn btn-ghost">Request Access Help</a>
+  </div>
+
+  <div style="margin-top:48px;font-family:var(--mono);font-size:0.7em;color:#333;
+              border:1px solid #222;border-radius:4px;padding:12px 20px;max-width:420px;text-align:left">
+    <div style="color:#555;margin-bottom:6px"># SIEM EVENT LOG</div>
+    <div>EVENT_TYPE: access_denied</div>
+    <div>HTTP_STATUS: 403</div>
+    <div>PATH: {{ request.url.path }}</div>
+    <div>ROLE: {{ user_role | replace('_',' ') | upper if user_role is defined and user_role else 'UNKNOWN' }}</div>
+    <div>TIMESTAMP: {{ now.strftime('%Y-%m-%dT%H:%M:%SZ') if now is defined else 'N/A' }}</div>
+    <div style="color:var(--red);margin-top:4px">ACTION: BLOCKED</div>
+  </div>
+</div>
+{% endblock %}

@@ -12,11 +12,39 @@
     letter-spacing: 1px;
     text-transform: uppercase;
   }
-  .role-admin        { background: rgba(0,255,204,0.12); color: var(--cyan); }
-  .role-auditor      { background: rgba(255,215,0,0.12); color: var(--gold); }
+  .role-admin        { background: rgba(118,255,3,0.12);   color: #76ff03; border: 1px solid rgba(118,255,3,0.25); }
+  .role-ao           { background: rgba(244,67,54,0.12);  color: var(--red); }
+  .role-issm         { background: rgba(255,107,0,0.12);  color: #ff8c42; }
+  .role-isso         { background: rgba(255,179,0,0.12);  color: var(--yellow); }
+  .role-sca          { background: rgba(100,180,255,0.12);color: #64b4ff; }
+  .role-auditor      { background: rgba(255,215,0,0.12);  color: var(--gold); }
   .role-bcdr         { background: rgba(255,107,53,0.12); color: #ff6b35; }
-  .role-system_owner { background: rgba(0,200,83,0.12); color: var(--green); }
+  .role-system_owner { background: rgba(0,200,83,0.12);   color: var(--green); }
   .role-employee     { background: rgba(136,136,136,0.1); color: var(--muted); }
+  .role-ciso         { background: rgba(224,64,251,0.12); color: #e040fb; }
+  .role-pen_tester   { background: rgba(255,82,82,0.12);  color: #ff5252; }
+  .role-data_owner   { background: rgba(64,196,255,0.12); color: #40c4ff; }
+  .role-pmo          { background: rgba(105,240,174,0.12);color: #69f0ae; }
+  .role-incident_responder { background: rgba(255,215,64,0.12); color: #ffd740; }
+
+  .status-frozen  { font-size:0.7em;color:#ff8c42;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 6px;background:rgba(255,107,0,0.12);border-radius:3px; }
+  .status-removed { font-size:0.7em;color:var(--red);font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 6px;background:rgba(244,67,54,0.12);border-radius:3px; }
+
+  /* Bulk action bar */
+  #bulk-bar {
+    display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+    background:var(--surface);border:1px solid rgba(0,255,204,0.3);border-radius:8px;
+    padding:10px 16px;box-shadow:0 4px 20px rgba(0,0,0,0.5);
+    z-index:500;display:flex;align-items:center;gap:12px;min-width:360px;
+  }
+
+  th.sortable:hover { color: var(--cyan); }
+  th.sort-asc .sort-icon::after  { content: ' ▲'; color: var(--cyan); }
+  th.sort-desc .sort-icon::after { content: ' ▼'; color: var(--cyan); }
+  th.sort-asc .sort-icon,
+  th.sort-desc .sort-icon { visibility: hidden; }
+  th.sort-asc .sort-icon::after,
+  th.sort-desc .sort-icon::after { visibility: visible; }
 
   .config-managed {
     font-size: 0.68em;
@@ -38,6 +66,11 @@
     padding: 3px 8px;
     font-size: 0.78em;
     cursor: pointer;
+    width: 140px;
+    min-width: 140px;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .add-user-section {
     background: var(--surface);
@@ -60,6 +93,46 @@
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 16px;
   }
+  /* Provision section */
+  .provision-section {
+    background: rgba(0,255,204,0.04);
+    border: 1px solid rgba(0,255,204,0.25);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+  /* One-time credential banner */
+  .cred-banner {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(0,255,204,0.4);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    position: relative;
+  }
+  .cred-field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 5px;
+    padding: 10px 14px;
+    margin: 8px 0;
+    font-family: monospace;
+    font-size: 1.05em;
+  }
+  .cred-copy {
+    margin-left: auto;
+    background: rgba(0,255,204,0.1);
+    border: 1px solid rgba(0,255,204,0.3);
+    color: var(--cyan);
+    border-radius: 4px;
+    padding: 3px 10px;
+    cursor: pointer;
+    font-size: 0.75em;
+    flex-shrink: 0;
+  }
 </style>
 {% endblock %}
 
@@ -70,15 +143,88 @@
   <span>User Management</span>
 </div>
 
-<h1>User Management</h1>
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:8px">
+  <h1 style="margin:0">User Management</h1>
+  {% if is_admin %}
+  <div style="display:flex;gap:8px">
+    <a href="/admin/users/shadow" class="btn btn-ghost btn-sm" style="font-size:0.82em">
+      Shadow Archive
+    </a>
+    <a href="/admin/users/provision" class="btn btn-primary btn-sm"
+       style="background:rgba(0,255,204,0.12);border:1px solid rgba(0,255,204,0.4);color:var(--cyan);font-size:0.82em;padding:8px 18px">
+      + Provision New User
+    </a>
+  </div>
+  {% endif %}
+</div>
 <p class="text-muted" style="margin-bottom:24px;font-size:0.88em">
   Manage RBAC roles for platform users. Admin users are defined in config.yaml and cannot be changed here.
 </p>
 
+{# ── One-time credential banner (shown immediately after provisioning) ── #}
+{% if provisioned_token %}
+<div class="cred-banner" id="cred-banner">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <span style="color:var(--cyan);font-weight:700;font-size:0.9em">NEW USER CREDENTIALS — SHOWN ONCE</span>
+    <button onclick="document.getElementById('cred-banner').remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1em">✕</button>
+  </div>
+  <p style="font-size:0.8em;color:var(--muted);margin-bottom:12px">
+    Copy and securely deliver these credentials to the user. This banner will not appear again.
+  </p>
+  <div id="cred-loading" style="color:var(--muted);font-size:0.85em">Loading credentials…</div>
+  <div id="cred-fields" style="display:none">
+    <div class="cred-field">
+      <span style="color:var(--muted);font-size:0.75em;min-width:80px">Username</span>
+      <span id="cred-username" style="color:var(--text)"></span>
+      <button class="cred-copy" onclick="copyField('cred-username', this)">Copy</button>
+    </div>
+    <div class="cred-field">
+      <span style="color:var(--muted);font-size:0.75em;min-width:80px">Password</span>
+      <span id="cred-password" style="color:var(--cyan)"></span>
+      <button class="cred-copy" onclick="copyField('cred-password', this)">Copy</button>
+    </div>
+    <p style="font-size:0.75em;color:var(--muted);margin-top:10px">
+      The user will be prompted to change their password on first login. A welcome email was sent if an email address was provided.
+    </p>
+  </div>
+  <div id="cred-error" style="display:none;color:var(--red);font-size:0.85em">
+    Credentials could not be retrieved — token may have expired (5-minute window). Check the welcome email.
+  </div>
+</div>
+<script>
+(function() {
+  fetch('/admin/users/provision/credential?token={{ provisioned_token }}')
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('cred-loading').style.display = 'none';
+      if (data.ok) {
+        document.getElementById('cred-username').textContent = data.username;
+        document.getElementById('cred-password').textContent = data.password;
+        document.getElementById('cred-fields').style.display = 'block';
+      } else {
+        document.getElementById('cred-error').style.display = 'block';
+      }
+    })
+    .catch(function() {
+      document.getElementById('cred-loading').style.display = 'none';
+      document.getElementById('cred-error').style.display = 'block';
+    });
+})();
+function copyField(id, btn) {
+  var text = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    btn.textContent = '✓ Copied';
+    btn.style.color = 'var(--green)';
+    setTimeout(function() { btn.textContent = 'Copy'; btn.style.color = ''; }, 2000);
+  });
+}
+</script>
+{% endif %}
+
 {# ── Stat row ── #}
 <div class="stats" style="margin-bottom:28px">
   <div class="stat">
-    <div class="stat-value">{{ profiles|length }}</div>
+    <div class="stat-value">{{ total_count }}</div>
     <div class="stat-label">Total Users</div>
   </div>
   <div class="stat">
@@ -128,9 +274,13 @@
           <label class="form-label">Role</label>
           <select class="form-control" name="role">
             <option value="employee">Employee</option>
-            <option value="auditor">Auditor</option>
-            <option value="bcdr">BCDR</option>
             <option value="system_owner">System Owner</option>
+            <option value="isso">ISSO — Sys Security Officer</option>
+            <option value="issm">ISSM — Sec Program Manager</option>
+            <option value="ao">AO — Authorizing Official</option>
+            <option value="sca">SCA — Control Assessor</option>
+            <option value="auditor">Auditor (read-only)</option>
+            <option value="bcdr">BCDR — Business Continuity</option>
           </select>
         </div>
       </div>
@@ -143,17 +293,22 @@
 <div class="card" style="padding:0;overflow:hidden">
   <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
     <span class="card-title" style="margin:0">Platform Users</span>
-    <span style="font-size:0.75em;color:var(--muted)">{{ profiles|length }} user{{ 's' if profiles|length != 1 }}</span>
+    <span style="font-size:0.75em;color:var(--muted)">
+      {{ total_count }} user{{ 's' if total_count != 1 }}
+      {% if total_pages > 1 %} · Page {{ page }} of {{ total_pages }}{% endif %}
+    </span>
   </div>
   {% if profiles %}
-  <table>
+  <table id="users-table">
     <thead>
       <tr>
-        <th>Username</th>
-        <th>Display Name</th>
-        <th>Role</th>
-        <th>Email</th>
-        <th style="text-align:center">Systems</th>
+        {% if is_admin %}<th style="width:28px;padding:8px"><input type="checkbox" id="chk-all" onchange="toggleAll(this)" title="Select all"></th>{% endif %}
+        <th class="sortable" data-col="0" onclick="sortTable(this)" title="Sort by username" style="cursor:pointer;user-select:none">Username <span class="sort-icon">⇅</span></th>
+        <th class="sortable" data-col="1" onclick="sortTable(this)" title="Sort by display name" style="cursor:pointer;user-select:none">Display Name <span class="sort-icon">⇅</span></th>
+        <th class="sortable" data-col="2" onclick="sortTable(this)" title="Sort by role" style="cursor:pointer;user-select:none">Role <span class="sort-icon">⇅</span></th>
+        <th class="sortable" data-col="3" onclick="sortTable(this)" title="Sort by email" style="cursor:pointer;user-select:none">Email <span class="sort-icon">⇅</span></th>
+        <th class="sortable" data-col="4" onclick="sortTable(this)" title="Sort by last login" style="cursor:pointer;user-select:none">Last Login <span class="sort-icon">⇅</span></th>
+        <th class="sortable" data-col="5" onclick="sortTable(this)" title="Sort by systems" style="cursor:pointer;user-select:none;text-align:center">Systems <span class="sort-icon">⇅</span></th>
         <th>Actions</th>
       </tr>
     </thead>
@@ -161,37 +316,75 @@
       {% for profile in profiles %}
       {% set is_config_admin = profile.remote_user in admin_users_cfg %}
       {% set eff_role = 'admin' if is_config_admin else (profile.role or 'employee') %}
-      <tr>
+      {% set pstatus = profile.status or 'active' %}
+      {% if profile.last_login and now %}
+        {% set age_days = ((now - profile.last_login).days) %}
+      {% else %}
+        {% set age_days = 999 %}
+      {% endif %}
+      <tr {% if pstatus == 'frozen' %}style="opacity:0.75;background:rgba(255,107,0,0.04)"{% endif %}>
+        {% if is_admin %}<td style="padding:8px"><input type="checkbox" class="row-chk" value="{{ profile.remote_user }}" {% if is_config_admin %}disabled{% endif %}></td>{% endif %}
         <td>
           <span class="mono" style="font-size:0.88em">{{ profile.remote_user }}</span>
           {% if is_config_admin %}
             <span class="config-managed">(config-managed)</span>
           {% endif %}
+          {% if pstatus == 'frozen' %}<span class="status-frozen" style="margin-left:6px">frozen</span>{% endif %}
         </td>
-        <td style="color:var(--text)">{{ profile.display_name or '—' }}</td>
+        <td style="color:var(--text)">{{ profile.display_name | title if profile.display_name else (profile.remote_user | replace('.', ' ') | replace('_', ' ') | title) }}</td>
         <td>
           <span class="role-badge role-{{ eff_role }}">{{ eff_role }}</span>
         </td>
         <td style="color:var(--muted);font-size:0.85em">{{ profile.email or '—' }}</td>
+        <td style="font-size:0.82em;
+          {% if age_days > 30 %}color:var(--red)
+          {% elif age_days > 7 %}color:var(--yellow)
+          {% else %}color:var(--muted){% endif %}">
+          {{ profile.last_login.strftime('%H:%M %d/%m/%y') if profile.last_login else 'Never' }}
+        </td>
         <td style="text-align:center">
           <span style="font-size:0.9em;color:var(--cyan)">{{ assign_counts.get(profile.remote_user, 0) }}</span>
         </td>
         <td>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;white-space:nowrap">
             {% if not is_config_admin %}
             <form class="role-select-form" onsubmit="return setRole(event, '{{ profile.remote_user }}')">
               <select name="role" id="role-sel-{{ loop.index }}">
-                <option value="employee"     {% if eff_role=='employee' %}selected{% endif %}>Employee</option>
-                <option value="auditor"      {% if eff_role=='auditor' %}selected{% endif %}>Auditor</option>
-                <option value="bcdr"         {% if eff_role=='bcdr' %}selected{% endif %}>BCDR</option>
-                <option value="system_owner" {% if eff_role=='system_owner' %}selected{% endif %}>Sys Owner</option>
+                <option value="employee"          {% if eff_role=='employee' %}selected{% endif %}>Employee</option>
+                <option value="system_owner"      {% if eff_role=='system_owner' %}selected{% endif %}>System Owner</option>
+                <option value="isso"              {% if eff_role=='isso' %}selected{% endif %}>ISSO</option>
+                <option value="issm"              {% if eff_role=='issm' %}selected{% endif %}>ISSM</option>
+                <option value="ao"               {% if eff_role=='ao' %}selected{% endif %}>AO</option>
+                <option value="sca"              {% if eff_role=='sca' %}selected{% endif %}>SCA</option>
+                <option value="auditor"           {% if eff_role=='auditor' %}selected{% endif %}>Auditor</option>
+                <option value="bcdr"              {% if eff_role=='bcdr' %}selected{% endif %}>BCDR</option>
+                <option value="ciso"              {% if eff_role=='ciso' %}selected{% endif %}>CISO</option>
+                <option value="pen_tester"        {% if eff_role=='pen_tester' %}selected{% endif %}>Pen Tester</option>
+                <option value="data_owner"        {% if eff_role=='data_owner' %}selected{% endif %}>Data Owner</option>
+                <option value="pmo"               {% if eff_role=='pmo' %}selected{% endif %}>PMO</option>
+                <option value="incident_responder" {% if eff_role=='incident_responder' %}selected{% endif %}>Incident Responder</option>
               </select>
-              <button type="submit" class="btn btn-ghost btn-sm">Set Role</button>
+              <button type="submit" class="btn btn-ghost btn-sm">Set</button>
             </form>
+            {% if is_admin %}
+              <a href="/view-as/{{ profile.remote_user }}"
+                 class="btn btn-ghost btn-sm"
+                 style="font-size:0.75em;color:#76ff03;border:1px solid rgba(118,255,3,0.25)"
+                 title="View this user's workspace">View ⟶</a>
+              {% if pstatus == 'frozen' %}
+              <form method="post" action="/admin/users/{{ profile.remote_user }}/unfreeze" style="display:inline">
+                <button class="btn btn-sm" style="background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.3);font-size:0.75em">Unfreeze</button>
+              </form>
+              {% else %}
+              <form method="post" action="/admin/users/{{ profile.remote_user }}/freeze" style="display:inline">
+                <button class="btn btn-sm" style="background:rgba(255,107,0,0.1);color:#ff8c42;border:1px solid rgba(255,107,0,0.3);font-size:0.75em">Freeze</button>
+              </form>
+              {% endif %}
+              <a href="/admin/users/{{ profile.remote_user }}/remove" class="btn btn-sm" style="background:rgba(244,67,54,0.1);color:var(--red);border:1px solid rgba(244,67,54,0.3);font-size:0.75em">Remove</a>
+            {% endif %}
             {% else %}
             <span style="font-size:0.75em;color:var(--muted)">Config-managed</span>
             {% endif %}
-            <a href="/profile" class="btn btn-sm" style="background:rgba(255,255,255,0.05);color:var(--muted);border:1px solid var(--border)">Profile</a>
           </div>
         </td>
       </tr>
@@ -203,22 +396,79 @@
     No user profiles found. Users are created automatically on first login.
   </div>
   {% endif %}
+
+  {# ── Pagination controls ── #}
+  {% if total_pages >= 1 %}
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;
+              border-top:1px solid var(--border);flex-wrap:wrap;gap:10px;font-size:0.82em">
+    {# Rows-per-page selector #}
+    <div style="display:flex;align-items:center;gap:8px;color:var(--muted)">
+      <span>Rows per page:</span>
+      {% for n in [10, 25, 50, 100] %}
+      <a href="/admin/users?page=1&per_page={{ n }}"
+         style="padding:2px 7px;border-radius:3px;
+                {% if per_page == n %}background:rgba(0,255,204,0.12);color:var(--cyan);font-weight:700
+                {% else %}color:var(--muted){% endif %}">{{ n }}</a>
+      {% endfor %}
+    </div>
+    {# Page navigation #}
+    {% if total_pages > 1 %}
+    <div style="display:flex;align-items:center;gap:4px">
+      {% if page > 1 %}
+      <a href="/admin/users?page={{ page - 1 }}&per_page={{ per_page }}"
+         class="btn btn-sm btn-ghost">‹ Prev</a>
+      {% endif %}
+      {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+          <span style="padding:3px 9px;border-radius:3px;background:rgba(0,255,204,0.12);
+                       color:var(--cyan);font-weight:700;min-width:30px;text-align:center">{{ p }}</span>
+        {% elif p <= 2 or p >= total_pages - 1 or (page - 2 <= p <= page + 2) %}
+          <a href="/admin/users?page={{ p }}&per_page={{ per_page }}"
+             class="btn btn-sm btn-ghost" style="min-width:30px;text-align:center">{{ p }}</a>
+        {% elif p == 3 or p == total_pages - 2 %}
+          <span style="color:var(--muted);padding:0 2px">…</span>
+        {% endif %}
+      {% endfor %}
+      {% if page < total_pages %}
+      <a href="/admin/users?page={{ page + 1 }}&per_page={{ per_page }}"
+         class="btn btn-sm btn-ghost">Next ›</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
 
-{# ── Config-managed admins note ── #}
-{% if admin_users_cfg %}
-<div class="card" style="background:rgba(255,215,0,0.04);border-color:rgba(255,215,0,0.2)">
-  <div class="card-title" style="color:var(--gold)">Config-Managed Admin Users</div>
-  <p style="font-size:0.85em;color:var(--muted);margin-bottom:12px">
-    These users are defined in <code>config.yaml → app.admin_users</code>. Their admin status cannot be changed from this UI.
-  </p>
-  <div style="display:flex;gap:8px;flex-wrap:wrap">
-    {% for admin_u in admin_users_cfg %}
-    <span class="role-badge role-admin">{{ admin_u }}</span>
-    {% endfor %}
-  </div>
+{# ── Bulk action bar ── #}
+{% if is_admin %}
+<div id="bulk-bar" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+     background:var(--surface);border:1px solid rgba(0,255,204,0.3);border-radius:8px;
+     padding:10px 16px;box-shadow:0 4px 20px rgba(0,0,0,0.5);z-index:500;
+     align-items:center;gap:12px;min-width:380px">
+  <span id="bulk-count" style="font-size:0.82em;color:var(--cyan);font-weight:700;white-space:nowrap">0 selected</span>
+  <select id="bulk-role-sel" style="background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:3px 8px;font-size:0.8em">
+    <option value="">— set role —</option>
+    <option value="employee">Employee</option>
+    <option value="system_owner">System Owner</option>
+    <option value="isso">ISSO</option>
+    <option value="issm">ISSM</option>
+    <option value="ao">AO</option>
+    <option value="sca">SCA</option>
+    <option value="auditor">Auditor</option>
+    <option value="bcdr">BCDR</option>
+    <option value="ciso">CISO</option>
+    <option value="pen_tester">Pen Tester</option>
+    <option value="data_owner">Data Owner</option>
+    <option value="pmo">PMO</option>
+    <option value="incident_responder">Incident Responder</option>
+  </select>
+  <button onclick="bulkSetRole()" class="btn btn-sm btn-ghost">Set Role</button>
+  <button onclick="bulkFreeze()" class="btn btn-sm" style="background:rgba(255,107,0,0.1);color:#ff8c42;border:1px solid rgba(255,107,0,0.3)">Freeze Selected</button>
+  <button onclick="clearSelection()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1em">✕</button>
 </div>
 {% endif %}
+
+{# Config-managed admins section removed (M2) — see /admin/system-settings for config admin list #}
 {% endblock %}
 
 {% block scripts %}
@@ -242,14 +492,160 @@ async function setRole(e, username) {
       btn.style.color = 'var(--green)';
       setTimeout(function(){ location.reload(); }, 800);
     } else {
-      btn.textContent = 'Set Role';
+      btn.textContent = 'Set';
       btn.disabled = false;
     }
   } catch(err) {
-    btn.textContent = 'Set Role';
+    btn.textContent = 'Set';
     btn.disabled = false;
   }
   return false;
+}
+
+function getSelected() {
+  return Array.from(document.querySelectorAll('.row-chk:checked:not(:disabled)')).map(c => c.value);
+}
+
+function updateBulkBar() {
+  const sel = getSelected();
+  const bar = document.getElementById('bulk-bar');
+  if (!bar) return;
+  if (sel.length > 0) {
+    bar.style.display = 'flex';
+    document.getElementById('bulk-count').textContent = sel.length + ' selected';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function toggleAll(master) {
+  document.querySelectorAll('.row-chk:not(:disabled)').forEach(c => c.checked = master.checked);
+  updateBulkBar();
+}
+
+// ── Selection persistence via sessionStorage ──────────────────────────────────
+const SEL_KEY = 'bu-user-sel';
+
+function saveSelections() {
+  const sel = getSelected();
+  if (sel.length) sessionStorage.setItem(SEL_KEY, JSON.stringify(sel));
+  else sessionStorage.removeItem(SEL_KEY);
+}
+
+function restoreSelections() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(SEL_KEY) || '[]');
+    if (!saved.length) return;
+    document.querySelectorAll('.row-chk').forEach(function(chk) {
+      if (saved.includes(chk.value)) chk.checked = true;
+    });
+    updateBulkBar();
+  } catch(e) {}
+}
+
+// Clear selections when leaving /admin/users entirely
+window.addEventListener('beforeunload', function() {
+  // If the stored selections are no longer relevant after leaving, we do NOT clear —
+  // selections persist until the user explicitly clears them or the tab is closed.
+  // This allows selections to survive pagination links.
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.row-chk').forEach(c => c.addEventListener('change', function() {
+    updateBulkBar();
+    saveSelections();
+  }));
+  // Intercept "select all" to also save
+  const chkAll = document.getElementById('chk-all');
+  if (chkAll) chkAll.addEventListener('change', function() { setTimeout(saveSelections, 0); });
+  // Restore any previous selections on this page
+  restoreSelections();
+});
+
+function clearSelection() {
+  document.querySelectorAll('.row-chk').forEach(c => c.checked = false);
+  const m = document.getElementById('chk-all');
+  if (m) m.checked = false;
+  updateBulkBar();
+  sessionStorage.removeItem(SEL_KEY);
+}
+
+// ── Client-side column sort ──────────────────────────────────────────────────
+var _sortState = {col: -1, asc: true};
+
+function sortTable(th) {
+  const table   = document.getElementById('users-table');
+  const tbody   = table.querySelector('tbody');
+  const hasChk  = {{ 'true' if is_admin else 'false' }};
+  // data-col is the logical column index (0=Username, 1=Display Name, …)
+  const logCol  = parseInt(th.dataset.col);
+  // Actual TD index offset by checkbox column presence
+  const tdIdx   = hasChk ? logCol + 1 : logCol;
+
+  // Flip direction if same column
+  const asc = (_sortState.col === logCol) ? !_sortState.asc : true;
+  _sortState = {col: logCol, asc: asc};
+
+  // Update header indicators
+  table.querySelectorAll('th.sortable').forEach(function(h) {
+    h.classList.remove('sort-asc', 'sort-desc');
+  });
+  th.classList.add(asc ? 'sort-asc' : 'sort-desc');
+
+  // Collect rows and sort
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  rows.sort(function(a, b) {
+    const tdA = a.querySelectorAll('td')[tdIdx];
+    const tdB = b.querySelectorAll('td')[tdIdx];
+    if (!tdA || !tdB) return 0;
+    // For systems column (logCol 5), sort numerically
+    let valA = tdA.textContent.trim();
+    let valB = tdB.textContent.trim();
+    let cmp;
+    if (logCol === 5) {
+      cmp = (parseFloat(valA) || 0) - (parseFloat(valB) || 0);
+    } else if (logCol === 4) {
+      // Last Login: "Never" sorts to end; otherwise date string (DD/MM/YY)
+      const neverA = valA === 'Never', neverB = valB === 'Never';
+      if (neverA && neverB) cmp = 0;
+      else if (neverA) cmp = 1;
+      else if (neverB) cmp = -1;
+      else cmp = valA.localeCompare(valB);
+    } else {
+      cmp = valA.toLowerCase().localeCompare(valB.toLowerCase());
+    }
+    return asc ? cmp : -cmp;
+  });
+  rows.forEach(function(r) { tbody.appendChild(r); });
+}
+
+async function bulkSetRole() {
+  const sel = getSelected();
+  const role = document.getElementById('bulk-role-sel').value;
+  if (!sel.length || !role) return;
+  if (!confirm('Set role "' + role + '" for ' + sel.length + ' user(s)?')) return;
+  const r = await fetch('/admin/users/bulk-role', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({usernames: sel, role: role})
+  });
+  const data = await r.json();
+  if (data.status === 'ok') location.reload();
+  else alert('Error: ' + (data.detail || 'unknown'));
+}
+
+async function bulkFreeze() {
+  const sel = getSelected();
+  if (!sel.length) return;
+  if (!confirm('Freeze ' + sel.length + ' user(s)?')) return;
+  const r = await fetch('/admin/users/bulk-freeze', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({usernames: sel})
+  });
+  const data = await r.json();
+  if (data.status === 'ok') location.reload();
+  else alert('Error: ' + (data.detail || 'unknown'));
 }
 </script>
 {% endblock %}

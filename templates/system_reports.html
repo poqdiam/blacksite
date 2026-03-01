@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Reports: {{ system.name }}{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+  <div>
+    <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">
+      <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a> / Reports
+    </div>
+    <h1 style="font-size:1.3em;margin:0">Generated Reports</h1>
+  </div>
+  <button class="btn btn-primary btn-sm" onclick="document.getElementById('gen-form').style.display='block';this.style.display='none'">
+    + Generate Report
+  </button>
+</div>
+
+<div id="gen-form" style="display:none" class="card" style="padding:20px;margin-bottom:16px">
+  <form method="post" action="/systems/{{ system.id }}/reports/generate">
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:4px">Report Type</label>
+      <select name="report_type" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px;color:var(--text);font-size:0.88em;min-width:300px">
+        <option value="executive_summary">Executive Summary</option>
+        <option value="evidence_pack_controls">Control Evidence Pack</option>
+        <option value="bcdr_evidence_pack">BCDR Evidence Pack</option>
+        <option value="ir_evidence_pack">IR Evidence Pack</option>
+        <option value="ir_summary">IR Cycle Summary</option>
+        <option value="bcdr_annual_summary">BCDR Annual Summary</option>
+        <option value="sca_evidence_pack">SCA Evidence Pack</option>
+        <option value="audit_report">Audit Report</option>
+        <option value="pentest_report">Penetration Test Report</option>
+        <option value="data_protection_report">Data Protection Report</option>
+        <option value="pmo_security_summary">PMO Security Summary</option>
+        <option value="portfolio_executive_summary">Portfolio Executive Summary</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button type="submit" class="btn btn-primary">Generate</button>
+      <button type="button" class="btn btn-ghost" onclick="document.getElementById('gen-form').style.display='none'">Cancel</button>
+    </div>
+  </form>
+</div>
+
+{% if reports %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table>
+    <thead>
+      <tr><th>Report Type</th><th>Filename</th><th>Status</th><th>Size</th><th>Generated</th><th>By</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for r in reports %}
+      <tr>
+        <td style="font-size:0.85em;color:var(--cyan)">{{ r.report_type.replace('_',' ').title() }}</td>
+        <td class="mono" style="font-size:0.78em;color:var(--muted)">{{ r.filename or '—' }}</td>
+        <td>
+          <span style="font-size:0.75em;padding:2px 7px;border-radius:3px;font-weight:700;
+            background:{% if r.status == 'ready' %}rgba(76,175,80,0.15){% elif r.status == 'error' %}rgba(244,67,54,0.15){% else %}rgba(0,188,212,0.15){% endif %};
+            color:{% if r.status == 'ready' %}var(--green){% elif r.status == 'error' %}var(--red){% else %}var(--cyan){% endif %}">
+            {{ r.status | upper }}
+          </span>
+        </td>
+        <td style="font-size:0.82em;color:var(--muted)">
+          {% if r.file_size %}{{ (r.file_size / 1024) | round(1) }} KB{% else %}—{% endif %}
+        </td>
+        <td class="mono" style="font-size:0.78em;color:var(--muted);white-space:nowrap">
+          {{ r.generated_at.strftime('%Y-%m-%d %H:%M') if r.generated_at else '—' }}
+        </td>
+        <td style="font-size:0.82em;color:var(--muted)">{{ r.remote_user }}</td>
+        <td>
+          {% if r.status == 'ready' %}
+          <a href="/systems/{{ system.id }}/reports/{{ r.id }}/download" class="btn btn-ghost btn-sm">⬇ Download</a>
+          {% elif r.status == 'generating' %}
+          <span style="font-size:0.75em;color:var(--cyan)">⏳ Generating…</span>
+          {% elif r.status == 'error' %}
+          <span style="font-size:0.75em;color:var(--red)" title="{{ r.error_msg }}">✗ Error</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="padding:48px;text-align:center">
+  <div style="color:var(--muted);font-size:0.9em">No reports generated yet. Use the button above to generate a compliance report.</div>
+</div>
+{% endif %}
+{% endblock %}

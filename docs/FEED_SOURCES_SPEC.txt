@@ -1,0 +1,196 @@
+FEED_SOURCES_SPEC.txt
+BLACKSITE — Advisory Feed Source System Specification
+Generated: 2026-03-01  (LIST4-ITEM3 rewrite)
+=============================================================
+
+OVERVIEW
+--------
+The advisory feed system pulls curated cybersecurity RSS/Atom feeds and serves
+them in two surfaces:
+  1. Sidebar advisory ticker — scrolling marquee in left sidebar
+  2. /advisories page — full advisory reading view
+
+Feed sources are admin-configurable via the /admin/feeds page. The allowlist
+(FEED_ALLOWLIST in app/models.py) defines what sources can ever be enabled.
+
+
+DATA MODEL
+----------
+Table: feed_sources (SQLite)
+
+Column         Type      Nullable  Default  Description
+---------------------------------------------------------------------------
+key            TEXT      NOT NULL  —        Primary key (e.g. "krebs")
+name           TEXT      NOT NULL  —        Display name
+url            TEXT      NOT NULL  —        RSS/Atom feed URL (UNIQUE)
+enabled        BOOLEAN   NOT NULL  True     Whether feed is fetched
+sort_order     INTEGER   NOT NULL  0        Display + fetch order
+last_fetched   DATETIME  NULL      NULL     Last successful fetch timestamp
+last_error     TEXT      NULL      NULL     Last error message (max 300 chars)
+item_count     INTEGER   NOT NULL  0        Item count from last successful fetch
+error_count    INTEGER   NOT NULL  0        Consecutive error count
+created_at     DATETIME  NOT NULL  now()    Row creation time
+updated_at     DATETIME  NOT NULL  now()    Last modification time
+
+Indexes:
+  PRIMARY KEY (key)
+  UNIQUE (url)
+
+Migration: added to _migrate_db() in app/models.py via CREATE TABLE IF NOT EXISTS.
+Seed:      INSERT OR IGNORE for all FEED_ALLOWLIST entries on every startup.
+           Existing rows are never overwritten by seed (OR IGNORE).
+
+
+ALLOWLIST (FEED_ALLOWLIST in app/models.py)
+-------------------------------------------
+14 curated sources. Only keys in FEED_ALLOWLIST can be enabled via admin UI.
+This prevents arbitrary URL injection via database manipulation.
+
+Key          Name                        Enabled  Sort  URL
+---------------------------------------------------------------------------
+krebs        Krebs on Security           YES      1     https://krebsonsecurity.com/feed
+darkreading  Dark Reading                YES      2     https://www.darkreading.com/rss.xml
+bleeping     BleepingComputer            YES      3     https://www.bleepingcomputer.com/feed/
+thn          The Hacker News             YES      4     https://feeds.feedburner.com/TheHackersNews
+cisa_alerts  CISA Alerts                 YES      5     https://www.cisa.gov/uscert/ncas/alerts.xml
+cisa_adv     CISA Advisories             YES      6     https://www.cisa.gov/uscert/ncas/advisories.xml
+sans         SANS ISC                    YES      7     https://isc.sans.edu/rssfeed_full.xml
+sophos       Sophos News                 YES      8     https://news.sophos.com/en-us/feed/
+google       Google Security Blog        YES      9     https://feeds.feedburner.com/GoogleOnlineSecurityBlog
+nist         NIST Cybersecurity Insights YES      10    https://www.nist.gov/blogs/cybersecurity-insights/rss.xml
+govinfo      GovInfoSecurity             NO       11    https://www.govinfosecurity.com/rssFeeds.php
+cso          CSO Online                  NO       12    https://www.csoonline.com/feed
+cisco        Cisco Security Blog         NO       13    https://blogs.cisco.com/security/feed
+secledger    The Security Ledger         NO       14    https://feeds.feedblitz.com/thesecurityledger
+
+Known issues at deployment:
+  cisa_adv: returns HTTP 404 — CISA may have moved URL. Will backoff after 3 errors.
+  sophos:   intermittent timeout. Will backoff after 3 errors.
+
+
+FETCH RULES
+-----------
+Per-source file cache:
+  Location: static/feed_cache/{key}.json
+  TTL:       3600 seconds (1 hour)
+  Miss:      Fetch from URL. On success: write cache. On failure: serve stale.
+  Staleness: Determined by file mtime vs current time.
+
+Hard cap:
+  MAX_ITEMS = 40 items per feed per fetch (slices findall result)
+
+HTTP fetch:
+  Timeout:    FETCH_TIMEOUT = 8 seconds
+  Read limit: 2 MB (prevents runaway large feeds; CISA feeds can exceed 512KB)
+  User-Agent: "BLACKSITE-GRC/1.0 (security advisory monitor)"
+  Library:    urllib.request.urlopen (no third-party HTTP lib required)
+
+XML parsing:
+  Library: xml.etree.ElementTree (stdlib)
+  Handles: RSS 2.0 (root tag "rss") and Atom (root tag "feed")
+  RSS 2.0: channel/item — title, link, description, pubDate
+  Atom:    entry — a:title, a:link[@href], a:summary, a:published
+  HTML stripping: re.sub(r"<[^>]+>", " ", text) on description/summary fields
+  Summary cap: 300 characters after strip
+
+Backoff:
+  BACKOFF_THRESHOLD = 3
+  If FeedSource.error_count >= 3: source is skipped for live fetches.
+  Source resumes when admin runs "Test" action (resets error_count on success).
+  Log message: "Skipping {key} — error_count={n} >= backoff threshold"
+
+
+DEDUPLICATION
+-------------
+Scope: across all enabled sources in a single get_feed_items() call.
+Key:   _item_dedup_key(item) →
+         if item["link"] is non-empty: use link URL as key
+         else: "title:" + SHA1(item["title"].encode("utf-8"))
+         (never deduplicates on empty link)
+Set:   seen: set[str] — populated as items are merged from each source.
+       Items with duplicate keys are silently dropped.
+
+
+KEYWORD SCORING
+---------------
+When systems list is provided (e.g. from /api/feeds):
+  _system_keywords(systems) extracts keywords from system names, abbreviations,
+  and descriptions (≥4 chars for name words, ≥5 chars for description words).
+  Stopwords excluded: system, platform, service, management, general, support,
+                      application, network, information, security, national, federal
+
+  _score_item(item, keywords) counts keyword hits in title+desc.
+
+  Items with score > 0 are sorted descending by score (most relevant first).
+  Items with score = 0 still included unless min_score > 0.
+
+When no systems list: keyword scoring disabled, items returned in fetch order.
+
+
+ADMIN UI — /admin/feeds
+-----------------------
+Access: admin-only (enforced by _is_admin() in all route handlers)
+
+Page layout:
+  Header:  "Advisory Feed Sources" with explanation text
+  Stats:   Total Sources | Enabled | With Errors (stat cards)
+  Table:   Source name + URL | Toggle checkbox | Item count |
+           Last fetched | Health badge | Test button
+  Footer:  Fetch rules documentation panel
+
+Toggle (POST /admin/feeds/{key}/toggle):
+  - Flips FeedSource.enabled boolean
+  - Returns {"key": ..., "enabled": bool}
+  - JS updates checkbox, state label (ON/OFF), row opacity instantly
+
+Test fetch (POST /admin/feeds/{key}/test):
+  - Bypasses cache — calls fetch_one_for_test(url) directly
+  - On success: updates last_fetched, item_count, clears last_error, resets error_count
+  - On failure: updates last_error, increments error_count
+  - Returns {"ok": bool, "item_count": int, "sample": str, "error": str}
+  - JS updates health badge and item count instantly; shows toast notification
+
+Reorder (POST /admin/feeds/reorder):
+  - Accepts {"key": sort_order, ...} JSON body
+  - Updates sort_order for each key in FEED_ALLOWLIST
+  - Future: drag-drop reorder UI (not yet wired to frontend)
+
+Health states displayed:
+  ✓ ok       — last_error is NULL and last_fetched is non-NULL
+  ✗ error ×N — last_error present; shows error_count and error text in tooltip
+  not tested — never successfully fetched (last_fetched NULL, no error)
+
+
+API — /api/feeds (GET)
+-----------------------
+Authenticated endpoint (requires Remote-User header from Authelia).
+Loads enabled FeedSource rows from DB ordered by sort_order.
+Resolves user's accessible systems via _user_system_ids().
+Calls get_feed_items(sources, systems, max_items=25, min_score=0) in executor.
+Returns: {"items": [...], "system_count": N}
+
+Each item dict:
+  title       — Article title
+  link        — Article URL
+  desc        — Summary (HTML-stripped, max 300 chars)
+  pub         — Publication date string (raw from feed)
+  source      — Feed source display name (e.g. "Krebs on Security")
+  source_key  — Feed source key (e.g. "krebs")
+  score       — Keyword relevance score vs user's systems (0 if no systems)
+
+
+FALLBACK
+--------
+_FALLBACK_FEEDS in app/rss_feed.py:
+  Used when DB query fails or sources param is None.
+  Contains 3 CISA/SANS entries with error_count=0 and enabled=True.
+  Does NOT persist to DB; purely in-memory emergency fallback.
+
+
+FILE LOCATIONS
+--------------
+app/models.py          — FeedSource model, FEED_ALLOWLIST dict, migration
+app/rss_feed.py        — All fetch/parse/cache/dedupe logic
+app/main.py            — Admin routes, api_feeds route
+templates/admin_feeds.html  — Admin UI template
+static/feed_cache/     — Per-source cache files ({key}.json)

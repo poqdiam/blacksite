@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block title %}Data Ingestion{% endblock %}
+
+{% block content %}
+<div class="page-header" style="margin-bottom:28px">
+  <h1 style="margin:0;font-size:1.4em;letter-spacing:1px">DATA INGESTION ENGINE</h1>
+  <p style="margin:4px 0 0;color:var(--muted);font-size:0.85em">
+    Bulk-import users and systems from JSON, CSV, or XLSX.
+    Preview before committing — no changes are made until you confirm.
+  </p>
+</div>
+
+{% if committed %}
+<div style="background:rgba(0,200,83,0.1);border-left:3px solid var(--green);
+            border-radius:6px;padding:12px 16px;margin-bottom:20px;font-size:0.85em">
+  {% if committed == 'already' %}
+  <strong style="color:var(--green)">✓ Already committed.</strong> This job was previously applied.
+  {% else %}
+  <strong style="color:var(--green)">✓ Import committed:</strong>
+  {% set parts = committed.split('/') %}
+  {{ parts[0]|replace('c','') }} created,
+  {{ parts[1]|replace('u','') }} updated,
+  {{ parts[2]|replace('s','') }} skipped.
+  {% endif %}
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:32px;align-items:start">
+
+  {# ── User Import ─────────────────────────────────────────────────────────── #}
+  <div class="card" style="padding:24px">
+    <h3 style="margin:0 0 4px;color:var(--cyan);font-size:0.9em;letter-spacing:1px">
+      USER IMPORT
+    </h3>
+    <p style="margin:0 0 18px;color:var(--muted);font-size:0.8em">
+      Bulk-create or update user accounts.
+      Existing users (matched by <code style="color:var(--cyan)">remote_user</code>) will have non-blank fields updated.
+    </p>
+
+    <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:12px 14px;
+                margin-bottom:16px;font-size:0.78em;color:var(--muted);line-height:1.7">
+      <strong style="color:var(--text)">Recognized columns:</strong><br>
+      <code style="color:var(--green)">remote_user</code> <span style="color:var(--red)">*required</span>,
+      display_name, email, department, role, company_tier, status<br>
+      <strong style="color:var(--text)">Aliases:</strong> username→remote_user, name→display_name, dept→department, tier→company_tier<br>
+      <strong style="color:var(--text)">Valid role values:</strong> employee, isso, issm, sca, ao, ciso, system_owner, pmo, pen_tester, auditor, admin<br>
+      <strong style="color:var(--text)">Valid company_tier:</strong> principal, executive, manager, analyst
+    </div>
+
+    <form method="post" action="/admin/ingest/upload" enctype="multipart/form-data">
+      <input type="hidden" name="ingest_type" value="users">
+      <div class="ingest-dropzone" id="user-drop"
+           style="border:2px dashed var(--border);border-radius:8px;padding:32px;
+                  text-align:center;cursor:pointer;transition:all 0.2s;margin-bottom:14px"
+           onclick="document.getElementById('user-file').click()"
+           ondragover="event.preventDefault();this.style.borderColor='var(--cyan)'"
+           ondragleave="this.style.borderColor='var(--border)'"
+           ondrop="_handleDrop(event,'user-file','user-drop','user-fname')">
+        <div style="font-size:1.6em;margin-bottom:8px">📂</div>
+        <div style="color:var(--muted);font-size:0.85em">
+          Drop file here or <span style="color:var(--cyan)">click to browse</span>
+        </div>
+        <div id="user-fname" style="color:var(--green);font-size:0.8em;margin-top:6px"></div>
+      </div>
+      <input type="file" id="user-file" name="file" accept=".json,.csv,.xlsx,.xlsm"
+             style="display:none" onchange="_showName(this,'user-fname','user-drop')">
+
+      <div style="display:flex;gap:10px;align-items:center">
+        <button type="submit" class="btn btn-primary" style="padding:9px 22px">
+          Preview Import →
+        </button>
+        <a href="/admin/ingest/template/users" class="btn btn-ghost btn-sm"
+           style="font-size:0.78em;color:var(--muted)">
+          ↓ CSV Template
+        </a>
+      </div>
+    </form>
+  </div>
+
+  {# ── System Import ────────────────────────────────────────────────────────── #}
+  <div class="card" style="padding:24px">
+    <h3 style="margin:0 0 4px;color:var(--cyan);font-size:0.9em;letter-spacing:1px">
+      SYSTEM IMPORT
+    </h3>
+    <p style="margin:0 0 18px;color:var(--muted);font-size:0.8em">
+      Bulk-create IT system records.
+      All imported systems start with <code style="color:var(--yellow)">auth_status=not_authorized</code>
+      and no role assignments — these must be made separately by an exec.
+    </p>
+
+    <div style="background:rgba(0,0,0,0.2);border-radius:6px;padding:12px 14px;
+                margin-bottom:16px;font-size:0.78em;color:var(--muted);line-height:1.7">
+      <strong style="color:var(--text)">Recognized columns:</strong><br>
+      <code style="color:var(--green)">name</code> <span style="color:var(--red)">*required</span>,
+      abbreviation, system_type, environment, owner_name, owner_email, description,
+      purpose, confidentiality_impact, integrity_impact, availability_impact,
+      inventory_number, has_pii, has_phi, has_ephi, has_financial_data,
+      is_public_facing, has_cui, connects_to_federal<br>
+      <strong style="color:var(--text)">Valid impacts:</strong> Low, Moderate, High<br>
+      <strong style="color:var(--text)">Boolean fields:</strong> true/false, yes/no, 1/0
+    </div>
+
+    <form method="post" action="/admin/ingest/upload" enctype="multipart/form-data">
+      <input type="hidden" name="ingest_type" value="systems">
+      <div class="ingest-dropzone" id="sys-drop"
+           style="border:2px dashed var(--border);border-radius:8px;padding:32px;
+                  text-align:center;cursor:pointer;transition:all 0.2s;margin-bottom:14px"
+           onclick="document.getElementById('sys-file').click()"
+           ondragover="event.preventDefault();this.style.borderColor='var(--cyan)'"
+           ondragleave="this.style.borderColor='var(--border)'"
+           ondrop="_handleDrop(event,'sys-file','sys-drop','sys-fname')">
+        <div style="font-size:1.6em;margin-bottom:8px">🖥️</div>
+        <div style="color:var(--muted);font-size:0.85em">
+          Drop file here or <span style="color:var(--cyan)">click to browse</span>
+        </div>
+        <div id="sys-fname" style="color:var(--green);font-size:0.8em;margin-top:6px"></div>
+      </div>
+      <input type="file" id="sys-file" name="file" accept=".json,.csv,.xlsx,.xlsm"
+             style="display:none" onchange="_showName(this,'sys-fname','sys-drop')">
+
+      <div style="display:flex;gap:10px;align-items:center">
+        <button type="submit" class="btn btn-primary" style="padding:9px 22px">
+          Preview Import →
+        </button>
+        <a href="/admin/ingest/template/systems" class="btn btn-ghost btn-sm"
+           style="font-size:0.78em;color:var(--muted)">
+          ↓ CSV Template
+        </a>
+      </div>
+    </form>
+  </div>
+
+</div>
+
+{# ── Recent Jobs ──────────────────────────────────────────────────────────── #}
+{% if recent_jobs %}
+<div class="card" style="padding:20px">
+  <h3 style="margin:0 0 14px;color:var(--cyan);font-size:0.85em;letter-spacing:1px">
+    RECENT IMPORT JOBS
+  </h3>
+  <table style="width:100%;border-collapse:collapse;font-size:0.82em">
+    <thead>
+      <tr style="color:var(--muted);text-align:left">
+        <th style="padding:6px 10px;border-bottom:1px solid var(--border)">Type</th>
+        <th style="padding:6px 10px;border-bottom:1px solid var(--border)">File</th>
+        <th style="padding:6px 10px;border-bottom:1px solid var(--border)">Rows</th>
+        <th style="padding:6px 10px;border-bottom:1px solid var(--border)">Status</th>
+        <th style="padding:6px 10px;border-bottom:1px solid var(--border)">By</th>
+        <th style="padding:6px 10px;border-bottom:1px solid var(--border)">When</th>
+        <th style="padding:6px 10px;border-bottom:1px solid var(--border)"></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for j in recent_jobs %}
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+      <td style="padding:7px 10px">
+        <span style="font-size:0.78em;text-transform:uppercase;letter-spacing:1px;
+                     color:{% if j.ingest_type=='users' %}var(--cyan){% else %}var(--yellow){% endif %}">
+          {{ j.ingest_type }}
+        </span>
+      </td>
+      <td style="padding:7px 10px;color:var(--muted);max-width:180px;
+                 overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        {{ j.filename or '—' }}
+      </td>
+      <td style="padding:7px 10px">{{ j.row_count }}</td>
+      <td style="padding:7px 10px">
+        {% if j.status == 'committed' %}
+        <span style="color:var(--green)">✓ committed</span>
+        {% elif j.status == 'preview' %}
+        <span style="color:var(--yellow)">⏳ preview</span>
+        {% else %}
+        <span style="color:var(--red)">✗ error</span>
+        {% endif %}
+      </td>
+      <td style="padding:7px 10px;color:var(--muted)">{{ j.created_by or '—' }}</td>
+      <td style="padding:7px 10px;color:var(--muted);white-space:nowrap">
+        {{ j.created_at.strftime('%Y-%m-%d %H:%M') if j.created_at else '—' }}
+      </td>
+      <td style="padding:7px 10px">
+        {% if j.status == 'preview' %}
+        <a href="/admin/ingest/preview/{{ j.id }}" style="color:var(--cyan);font-size:0.8em">
+          Review →
+        </a>
+        {% elif j.status == 'committed' and j.commit_results %}
+        {% set res = j.commit_results | fromjson %}
+        <span style="color:var(--muted);font-size:0.78em">
+          +{{ res.created }} / ~{{ res.updated }} / ×{{ res.skipped }}
+        </span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<script>
+function _showName(input, nameId, dropId) {
+  const f = input.files[0];
+  if (f) {
+    document.getElementById(nameId).textContent = f.name;
+    document.getElementById(dropId).style.borderColor = 'var(--green)';
+  }
+}
+
+function _handleDrop(evt, inputId, dropId, nameId) {
+  evt.preventDefault();
+  const dt = evt.dataTransfer;
+  const files = dt.files;
+  if (!files.length) return;
+  const input = document.getElementById(inputId);
+  // DataTransfer trick to assign to file input
+  try {
+    const dti = new DataTransfer();
+    dti.items.add(files[0]);
+    input.files = dti.files;
+  } catch(e) { /* Safari fallback — won't auto-fill but won't crash */ }
+  document.getElementById(nameId).textContent = files[0].name;
+  document.getElementById(dropId).style.borderColor = 'var(--green)';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — SCA Workspace{% endblock %}
+
+{% block head %}
+<style>
+  .workspace-header { margin-bottom: 28px; }
+  .workspace-header h1 { font-size: 1.3em; font-weight: 900; color: var(--text); }
+  .workspace-header p  { font-size: 0.82em; color: var(--muted); margin-top: 4px; }
+
+  .section-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+  .section-head h2 { font-size: 0.88em; font-weight: 700; color: var(--text); letter-spacing: 0.5px; text-transform: uppercase; }
+  .section-count   { font-size: 0.75em; color: var(--muted); font-family: var(--mono); }
+
+  .sys-list-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    transition: background 0.1s;
+  }
+  .sys-list-row:last-child { border-bottom: none; }
+  .sys-list-row:hover { background: rgba(255,255,255,0.025); }
+
+  .sys-name  { font-size: 0.88em; font-weight: 700; color: var(--text); flex: 1; }
+  .sys-abbr  { font-family: var(--mono); font-size: 0.72em; color: var(--muted); }
+
+  .edit-table { width: 100%; border-collapse: collapse; font-size: 0.82em; }
+  .edit-table th {
+    text-align: left; padding: 10px 20px;
+    font-size: 0.72em; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+  .edit-table td { padding: 9px 20px; border-bottom: 1px solid rgba(255,255,255,0.03); color: var(--text); vertical-align: middle; }
+  .edit-table tr:last-child td { border-bottom: none; }
+  .edit-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .field-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 3px;
+    font-size: 0.72em; font-weight: 700; letter-spacing: 0.4px;
+    background: rgba(0,255,204,0.08); color: var(--cyan); border: 1px solid rgba(0,255,204,0.2);
+  }
+
+  .empty-note {
+    padding: 28px 20px; text-align: center; color: var(--muted); font-size: 0.82em;
+  }
+
+  .doc-queue-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .doc-queue-row:last-child { border-bottom: none; }
+  .doc-queue-icon { font-size: 1.4em; flex-shrink: 0; }
+  .doc-queue-info { flex: 1; }
+  .doc-queue-info h3 { font-size: 0.88em; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+  .doc-queue-info p  { font-size: 0.75em; color: var(--muted); }
+  .btn-sm {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 12px; border-radius: 4px; font-size: 0.78em; font-weight: 700;
+    cursor: pointer; text-decoration: none;
+    border: 1px solid rgba(0,255,204,0.3); background: rgba(0,255,204,0.06); color: var(--cyan);
+    transition: background 0.12s;
+  }
+  .btn-sm:hover { background: rgba(0,255,204,0.12); }
+
+  .status-badge {
+    display: inline-block; padding: 2px 7px; border-radius: 3px;
+    font-size: 0.7em; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase;
+  }
+  .status-processing { background: rgba(255,179,0,0.12); color: var(--yellow); border: 1px solid rgba(255,179,0,0.25); }
+  .status-complete   { background: rgba(0,200,83,0.12);  color: var(--green);  border: 1px solid rgba(0,200,83,0.25); }
+  .status-error      { background: rgba(244,67,54,0.12); color: var(--red);    border: 1px solid rgba(244,67,54,0.25); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="workspace-header">
+  <h1>⊞ Security Control Assessor Workspace</h1>
+  <p>Manage assessments, review control implementations, and upload SAR/SAP artifacts.</p>
+</div>
+
+{# ── Section 1: Assigned Systems ── #}
+<div class="section-card">
+  <div class="section-head">
+    <h2>Assigned Systems</h2>
+    <span class="section-count">{{ systems|length }} system{% if systems|length != 1 %}s{% endif %}</span>
+  </div>
+  {% if systems %}
+    {% for sys in systems %}
+    <div class="sys-list-row">
+      <span class="sys-abbr">[{{ sys.abbreviation or '—' }}]</span>
+      <a href="/systems/{{ sys.id }}" class="sys-name">{{ sys.name }}</a>
+      <span class="sys-abbr">{{ sys.system_type or '' }}</span>
+      {% if sys.auth_status == 'authorized' %}
+        <span class="status-badge status-complete">ATO</span>
+      {% elif sys.auth_status == 'in_progress' %}
+        <span class="status-badge status-processing">In Review</span>
+      {% elif sys.auth_status == 'expired' %}
+        <span class="status-badge status-error">Expired</span>
+      {% else %}
+        <span class="status-badge" style="background:rgba(158,158,158,0.1);color:var(--grey);border:1px solid rgba(158,158,158,0.2)">Not Auth</span>
+      {% endif %}
+      <a href="/systems/{{ sys.id }}/controls" class="btn-sm">Controls →</a>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-note">No systems assigned. Contact your ISSM or administrator.</div>
+  {% endif %}
+</div>
+
+{# ── Section 2: Pending Uploads ── #}
+{% if pending_uploads %}
+<div class="section-card">
+  <div class="section-head">
+    <h2>Processing Queue</h2>
+    <span class="section-count">{{ pending_uploads|length }} processing</span>
+  </div>
+  {% for a in pending_uploads %}
+  <div class="sys-list-row">
+    <span class="status-badge status-processing">Processing</span>
+    <span style="font-size:0.84em;color:var(--text);flex:1">{{ a.filename }}</span>
+    <span style="font-size:0.72em;color:var(--muted)">{{ a.uploaded_at.strftime('%Y-%m-%d %H:%M') if a.uploaded_at else '' }}</span>
+    <a href="/status/{{ a.id }}" class="btn-sm">Status →</a>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── Section 3: Recent Control Edits ── #}
+<div class="section-card">
+  <div class="section-head">
+    <h2>Recent Control Assessment Activity</h2>
+    <span class="section-count">{{ recent_edits|length }} record{% if recent_edits|length != 1 %}s{% endif %}</span>
+  </div>
+  {% if recent_edits %}
+  <table class="edit-table">
+    <thead>
+      <tr>
+        <th>Control</th>
+        <th>Field</th>
+        <th>Assessor</th>
+        <th>New Value</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in recent_edits %}
+      <tr>
+        <td><span class="field-badge">{{ e.control_id }}</span></td>
+        <td><span style="font-size:0.8em;color:var(--muted)">{{ e.field }}</span></td>
+        <td style="font-size:0.82em;color:var(--text)">{{ e.remote_user }}</td>
+        <td style="font-size:0.82em;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          {{ (e.new_value or '—')[:80] }}{% if e.new_value and e.new_value|length > 80 %}…{% endif %}
+        </td>
+        <td style="font-size:0.75em;color:var(--muted);white-space:nowrap">
+          {{ e.edited_at.strftime('%Y-%m-%d') if e.edited_at else '' }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="empty-note">No control assessment activity yet.</div>
+  {% endif %}
+</div>
+
+{# ── Section 4: Document Queue ── #}
+<div class="section-card">
+  <div class="section-head">
+    <h2>Document Queue</h2>
+    <span class="section-count">SAR / SAP Artifacts</span>
+  </div>
+  <div class="doc-queue-row">
+    <span class="doc-queue-icon">↑</span>
+    <div class="doc-queue-info">
+      <h3>Upload Assessment Artifact</h3>
+      <p>Upload SSP, SAR, or SAP documents for automated control scoring.</p>
+    </div>
+    <a href="/upload" class="btn-sm">Upload →</a>
+  </div>
+  <div class="doc-queue-row">
+    <span class="doc-queue-icon">⊞</span>
+    <div class="doc-queue-info">
+      <h3>Control Catalog</h3>
+      <p>Browse NIST 800-53r5 controls and review implementation narratives.</p>
+    </div>
+    <a href="/controls" class="btn-sm">Browse →</a>
+  </div>
+</div>
+{% endblock %}

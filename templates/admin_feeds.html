@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Feed Sources{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div style="font-size:0.72em;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Admin Tools</div>
+    <h1 style="margin:0;font-size:1.4em;letter-spacing:1px">Advisory Feed Sources</h1>
+    <p style="margin:6px 0 0;color:var(--muted);font-size:0.82em">
+      Select which curated feeds power the sidebar advisory ticker and the
+      <a href="/advisories" style="color:var(--cyan)">Security Advisories</a> page.
+      Toggle sources, test fetch, and inspect health status per source.
+    </p>
+  </div>
+  <div style="display:flex;gap:10px">
+    <a href="/admin" class="btn btn-ghost btn-sm">← Admin</a>
+  </div>
+</div>
+
+{# ── Health summary ─────────────────────────────────────────────────────────── #}
+{% set enabled_count = sources | selectattr('enabled') | list | length %}
+{% set error_count = sources | selectattr('last_error') | list | length %}
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px">
+  <div class="stat" style="min-width:120px">
+    <div class="stat-value">{{ sources | length }}</div>
+    <div class="stat-label">Total Sources</div>
+  </div>
+  <div class="stat" style="min-width:120px">
+    <div class="stat-value" style="color:var(--green)">{{ enabled_count }}</div>
+    <div class="stat-label">Enabled</div>
+  </div>
+  <div class="stat" style="min-width:120px">
+    <div class="stat-value" style="color:{% if error_count %}var(--red){% else %}var(--green){% endif %}">{{ error_count }}</div>
+    <div class="stat-label">With Errors</div>
+  </div>
+</div>
+
+{# ── Source table ────────────────────────────────────────────────────────────── #}
+<div class="card" style="padding:0;overflow:hidden">
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
+    <span style="font-size:0.8em;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">Feed Allowlist</span>
+    <span style="font-size:0.75em;color:var(--muted)">Changes take effect within 1 hour (cache TTL)</span>
+  </div>
+  <table style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr style="font-size:0.72em;text-transform:uppercase;letter-spacing:1px;color:var(--muted);border-bottom:1px solid var(--border)">
+        <th style="padding:10px 16px;text-align:left;font-weight:500">Source</th>
+        <th style="padding:10px 16px;text-align:left;font-weight:500;display:none" class="col-url">URL</th>
+        <th style="padding:10px 16px;text-align:center;font-weight:500">Enabled</th>
+        <th style="padding:10px 16px;text-align:center;font-weight:500">Items</th>
+        <th style="padding:10px 16px;text-align:left;font-weight:500">Last Fetched</th>
+        <th style="padding:10px 16px;text-align:left;font-weight:500">Health</th>
+        <th style="padding:10px 16px;text-align:center;font-weight:500">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for src in sources | sort(attribute='sort_order') %}
+      <tr id="row-{{ src.key }}" style="border-bottom:1px solid var(--border);transition:background 0.15s"
+          {% if not src.enabled %}style="opacity:0.6"{% endif %}>
+        <td style="padding:12px 16px">
+          <div style="font-weight:600;font-size:0.9em">{{ src.name }}</div>
+          <div style="font-size:0.72em;color:var(--muted);font-family:var(--mono);margin-top:2px">
+            <a href="{{ src.url }}" target="_blank" rel="noopener noreferrer"
+               style="color:var(--muted);text-decoration:none;word-break:break-all">{{ src.url }}</a>
+          </div>
+        </td>
+        <td style="padding:12px 16px;text-align:center">
+          <label class="feed-toggle" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+            <input type="checkbox" id="toggle-{{ src.key }}"
+                   {% if src.enabled %}checked{% endif %}
+                   onchange="toggleFeed('{{ src.key }}', this.checked)"
+                   style="accent-color:var(--green);width:16px;height:16px;cursor:pointer">
+            <span id="state-{{ src.key }}" style="font-size:0.72em;font-family:var(--mono);color:{% if src.enabled %}var(--green){% else %}var(--muted){% endif %}">
+              {% if src.enabled %}ON{% else %}OFF{% endif %}
+            </span>
+          </label>
+        </td>
+        <td style="padding:12px 16px;text-align:center;font-family:var(--mono);font-size:0.85em">
+          <span id="items-{{ src.key }}">{{ src.item_count or '—' }}</span>
+        </td>
+        <td style="padding:12px 16px;font-size:0.75em;color:var(--muted);font-family:var(--mono)">
+          <span id="fetched-{{ src.key }}">
+            {% if src.last_fetched %}{{ src.last_fetched.strftime('%Y-%m-%d %H:%M') }}{% else %}never{% endif %}
+          </span>
+        </td>
+        <td style="padding:12px 16px">
+          <span id="health-{{ src.key }}">
+            {% if src.last_error %}
+              <span style="color:var(--red);font-size:0.75em;font-family:var(--mono)"
+                    title="{{ src.last_error }}">
+                ✗ error ×{{ src.error_count }}
+              </span>
+            {% elif src.last_fetched %}
+              <span style="color:var(--green);font-size:0.75em;font-family:var(--mono)">✓ ok</span>
+            {% else %}
+              <span style="color:var(--muted);font-size:0.75em">not tested</span>
+            {% endif %}
+          </span>
+        </td>
+        <td style="padding:12px 16px;text-align:center">
+          <button onclick="testFeed('{{ src.key }}')" id="test-btn-{{ src.key }}"
+                  class="btn btn-ghost btn-sm" style="font-size:0.72em;padding:4px 10px">
+            ↺ Test
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ── Fetch info ──────────────────────────────────────────────────────────────── #}
+<div class="card" style="margin-top:20px;padding:16px 20px;font-size:0.82em;color:var(--muted)">
+  <strong style="color:var(--text)">Fetch Rules</strong>
+  <ul style="margin:8px 0 0;padding-left:18px;line-height:1.8">
+    <li>Cache TTL: 1 hour per source. "Test" bypasses cache and updates health stats.</li>
+    <li>Hard cap: 40 items per feed per fetch. HTML stripped from summaries.</li>
+    <li>Deduplication: by URL; by SHA1(title) when URL is absent.</li>
+    <li>Backoff: sources with 3+ consecutive errors are skipped until manually re-tested.</li>
+    <li>Sources are merged and scored by keyword relevance to your systems.</li>
+  </ul>
+</div>
+
+<script>
+async function toggleFeed(key, enabled) {
+  const stateEl = document.getElementById('state-' + key);
+  const rowEl = document.getElementById('row-' + key);
+  if (stateEl) stateEl.textContent = '…';
+  try {
+    const r = await fetch('/admin/feeds/' + encodeURIComponent(key) + '/toggle', {method: 'POST'});
+    const j = await r.json();
+    if (stateEl) {
+      stateEl.textContent = j.enabled ? 'ON' : 'OFF';
+      stateEl.style.color = j.enabled ? 'var(--green)' : 'var(--muted)';
+    }
+    if (rowEl) rowEl.style.opacity = j.enabled ? '' : '0.6';
+    document.getElementById('toggle-' + key).checked = j.enabled;
+  } catch(e) {
+    if (stateEl) stateEl.textContent = 'err';
+  }
+}
+
+async function testFeed(key) {
+  const btn    = document.getElementById('test-btn-' + key);
+  const health = document.getElementById('health-' + key);
+  const items  = document.getElementById('items-' + key);
+  const fetched = document.getElementById('fetched-' + key);
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const r = await fetch('/admin/feeds/' + encodeURIComponent(key) + '/test', {method: 'POST'});
+    const j = await r.json();
+    if (health) {
+      if (j.ok) {
+        health.innerHTML = '<span style="color:var(--green);font-size:0.75em;font-family:var(--mono)">✓ ok</span>';
+        if (items) items.textContent = j.item_count || 0;
+        if (fetched) fetched.textContent = new Date().toISOString().slice(0,16).replace('T',' ');
+      } else {
+        health.innerHTML = '<span style="color:var(--red);font-size:0.75em;font-family:var(--mono)" title="' +
+          (j.error || '').replace(/"/g,'&quot;') + '">✗ error</span>';
+      }
+    }
+    // Show toast
+    const sample = j.sample || j.error || '';
+    _showToast(j.ok ? '✓ ' + key + ': ' + (j.item_count||0) + ' items — ' + sample.substring(0,60)
+                    : '✗ ' + key + ': ' + sample.substring(0,80), j.ok ? 'ok' : 'err');
+  } catch(e) {
+    _showToast('✗ ' + key + ': network error', 'err');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '↺ Test'; }
+}
+
+function _showToast(msg, type) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;padding:10px 16px;' +
+    'border-radius:6px;font-size:0.82em;font-family:var(--mono);max-width:420px;word-break:break-all;' +
+    'background:' + (type === 'ok' ? 'rgba(118,255,3,0.12);border:1px solid rgba(118,255,3,0.3);color:var(--green)'
+                                   : 'rgba(244,67,54,0.12);border:1px solid rgba(244,67,54,0.3);color:var(--red)');
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 5000);
+}
+</script>
+{% endblock %}

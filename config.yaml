@@ -5,9 +5,9 @@ app:
   name: BLACKSITE
   brand: TheKramerica
   tagline: "Security Assessment Platform"
-  host: 0.0.0.0
+  host: 127.0.0.1   # BLKS022826-1011AC11 fixed: bind loopback only; Caddy proxies all external traffic
   port: 8100
-  secret_key: "CHANGE_ME_RANDOM_32_CHAR_STRING"   # used for session signing — rotate via creds page
+  secret_key: ""   # leave blank — auto-generated random key stored in data/.app_secret on first run
   base_url: "https://blacksite.borisov.network"
   authelia_logout_url: "https://auth.borisov.network/logout?rd=https://blacksite.borisov.network"
   admin_users:           # Authelia usernames with admin dashboard access
@@ -44,6 +44,9 @@ employees:               # Known employees (non-admin Authelia users)
   - username: "nadia.volkov"
     name: "Nadia Volkov"
     email: "nadia.volkov@thekramerica.com"
+  - username: "dickie"
+    name: "Dickie"
+    email: ""
 
 quiz:
   daily: true

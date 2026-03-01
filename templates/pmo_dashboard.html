@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — PMO Dashboard{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:28px">
+  <h1 style="margin:0;margin-bottom:4px">PMO Dashboard</h1>
+  <p class="text-muted" style="font-size:0.88em">ATO expiration timeline, portfolio status, and POA&M aging summary</p>
+</div>
+
+{# ── Stats ── #}
+<div class="stats" style="margin-bottom:28px">
+  <div class="stat">
+    <div class="stat-value" style="color:var(--green)">{{ ato_breakdown.get('authorized', 0) }}</div>
+    <div class="stat-label">Authorized</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--yellow)">{{ ato_breakdown.get('in_progress', 0) }}</div>
+    <div class="stat-label">In Progress</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--red)">{{ ato_breakdown.get('expired', 0) }}</div>
+    <div class="stat-label">Expired</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--muted)">{{ ato_breakdown.get('not_authorized', 0) }}</div>
+    <div class="stat-label">Not Authorized</div>
+  </div>
+</div>
+
+{# ── POA&M Aging ── #}
+<div class="card" style="margin-bottom:20px;padding:20px">
+  <div class="card-title" style="margin-bottom:16px">POA&amp;M Aging Summary</div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+    {% for sev, count in [('Critical', sev_breakdown.get('Critical', 0)),
+                           ('High', sev_breakdown.get('High', 0)),
+                           ('Moderate', sev_breakdown.get('Moderate', 0)),
+                           ('Low', sev_breakdown.get('Low', 0))] %}
+    {% set sev_color = 'var(--red)' if sev == 'Critical' else ('#ff6b35' if sev == 'High' else ('var(--yellow)' if sev == 'Moderate' else 'var(--green)')) %}
+    <div style="flex:1;min-width:100px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px;text-align:center">
+      <div style="font-size:1.8em;font-weight:900;color:{{ sev_color }};font-family:var(--mono)">{{ count }}</div>
+      <div style="font-size:0.75em;color:var(--muted);margin-top:4px">{{ sev }}</div>
+    </div>
+    {% endfor %}
+    <div style="flex:1;min-width:100px;background:rgba(244,67,54,0.08);border:1px solid rgba(244,67,54,0.2);border-radius:6px;padding:16px;text-align:center">
+      <div style="font-size:1.8em;font-weight:900;color:var(--red);font-family:var(--mono)">{{ overdue_count }}</div>
+      <div style="font-size:0.75em;color:var(--muted);margin-top:4px">Overdue</div>
+    </div>
+  </div>
+  <div style="margin-top:12px">
+    <a href="/poam?status=open&overdue=1" style="font-size:0.82em;color:var(--cyan)">View overdue items →</a>
+  </div>
+</div>
+
+{# ── ATO Expiration Timeline ── #}
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border)">
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">ATO Expiration Timeline</div>
+    <span style="font-size:0.75em;color:var(--muted)">Sorted by nearest expiry</span>
+  </div>
+  {% if all_systems %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.83em">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)">
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">System</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">ATO Status</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Expiry Date</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Days Remaining</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sys in all_systems %}
+      {% set ast = sys.auth_status or 'not_authorized' %}
+      {% if sys.auth_expiry and today is defined %}
+        {% set exp_date = sys.auth_expiry %}
+        {% set days_left = ((exp_date | string)[:10] > today[:10]) | int * 999 %}
+      {% else %}
+        {% set exp_date = None %}
+        {% set days_left = None %}
+      {% endif %}
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:10px 20px">
+          <a href="/systems/{{ sys.id }}" style="color:var(--cyan);font-weight:600">{{ sys.name }}</a>
+          {% if sys.abbreviation %}<span class="mono" style="color:var(--muted);font-size:0.85em"> ({{ sys.abbreviation }})</span>{% endif %}
+        </td>
+        <td style="padding:10px 20px">
+          {% if ast == 'authorized' %}<span style="color:var(--green)">Authorized</span>
+          {% elif ast == 'in_progress' %}<span style="color:var(--yellow)">In Progress</span>
+          {% elif ast == 'expired' %}<span style="color:var(--red)">Expired</span>
+          {% else %}<span style="color:var(--muted)">Not Authorized</span>{% endif %}
+        </td>
+        <td style="padding:10px 20px;font-family:var(--mono);color:var(--muted)">
+          {{ sys.auth_expiry or '—' }}
+        </td>
+        <td style="padding:10px 20px;font-family:var(--mono)">
+          {% if sys.auth_expiry and today is defined %}
+            {% if sys.auth_expiry < today %}
+              <span style="color:var(--red)">EXPIRED</span>
+            {% else %}
+              <span style="color:var(--muted)">{{ sys.auth_expiry }}</span>
+            {% endif %}
+          {% else %}
+            <span style="color:var(--muted)">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:24px 20px;color:var(--muted);font-size:0.85em">No systems in portfolio.</div>
+  {% endif %}
+</div>
+{% endblock %}

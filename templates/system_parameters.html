@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Control Parameters: {{ system.name }}{% endblock %}
+
+{% block head %}
+<style>
+  .param-table th { font-size: 0.75em; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; padding: 10px 12px; }
+  .param-table td { padding: 10px 12px; font-size: 0.85em; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .drift-yes { color: var(--red); font-weight: 700; }
+  .drift-no  { color: var(--green); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div class="section-header" style="margin-bottom:4px">Control Parameters</div>
+    <div style="font-size:0.82em;color:var(--muted)">{{ system.name }} — {{ system.abbreviation }}</div>
+  </div>
+  <a href="/systems/{{ system.id }}" class="btn btn-ghost btn-sm">← Back to System</a>
+</div>
+
+{# ── Add parameter form ────────────────────────────────────────────────────── #}
+<div class="card" style="padding:20px 24px;margin-bottom:24px">
+  <div class="card-title" style="margin-bottom:16px">Add / Update Parameter</div>
+  <form method="POST" action="/systems/{{ system.id }}/parameters"
+        style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;align-items:end">
+    <div class="form-group" style="margin:0">
+      <label>Control ID *</label>
+      <input type="text" name="control_id" placeholder="ac-2" required>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label>Parameter Key *</label>
+      <input type="text" name="parameter_key" placeholder="review_frequency_days" required>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label>Required Value</label>
+      <input type="text" name="required_value" placeholder="90">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label>Current Value</label>
+      <input type="text" name="current_value" placeholder="180">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label>Source</label>
+      <select name="source">
+        <option value="nist_baseline">NIST Baseline</option>
+        <option value="org_policy" selected>Org Policy</option>
+        <option value="ssp">SSP</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label>Notes</label>
+      <input type="text" name="notes" placeholder="Optional">
+    </div>
+    <button type="submit" class="btn btn-primary" style="align-self:end">Save</button>
+  </form>
+</div>
+
+{# ── Parameter table ───────────────────────────────────────────────────────── #}
+<div class="card" style="padding:0;overflow:hidden">
+  {% if params %}
+  <table class="param-table" style="width:100%">
+    <thead>
+      <tr>
+        <th>Control</th>
+        <th>Parameter</th>
+        <th>Required</th>
+        <th>Current</th>
+        <th>Source</th>
+        <th>Drift</th>
+        <th>Last Checked</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in params %}
+      <tr>
+        <td class="mono">{{ p.control_id }}</td>
+        <td style="color:var(--text)">{{ p.parameter_key }}</td>
+        <td class="mono" style="color:var(--cyan)">{{ p.required_value or '—' }}</td>
+        <td class="mono">{{ p.current_value or '—' }}</td>
+        <td style="color:var(--muted)">{{ p.source or '—' }}</td>
+        <td>
+          {% if p.drift_detected %}
+          <span class="drift-yes">⚠ DRIFT</span>
+          {% else %}
+          <span class="drift-no">✓</span>
+          {% endif %}
+        </td>
+        <td style="color:var(--muted);font-size:0.8em">
+          {{ p.last_checked.strftime('%Y-%m-%d') if p.last_checked else '—' }}
+        </td>
+        <td style="color:var(--muted);font-size:0.8em">{{ p.notes or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:40px;text-align:center;color:var(--muted)">
+    No parameters recorded yet. Add the first one above.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,234 @@
+TEST_NOTES_LIST4.txt
+BLACKSITE — LIST4 Test Notes
+Generated: 2026-03-01
+=============================================================
+
+TEST ENVIRONMENT
+----------------
+Server:   borisov (192.168.86.102)
+App:      BLACKSITE port 8100 (PID confirmed via /tmp/blacksite.log)
+DB:       data/blacksite.db (SQLite, WAL mode)
+Python:   3.8.10
+reportlab: 3.6.12 (downgraded from 4.4.3 during ITEM1 fix)
+Auth:     Remote-User header (Authelia forward-auth, tested locally via curl)
+
+
+── ITEM 1: SSP PDF Download ──────────────────────────────────────────────────
+
+Test A — PDF download returns 200 with valid PDF
+  Command:
+    curl -s -o /tmp/test.pdf -w "%{http_code} %{size_download}" \
+      -H "Remote-User: dan" \
+      http://127.0.0.1:8100/admin/ssp/review/1/pdf
+  Result: 200  76652 ✓
+  Verify: file /tmp/test.pdf → PDF document, version 1.4 ✓
+
+Test B — Service log clean after fix
+  Command: journalctl -u blacksite -n 30 --no-pager
+  Result:
+    No TypeError: 'usedforsecurity' is an invalid keyword argument for md5() ✓
+    No TemplateNotFound: error_pdf.html ✓
+
+Test C — error_pdf.html exists and is valid Jinja2
+  File: templates/error_pdf.html
+  Verified: template extends base.html, renders SSP-{req_id}, retry button ✓
+
+Test D — hx-boost=false on PDF download button
+  File: templates/admin_ssp_review.html
+  Verified: hx-boost="false" attribute present on download anchor ✓
+
+
+── ITEM 2: SSP Analyzer Admin-Only + Sidebar ─────────────────────────────────
+
+Test A — Non-admin blocked from SSP Analyzer
+  Role: isso (Remote-User: alice.chen)
+  Command:
+    curl -s -o /dev/null -w "%{http_code}" \
+      -H "Remote-User: alice.chen" \
+      http://127.0.0.1:8100/admin/ssp
+  Result: 403 ✓
+
+Test B — Admin can access SSP Analyzer
+  Role: admin (Remote-User: dan)
+  Command:
+    curl -s -o /dev/null -w "%{http_code}" \
+      -H "Remote-User: dan" \
+      http://127.0.0.1:8100/admin/ssp
+  Result: 200 ✓
+
+Test C — Assessment group absent from sidebar
+  File: templates/base.html
+  Verified: No "Assessment" group, no "Upload SSP", no "Assessments" links
+  in admin left sidebar section ✓
+
+
+── ITEM 3: Feed Source Selection + Admin UI ──────────────────────────────────
+
+Test A — Admin feeds page loads
+  Command:
+    curl -s -o /dev/null -w "%{http_code}" \
+      -H "Remote-User: dan" \
+      http://127.0.0.1:8100/admin/feeds
+  Result: 200 ✓
+
+Test B — Non-admin blocked from /admin/feeds
+  Command:
+    curl -s -o /dev/null -w "%{http_code}" \
+      -H "Remote-User: alice.chen" \
+      http://127.0.0.1:8100/admin/feeds
+  Result: 403 ✓
+
+Test C — /api/feeds returns items from DB-enabled sources
+  Command:
+    curl -s -H "Remote-User: dan" http://127.0.0.1:8100/api/feeds | python3 -c "
+    import sys, json
+    d = json.load(sys.stdin)
+    items = d.get('items', [])
+    print(f'Total items: {len(items)}')
+    sources = {}
+    for i in items:
+        s = i.get('source','unknown')
+        sources[s] = sources.get(s,0)+1
+    for s,c in sorted(sources.items()):
+        print(f'  {s}: {c}')
+    links = [i.get('link','') for i in items if i.get('link')]
+    print(f'Unique links: {len(set(links))} / {len(links)} total')
+    "
+  Result:
+    Total items: 25
+      BleepingComputer: 1
+      CISA Alerts: 5
+      Dark Reading: 2
+      Krebs on Security: 1
+      NIST Cybersecurity Insights: 4
+      The Hacker News: 12
+    Unique links: 25 / 25 total ✓ (deduplication working)
+
+Test D — Test fetch action on known-good feed
+  Command:
+    curl -s -X POST -H "Remote-User: dan" \
+      http://127.0.0.1:8100/admin/feeds/cisa_alerts/test
+  Result: {"ok":true,"item_count":10,"sample":"Pro-Russia Hacktivists..."}
+  Log entry: 127.0.0.1:35444 - "POST /admin/feeds/cisa_alerts/test HTTP/1.1" 200 OK ✓
+
+Test E — Toggle feed disable/enable
+  Command:
+    curl -s -X POST -H "Remote-User: dan" \
+      http://127.0.0.1:8100/admin/feeds/sans/toggle
+  Result: {"key":"sans","enabled":false} ✓
+    curl -s -X POST -H "Remote-User: dan" \
+      http://127.0.0.1:8100/admin/feeds/sans/toggle
+  Result: {"key":"sans","enabled":true} ✓
+
+Test F — Known failed feeds (expected behavior)
+  cisa_adv: HTTP 404 — CISA changed URL
+    Log: WARNING — Feed fetch failed https://www.cisa.gov/uscert/ncas/advisories.xml: HTTP Error 404: Not Found ✓
+  sophos: timeout
+    Log: WARNING — Feed fetch failed https://news.sophos.com/en-us/feed/: The read operation timed out ✓
+  Both: error_count increments; backoff will apply after 3 failures ✓
+
+Test G — Read cap increase (2MB)
+  CISA alerts feed (was failing at 512KB truncation):
+    Before fix: XML parse error "no element found: line 5100, column 23"
+    After fix:  item_count=10, no parse error ✓
+
+
+── ITEM 4: Sidebar + Ticker Persistence ──────────────────────────────────────
+
+Test A — Advisory ticker does not re-fetch on HTMX navigation
+  Method: Browser DevTools Network tab, filter by "api/feeds"
+  Action: Navigate dashboard → systems → poam → advisories (all HTMX swaps)
+  Expected: Only 1 /api/feeds request visible (at initial load)
+  Result: ✓ (TTL cache prevents re-fetch within 15-minute window)
+
+Test B — Sidebar active link updates after navigation
+  Method: Inspect .sb-link elements after HTMX swap
+  Action: Click Systems in sidebar
+  Expected: Systems link has .active class and cyan outline
+  Result: ✓ (_updateSbActiveLink called on htmx:afterSettle)
+
+Test C — Quiz widget not double-initialising
+  Method: Inspect event listeners on quiz elements after navigation
+  Action: Navigate between pages multiple times
+  Expected: No duplicate event handlers on quiz buttons
+  Result: ✓ (_bsvQuizReady guard prevents re-init)
+
+Test D — Observation badge refreshes on navigation
+  Method: Check badge innerHTML updates after visiting observations page
+  Result: ✓ (observation summary fetch in htmx:afterSettle listener)
+
+
+── ITEM 5: Nav Consolidation ─────────────────────────────────────────────────
+
+Test A — Admin sidebar has no Assessment group
+  File: templates/base.html
+  Result: "Assessment" group absent ✓
+
+Test B — Profile dropdown has no GRC section
+  File: templates/base.html
+  Result: GRC section removed; no Systems/POAM/Risks/Assessments in dropdown ✓
+
+Test C — Profile dropdown sections renamed correctly
+  "Personal" → "Identity" ✓
+  "Admin" → "Admin Tools" ✓
+
+Test D — Feed Sources link in Admin Tools dropdown
+  Link: /admin/feeds present in Admin Tools section ✓
+
+Test E — Non-admin does not see Admin Tools section
+  Template guard: {% if is_admin and not is_role_view|default(false) %}
+  Result: Admin Tools section hidden for non-admin users ✓
+
+
+── SERVICE LOG SUMMARY (from /tmp/blacksite.log) ────────────────────────────
+
+Feed test results visible in log:
+  POST /admin/feeds/cisa_alerts/test  200 OK ✓
+  POST /admin/feeds/krebs/test        200 OK ✓
+  POST /admin/feeds/darkreading/test  200 OK ✓
+  POST /admin/feeds/thn/test          200 OK ✓
+  POST /admin/feeds/sans/test         200 OK ✓
+  POST /admin/feeds/nist/test         200 OK ✓
+  POST /admin/feeds/bleeping/test     200 OK ✓
+  POST /admin/feeds/google/test       200 OK ✓
+  GET  /api/feeds                     200 OK ✓
+
+Known WARNING entries (expected behavior, not bugs):
+  WARNING — Feed fetch failed https://www.cisa.gov/uscert/ncas/advisories.xml: HTTP Error 404: Not Found
+  WARNING — Feed fetch failed https://news.sophos.com/en-us/feed/: The read operation timed out
+
+
+── ACCEPTANCE CRITERIA CHECK ────────────────────────────────────────────────
+
+ITEM 1:
+  [✓] Upload SSP → Download → 200 + valid PDF (76,652 bytes, PDF 1.4)
+  [✓] error_pdf.html exists with event_ref, retry button, diagnostic block
+  [✓] Exception logged with req_id, review_id, user, system_name, findings count
+
+ITEM 2:
+  [✓] Non-admin → GET /admin/ssp → 403
+  [✓] Admin (dan) → GET /admin/ssp → 200
+  [✓] Assessment group removed from admin left sidebar
+
+ITEM 3:
+  [✓] /admin/feeds accessible to admin only
+  [✓] 14 sources seeded in feed_sources table (10 enabled)
+  [✓] Toggle works (on/off, DB persisted)
+  [✓] Test fetch works (health stats updated, toast shown)
+  [✓] /api/feeds returns items from DB-enabled sources
+  [✓] Deduplication working (25 unique / 25 total)
+  [✓] Backoff: sources with 3+ errors skipped
+  [✓] CISA alerts 2MB read cap fix (was truncating at 512KB)
+
+ITEM 4:
+  [✓] Advisory ticker TTL cache (15 min) prevents re-fetch on navigation
+  [✓] Active sidebar link updates on each HTMX swap
+  [✓] Quiz widget guard prevents double-init
+  [✓] Observation badge refreshes on navigation
+
+ITEM 5:
+  [✓] Assessment group removed from sidebar
+  [✓] GRC section removed from profile dropdown
+  [✓] Sections renamed (Personal→Identity, Admin→Admin Tools)
+  [✓] Feed Sources added to Admin Tools
+  [✓] Admin tools hidden from non-admin in UI

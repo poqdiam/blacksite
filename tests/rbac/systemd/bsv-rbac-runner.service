@@ -1,0 +1,18 @@
+[Unit]
+Description=BLACKSITE RBAC Regression Runner
+After=network.target
+
+[Service]
+Type=oneshot
+User=graycat
+WorkingDirectory=/home/graycat/projects/blacksite
+ExecStart=/home/graycat/projects/blacksite/.venv/bin/python /home/graycat/projects/blacksite/scripts/bsv_rbac_run --base-url http://127.0.0.1:8100 --silent
+Environment=BSV_TEST_USER=dan
+Environment=BSV_LOCAL_MODE=1
+EnvironmentFile=-/home/graycat/projects/blacksite/.env.rbac
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bsv-rbac-runner
+
+[Install]
+WantedBy=multi-user.target

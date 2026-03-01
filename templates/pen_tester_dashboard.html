@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Pen Tester Dashboard{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:28px">
+  <h1 style="margin:0;margin-bottom:4px">Pen Tester Dashboard</h1>
+  <p class="text-muted" style="font-size:0.88em">Assigned systems, submitted findings, and active assessments</p>
+</div>
+
+{# ── Stats row ── #}
+<div class="stats" style="margin-bottom:28px">
+  <div class="stat">
+    <div class="stat-value">{{ assigned_systems | length }}</div>
+    <div class="stat-label">Assigned Systems</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{{ my_observations | length }}</div>
+    <div class="stat-label">My Findings</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{{ recent_assessments | length }}</div>
+    <div class="stat-label">Active Assessments</div>
+  </div>
+</div>
+
+{# ── Assigned Systems ── #}
+<div class="card" style="margin-bottom:20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border)">
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Assigned Systems</div>
+  </div>
+  {% if assigned_systems %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.83em">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)">
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">System</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Classification</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Owner</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">ATO Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sys in assigned_systems %}
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:10px 20px">
+          <a href="/systems/{{ sys.id }}" style="color:var(--cyan);font-weight:600">{{ sys.name }}</a>
+          {% if sys.abbreviation %}<span class="mono" style="color:var(--muted);font-size:0.85em"> ({{ sys.abbreviation }})</span>{% endif %}
+        </td>
+        <td style="padding:10px 20px;color:var(--muted)">{{ sys.environment or '—' }}</td>
+        <td style="padding:10px 20px;color:var(--muted)">{{ sys.owner_name or '—' }}</td>
+        <td style="padding:10px 20px">
+          {% set ast = sys.auth_status or 'not_authorized' %}
+          {% if ast == 'authorized' %}<span style="color:var(--green)">Authorized</span>
+          {% elif ast == 'in_progress' %}<span style="color:var(--yellow)">In Progress</span>
+          {% elif ast == 'expired' %}<span style="color:var(--red)">Expired</span>
+          {% else %}<span style="color:var(--muted)">Not Authorized</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:24px 20px;color:var(--muted);font-size:0.85em">No systems assigned yet.</div>
+  {% endif %}
+</div>
+
+{# ── My Observations / Findings ── #}
+<div class="card" style="margin-bottom:20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border)">
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">My Submitted Findings</div>
+    <a href="/observations/new" class="btn btn-primary btn-sm">+ New Finding</a>
+  </div>
+  {% if my_observations %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.83em">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)">
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Title</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Severity</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Status</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for obs in my_observations %}
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:10px 20px">
+          <a href="/observations/{{ obs.id }}" style="color:var(--text);font-weight:600">{{ obs.title | truncate(50) }}</a>
+        </td>
+        <td style="padding:10px 20px">
+          {% set sev = obs.severity or 'Low' %}
+          {% if sev == 'Critical' %}<span style="color:var(--red)">Critical</span>
+          {% elif sev == 'High' %}<span style="color:#ff6b35">High</span>
+          {% elif sev == 'Moderate' %}<span style="color:var(--yellow)">Moderate</span>
+          {% else %}<span style="color:var(--green)">Low</span>{% endif %}
+        </td>
+        <td style="padding:10px 20px;color:var(--muted)">{{ obs.status | replace('_',' ') | title if obs.status else '—' }}</td>
+        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono);font-size:0.85em">
+          {{ obs.created_at.strftime('%Y-%m-%d') if obs.created_at and obs.created_at.strftime is defined else (obs.created_at or '—') }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:24px 20px;color:var(--muted);font-size:0.85em">No findings submitted yet.
+    <a href="/observations/new" style="color:var(--cyan)">Submit your first finding →</a>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Recent Assessments ── #}
+{% if recent_assessments %}
+<div class="card">
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Active Assessments on Your Systems</div>
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:0.83em">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)">
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Assessment</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for asmt in recent_assessments %}
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:10px 20px">
+          <a href="/assessments/{{ asmt.id }}" style="color:var(--cyan)">{{ asmt.id[:8] }}…</a>
+        </td>
+        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono);font-size:0.85em">
+          {{ asmt.uploaded_at.strftime('%Y-%m-%d') if asmt.uploaded_at and asmt.uploaded_at.strftime is defined else '—' }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

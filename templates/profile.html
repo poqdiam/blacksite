@@ -2,6 +2,9 @@
 {% block title %}{{ app_name }} — My Profile{% endblock %}
 
 {% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css"
+      integrity="sha512-UtLOu9C7NuThQhuXXrGwx9Jb/z9zPQJctuAgNUBK3Z6kkSYT9wkCFo4HYE0DnCMXVRCxG7BIMBMoXTCcMZwA=="
+      crossorigin="anonymous" referrerpolicy="no-referrer">
 <style>
   .profile-layout {
     display: grid;
@@ -29,7 +32,7 @@
     letter-spacing: 2px;
     margin: 0 auto 18px;
     flex-shrink: 0;
-    text-shadow: 0 0 20px rgba(0,255,204,0.25);
+    text-shadow: 0 0 20px rgba(0,255,204,0.05);
   }
 
   .form-section {
@@ -125,6 +128,111 @@
   .domain-check-body { display: flex; flex-direction: column; gap: 1px; }
   .domain-id { font-family: var(--mono); font-size: 0.7em; font-weight: 700; color: var(--muted); letter-spacing: 1px; transition: color 0.15s; }
   .domain-name { font-size: 0.78em; color: var(--text); }
+
+  /* Theme palette swatches */
+  .theme-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .theme-swatch {
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.15s, transform 0.1s;
+  }
+  .theme-swatch:hover { transform: translateY(-1px); }
+  .theme-swatch.active { border-color: var(--cyan); }
+  .theme-swatch .sw-preview {
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+  }
+  .theme-swatch .sw-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+  .theme-swatch .sw-bar {
+    width: 24px; height: 4px;
+    border-radius: 2px;
+    opacity: 0.7;
+  }
+  .theme-swatch .sw-label {
+    font-size: 0.62em;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 4px 4px 5px;
+    font-family: var(--mono);
+  }
+  .theme-swatch .sw-check {
+    position: absolute;
+    top: 5px; right: 6px;
+    font-size: 0.75em;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .theme-swatch.active .sw-check { opacity: 1; }
+
+  /* Avatar upload overlay */
+  .avatar-wrap {
+    position: relative;
+    width: 96px;
+    margin: 0 auto 18px;
+  }
+  .avatar-edit-btn {
+    position: absolute;
+    bottom: 4px;
+    right: 0px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    color: var(--cyan);
+    font-size: 0.7em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s;
+    z-index: 2;
+  }
+  .avatar-edit-btn:hover { background: rgba(0,255,204,0.1); }
+  .avatar-img {
+    width: 96px; height: 96px; border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(0,255,204,0.35);
+    display: block;
+  }
+
+  /* Crop modal */
+  .crop-overlay {
+    display: none;
+    position: fixed; inset: 0; z-index: 600;
+    background: rgba(0,0,0,0.75);
+    align-items: center; justify-content: center;
+  }
+  .crop-overlay.open { display: flex; }
+  .crop-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    width: min(480px, 92vw);
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .crop-box h3 { font-size: 0.9em; color: var(--text); margin: 0; }
+  .crop-img-wrap { max-height: 320px; overflow: hidden; border-radius: 6px; }
+  .crop-img-wrap img { max-width: 100%; display: block; }
+  .crop-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  .crop-feedback { font-size: 0.8em; color: var(--muted); min-height: 1.2em; }
 </style>
 {% endblock %}
 
@@ -154,7 +262,7 @@
   <div>
     <div class="card" style="text-align:center;padding:28px 20px">
 
-      {# Avatar circle with initials #}
+      {# Avatar circle with initials or uploaded photo #}
       {% set display = (profile.display_name if profile and profile.display_name else remote_user) or '' %}
       {% set parts = display.split() %}
       {% if parts|length >= 2 %}
@@ -164,7 +272,15 @@
       {% else %}
         {% set initials = '??' %}
       {% endif %}
-      <div class="avatar-circle">{{ initials | upper }}</div>
+      <div class="avatar-wrap">
+        {% if profile and profile.avatar_url %}
+        <img id="avatarImg" class="avatar-img" src="{{ profile.avatar_url }}" alt="{{ initials | upper }}">
+        {% else %}
+        <div class="avatar-circle" id="avatarInitials">{{ initials | upper }}</div>
+        {% endif %}
+        <button class="avatar-edit-btn" onclick="document.getElementById('avatarFileInput').click()" title="Change photo" type="button">📷</button>
+      </div>
+      <input type="file" id="avatarFileInput" accept=".jpg,.jpeg,.png,.gif,.webp" style="display:none">
 
       {# Username #}
       <div style="font-weight:700;font-size:1.05em;margin-bottom:4px">{{ remote_user }}</div>
@@ -200,15 +316,6 @@
         {% endif %}
       </div>
 
-      {# Last updated #}
-      {% if profile and profile.updated_at %}
-      <div style="margin-top:10px">
-        <div class="text-muted" style="font-size:0.62em;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px">Last Updated</div>
-        <div class="mono" style="font-size:0.78em;color:var(--muted)">
-          {{ profile.updated_at.strftime('%Y-%m-%d %H:%M') if profile.updated_at else '—' }}
-        </div>
-      </div>
-      {% endif %}
 
     </div>
   </div>
@@ -314,6 +421,58 @@
           </div>
         </div>
 
+        {# ── Section: Interface Theme ──────────────────────────────────── #}
+        <div class="form-section" id="themeSection">
+          <div class="section-header">Interface Theme</div>
+          <p class="text-muted" style="font-size:0.8em;margin-bottom:14px">
+            Click a palette to apply it instantly. Your choice is saved automatically.
+          </p>
+          <div class="theme-grid" id="themeGrid">
+            {# Swatches rendered by JS below #}
+          </div>
+        </div>
+
+        {# ── Section: Display Preferences ──────────────────────────────── #}
+        <div class="form-section" id="prefsSection">
+          <div class="section-header">Display Preferences</div>
+          <p class="text-muted" style="font-size:0.8em;margin-bottom:16px">
+            Preferences are saved to your account and applied on every device after login.
+          </p>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+            <div>
+              <label style="display:block;font-size:0.78em;color:var(--muted);margin-bottom:6px;letter-spacing:1px">FONT SIZE</label>
+              <select id="pref-font-size" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:0.85em">
+                {% for sz in ['12px','14px','16px','18px','20px'] %}
+                <option value="{{ sz }}" {% if pref_font_size == sz %}selected{% endif %}>{{ sz }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-size:0.78em;color:var(--muted);margin-bottom:6px;letter-spacing:1px">DENSITY</label>
+              <select id="pref-density" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:0.85em">
+                {% for d in ['compact','comfortable','spacious'] %}
+                <option value="{{ d }}" {% if pref_density == d %}selected{% endif %}>{{ d | title }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-size:0.78em;color:var(--muted);margin-bottom:6px;letter-spacing:1px">ROWS PER PAGE</label>
+              <select id="pref-rows" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:0.85em">
+                {% for r in [10,25,50,100] %}
+                <option value="{{ r }}" {% if pref_rows_per_page == r %}selected{% endif %}>{{ r }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div style="margin-top:12px">
+            <button type="button" id="save-prefs-btn" class="btn btn-ghost btn-sm"
+                    style="color:var(--cyan);border-color:rgba(0,255,204,0.3)">
+              Save Display Preferences
+            </button>
+            <span id="prefs-feedback" style="font-size:0.8em;color:var(--muted);margin-left:10px"></span>
+          </div>
+        </div>
+
         {# ── Submit ────────────────────────────────────────────────────── #}
         <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
           <button type="submit" class="btn btn-primary">Save Changes</button>
@@ -326,14 +485,202 @@
   </div>
 
 </div>
+
+{# ── Avatar crop modal ──────────────────────────────────────────────────────── #}
+<div id="cropOverlay" class="crop-overlay">
+  <div class="crop-box">
+    <h3>Crop Profile Photo</h3>
+    <div class="crop-img-wrap">
+      <img id="cropImg" src="" alt="crop preview">
+    </div>
+    <div class="crop-feedback" id="cropFeedback"></div>
+    <div class="crop-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeCropModal()" type="button">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveCrop()" id="cropSaveBtn" type="button">Save Photo</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"
+        integrity="sha512-JyCZjCOZoyeQZSd5+YEAcFgz2owMmqfu9rCUjR6G/Wb8wMfAlxXNSWkGG4YrL7Ln08K0qO3VUV/3cAN4OzAtQ=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 function setAllDomains(checked) {
   document.querySelectorAll('input[name="quiz_domains"]').forEach(cb => {
     cb.checked = checked;
   });
 }
+
+// ── Theme palette picker ────────────────────────────────────────────────────
+(function() {
+  const THEMES = [
+    { id: "midnight",  label: "Midnight",  bg: "#0b0b18", accent: "#00ffcc", text: "#c8d0e0" },
+    { id: "obsidian",  label: "Obsidian",  bg: "#08050f", accent: "#b08cff", text: "#c2b8dc" },
+    { id: "void",      label: "Void",      bg: "#030508", accent: "#00c8ff", text: "#b0c8e0" },
+    { id: "ember",     label: "Ember",     bg: "#0c0600", accent: "#ff8c1a", text: "#d4c0a0" },
+    { id: "pine",      label: "Pine",      bg: "#020c06", accent: "#00e870", text: "#a8d0b0" },
+    { id: "steel",     label: "Steel",     bg: "#04080f", accent: "#4da6ff", text: "#b0c4e0" },
+    { id: "arctic",    label: "Arctic",    bg: "#eef3f8", accent: "#0064cc", text: "#1a2840" },
+    { id: "parchment", label: "Parchment", bg: "#f4ede0", accent: "#c05000", text: "#2a1f10" },
+    // Phase 22
+    { id: "terminal",  label: "Terminal",  bg: "#000000", accent: "#00ff41", text: "#00ff41" },
+    { id: "synthwave", label: "Synthwave", bg: "#0a0014", accent: "#ff00ff", text: "#f0e0ff" },
+    { id: "crimson",   label: "Crimson",   bg: "#0a0000", accent: "#ff2244", text: "#f2d8dc" },
+    { id: "ocean",     label: "Ocean",     bg: "#010810", accent: "#00e5ff", text: "#c0dff5" },
+    { id: "amber",     label: "Amber",     bg: "#0a0600", accent: "#ffb300", text: "#ffcc66" },
+    { id: "noir",      label: "Noir",      bg: "#000000", accent: "#ffffff", text: "#e8e8e8" },
+  ];
+
+  const current = document.documentElement.dataset.theme || "midnight";
+  const grid    = document.getElementById("themeGrid");
+  if (!grid) return;
+
+  THEMES.forEach(t => {
+    const div = document.createElement("div");
+    div.className = "theme-swatch" + (t.id === current ? " active" : "");
+    div.dataset.themeId = t.id;
+    div.innerHTML = `
+      <div class="sw-preview" style="background:${t.bg}">
+        <div class="sw-dot" style="background:${t.accent}"></div>
+        <div class="sw-bar" style="background:${t.text}"></div>
+      </div>
+      <div class="sw-label" style="background:${t.bg};color:${t.text}">${t.label}</div>
+      <div class="sw-check" style="color:${t.accent}">✓</div>
+    `;
+    div.addEventListener("click", () => applyTheme(t.id));
+    grid.appendChild(div);
+  });
+
+  function applyTheme(id) {
+    // Immediate visual change
+    document.documentElement.setAttribute("data-theme", id);
+    // Update active swatch
+    grid.querySelectorAll(".theme-swatch").forEach(el => {
+      el.classList.toggle("active", el.dataset.themeId === id);
+    });
+    // Persist via cookie API
+    fetch("/api/profile/theme", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: id }),
+    }).catch(() => {});
+  }
+})();
+
+// ── Avatar upload + crop ──────────────────────────────────────────────────────
+(function() {
+  let _cropper = null;
+
+  const fileInput = document.getElementById('avatarFileInput');
+  if (!fileInput) return;
+
+  fileInput.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    // Client-side size check (5 MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File too large. Maximum 5 MB.');
+      fileInput.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      const img = document.getElementById('cropImg');
+      img.src = ev.target.result;
+      document.getElementById('cropFeedback').textContent = '';
+      document.getElementById('cropOverlay').classList.add('open');
+      // Init cropper after a tick so image dimensions are available
+      setTimeout(() => {
+        if (_cropper) { _cropper.destroy(); _cropper = null; }
+        _cropper = new Cropper(img, {
+          aspectRatio: 1,
+          viewMode: 1,
+          dragMode: 'move',
+          autoCropArea: 0.85,
+          responsive: true,
+        });
+      }, 80);
+    };
+    reader.readAsDataURL(file);
+  });
+
+  window.closeCropModal = function() {
+    if (_cropper) { _cropper.destroy(); _cropper = null; }
+    document.getElementById('cropOverlay').classList.remove('open');
+    fileInput.value = '';
+  };
+
+  window.saveCrop = function() {
+    if (!_cropper) return;
+    const fb = document.getElementById('cropFeedback');
+    const btn = document.getElementById('cropSaveBtn');
+    btn.disabled = true;
+    fb.textContent = 'Uploading…';
+
+    _cropper.getCroppedCanvas({ width: 256, height: 256 }).toBlob(function(blob) {
+      const fd = new FormData();
+      fd.append('file', blob, 'avatar.jpg');
+      fetch('/profile/avatar', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(j => {
+          if (j.ok) {
+            // Replace avatar display
+            let img = document.getElementById('avatarImg');
+            const initials = document.getElementById('avatarInitials');
+            if (!img) {
+              // First time — replace initials circle with <img>
+              img = document.createElement('img');
+              img.id = 'avatarImg';
+              img.className = 'avatar-img';
+              img.alt = '';
+              if (initials) initials.replaceWith(img);
+              else document.querySelector('.avatar-wrap').prepend(img);
+            }
+            img.src = j.url;
+            closeCropModal();
+          } else {
+            fb.textContent = j.detail || 'Upload failed.';
+            btn.disabled = false;
+          }
+        })
+        .catch(() => { fb.textContent = 'Network error.'; btn.disabled = false; });
+    }, 'image/jpeg', 0.92);
+  };
+})();
+
+// ── Display Preferences ───────────────────────────────────────────────────────
+(function() {
+  const btn = document.getElementById('save-prefs-btn');
+  if (!btn) return;
+  const fb = document.getElementById('prefs-feedback');
+
+  btn.addEventListener('click', async function() {
+    btn.disabled = true;
+    if (fb) fb.textContent = 'Saving…';
+    const fd = new FormData();
+    const fontEl = document.getElementById('pref-font-size');
+    const densEl = document.getElementById('pref-density');
+    const rowsEl = document.getElementById('pref-rows');
+    if (fontEl) fd.append('font_size',     fontEl.value);
+    if (densEl) fd.append('density',       densEl.value);
+    if (rowsEl) fd.append('rows_per_page', rowsEl.value);
+    try {
+      const r = await fetch('/api/preferences', { method: 'PATCH', body: fd });
+      const j = await r.json();
+      if (r.ok) {
+        if (fb) fb.textContent = '✓ Saved';
+        if (j.font_size) document.body.style.setProperty('--ui-font-size', j.font_size);
+      } else {
+        if (fb) fb.textContent = j.detail || 'Error saving';
+      }
+    } catch(e) {
+      if (fb) fb.textContent = 'Network error';
+    }
+    btn.disabled = false;
+    setTimeout(() => { if (fb) fb.textContent = ''; }, 3000);
+  });
+})();
 </script>
 {% endblock %}

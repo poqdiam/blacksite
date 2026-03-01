@@ -76,27 +76,52 @@
 
   .required-star { color: var(--red); margin-left: 2px; }
 
-  .field-help {
-    font-size: 0.78em;
-    color: var(--muted);
+  .field-help { display: none; }  /* hidden — content moved to hover tooltip */
+  .section-intro { display: none; }  /* condensed — content in tooltips */
+
+  /* ── Hover tooltip for form field labels ─── */
+  .tip-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px; height: 15px;
+    border-radius: 50%;
+    background: rgba(0,255,204,0.10);
+    border: 1px solid rgba(0,255,204,0.3);
+    color: var(--cyan);
+    font-size: 0.68em;
+    font-weight: 700;
+    cursor: default;
+    margin-left: 5px;
+    vertical-align: middle;
+    position: relative;
+  }
+  .tip-icon::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1a2e;
+    border: 1px solid rgba(0,255,204,0.25);
+    color: var(--text);
+    font-size: 0.9em;
+    font-weight: 400;
     line-height: 1.5;
-    margin-top: 5px;
-    margin-bottom: 0;
-    padding: 6px 10px;
-    background: rgba(0,255,204,0.03);
-    border-left: 2px solid rgba(0,255,204,0.18);
-    border-radius: 0 3px 3px 0;
-  }
-  .section-intro {
-    font-size: 0.82em;
-    color: var(--muted);
-    line-height: 1.6;
-    margin-bottom: 18px;
-    padding: 10px 14px;
-    background: var(--surface);
-    border: 1px solid var(--border);
+    padding: 8px 12px;
     border-radius: 5px;
+    white-space: pre-wrap;
+    width: max-content;
+    max-width: 340px;
+    min-width: 180px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 999;
+    text-align: left;
   }
+  .tip-icon:hover::after { opacity: 1; }
 
   .form-actions {
     display: flex;
@@ -149,7 +174,8 @@
       </p>
 
       <div class="form-group">
-        <label for="name">System Name <span class="required-star">*</span></label>
+        <label for="name">System Name <span class="required-star">*</span>
+          <span class="tip-icon" data-tip="The full, official name of this system. Be specific — &#39;Payroll Processing System&#39; is better than &#39;Payroll.&#39;">?</span></label>
         <input type="text" id="name" name="name" required
                placeholder="e.g. Agency Financial Management System"
                value="{{ system.name or '' if system else '' }}"/>
@@ -158,10 +184,13 @@
 
       <div class="form-row">
         <div class="form-group">
-          <label for="abbreviation">Abbreviation</label>
-          <input type="text" id="abbreviation" name="abbreviation"
+          <label for="abbreviation">Abbreviation <span class="required-star">*</span>
+            <span class="tip-icon" data-tip="Exactly 4 uppercase letters. Becomes the prefix of this system&#39;s Inventory Number (e.g. AFMS-0200). Must be unique — if two systems share an abbreviation, the newer one gets its last letter changed to &#39;1&#39;.">?</span></label>
+          <input type="text" id="abbreviation" name="abbreviation" required
+                 maxlength="4" minlength="4" pattern="[A-Za-z]{4}"
                  placeholder="e.g. AFMS"
-                 value="{{ system.abbreviation or '' if system else '' }}"/>
+                 value="{{ system.abbreviation or '' if system else '' }}"
+                 oninput="this.value=this.value.toUpperCase().replace(/[^A-Z]/g,'').slice(0,4)"/>
           <p class="field-help">A short acronym or code name used internally (optional). For example, "AFMS" for Agency Financial Management System.</p>
         </div>
         <div class="form-group" style="margin-bottom:0">
@@ -171,7 +200,8 @@
 
       <div class="form-row" style="margin-top:0">
         <div class="form-group" style="margin-bottom:0">
-          <label for="system_type">System Type</label>
+          <label for="system_type">System Type
+            <span class="tip-icon" data-tip="Major Application — standalone app for important agency business (e.g. grants portal).&#10;General Support System — shared infrastructure other systems depend on (e.g. data center, cloud platform).&#10;Minor Application — smaller app running on top of a General Support System.">?</span></label>
           <select id="system_type" name="system_type">
             <option value="">— Select type —</option>
             <option value="major_application"
@@ -195,7 +225,8 @@
         </div>
 
         <div class="form-group" style="margin-bottom:0">
-          <label for="environment">Environment</label>
+          <label for="environment">Environment
+            <span class="tip-icon" data-tip="Where does the system live?&#10;On-Premises — your agency's own servers or data center.&#10;Cloud / SaaS / PaaS / IaaS — hosted by a third-party provider (e.g. AWS, Azure, Salesforce).&#10;Hybrid — partly on-premises and partly in the cloud.">?</span></label>
           <select id="environment" name="environment">
             <option value="">— Select environment —</option>
             <option value="on_prem"
@@ -245,7 +276,8 @@
 
       <div class="form-row">
         <div class="form-group">
-          <label for="owner_name">System Owner Name</label>
+          <label for="owner_name">System Owner Name
+            <span class="tip-icon" data-tip="Full name of the person accountable for this system. This person signs off on security decisions and is the primary point of contact for compliance matters.">?</span></label>
           <input type="text" id="owner_name" name="owner_name"
                  placeholder="e.g. Jane Smith"
                  value="{{ system.owner_name or '' if system else '' }}"/>
@@ -253,7 +285,8 @@
         </div>
 
         <div class="form-group" style="margin-bottom:0">
-          <label for="owner_email">System Owner Email</label>
+          <label for="owner_email">System Owner Email
+            <span class="tip-icon" data-tip="Official work email address for the System Owner. Used for compliance notifications and audit correspondence.">?</span></label>
           <input type="email" id="owner_email" name="owner_email"
                  placeholder="owner@agency.gov"
                  value="{{ system.owner_email or '' if system else '' }}"/>
@@ -275,7 +308,8 @@
 
       <div class="form-row-3">
         <div class="form-group">
-          <label for="confidentiality_impact">Confidentiality</label>
+          <label for="confidentiality_impact">Confidentiality
+            <span class="tip-icon" data-tip="How damaging would unauthorized disclosure of this system's data be?&#10;Low — limited harm (e.g. public information).&#10;Moderate — serious harm (e.g. employee PII, internal records).&#10;High — severe or catastrophic harm (e.g. classified data, health records, financial data).">?</span></label>
           <select id="confidentiality_impact" name="confidentiality_impact" onchange="compute_overall()">
             <option value="">— Select —</option>
             <option value="low"
@@ -299,7 +333,8 @@
         </div>
 
         <div class="form-group">
-          <label for="integrity_impact">Integrity</label>
+          <label for="integrity_impact">Integrity
+            <span class="tip-icon" data-tip="How damaging would unauthorized modification or corruption of this system's data be?&#10;Low — minor harm (e.g. internal notes, non-critical data).&#10;Moderate — significant harm (e.g. employee records, work orders).&#10;High — catastrophic harm (e.g. financial ledgers, safety-critical systems).">?</span></label>
           <select id="integrity_impact" name="integrity_impact" onchange="compute_overall()">
             <option value="">— Select —</option>
             <option value="low"
@@ -323,7 +358,8 @@
         </div>
 
         <div class="form-group">
-          <label for="availability_impact">Availability</label>
+          <label for="availability_impact">Availability
+            <span class="tip-icon" data-tip="How damaging would system downtime or unavailability be?&#10;Low — acceptable downtime (e.g. internal reporting tool used during business hours).&#10;Moderate — significant disruption (e.g. email, HR portal, internal services).&#10;High — any outage is unacceptable (e.g. 911 dispatch, emergency response, payment processing).">?</span></label>
           <select id="availability_impact" name="availability_impact" onchange="compute_overall()">
             <option value="">— Select —</option>
             <option value="low"
@@ -355,6 +391,78 @@
     </div>
 
     {# ════════════════════════════════════════════════════════════════════════
+       SECTION 3b — Data Sensitivity & Special Categories
+    ════════════════════════════════════════════════════════════════════════ #}
+    <div class="form-section" id="data-sensitivity-section">
+      <div class="section-header">Data Sensitivity &amp; Special Categories</div>
+      <p style="font-size:0.85em;color:var(--muted);margin-bottom:16px">
+        Check all data types this system processes. These flags determine the minimum recommended FIPS 199 impact level
+        and may trigger additional regulatory requirements.
+      </p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 32px;margin-bottom:16px">
+        {# Each checkbox with framework badge + tooltip #}
+        {% set checks = [
+          ('has_pii',          'Personally Identifiable Information (PII)',  'NIST Privacy',  'Names, SSNs, addresses, birthdates, or any info that can identify an individual. Minimum recommended: Moderate Confidentiality.'),
+          ('has_phi',          'Protected Health Information (PHI)',          'HIPAA',         'Medical records, diagnoses, treatment history, or any health-related data. Minimum: High Confidentiality.'),
+          ('has_ephi',         'Electronic PHI (ePHI)',                       'HIPAA/HITECH',  'PHI stored or transmitted electronically. HIPAA Security Rule applies. Minimum: High Confidentiality.'),
+          ('has_financial_data','Financial / Payment Data',                   'PCI DSS',       'Credit card numbers, bank accounts, financial transactions, or budget data. Minimum: High Confidentiality.'),
+          ('is_public_facing', 'Public-Facing System',                       'NIST',          'Accessible from the internet by the general public. Raises Integrity and Availability baselines.'),
+          ('has_cui',          'Controlled Unclassified Information (CUI)',   'CMMC',          'Federal CUI as defined by NARA. May require CMMC compliance. Minimum: Moderate across C/I/A.'),
+          ('connects_to_federal','Connects to Federal Network / System',      'FedRAMP',       'Has data flows to or from a federal agency network or system. May require FedRAMP authorization boundary review.'),
+        ] %}
+        {% for field, label, badge, tip in checks %}
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:10px;
+                    background:var(--surface);border:1px solid var(--border);border-radius:6px">
+          <input type="checkbox" id="{{ field }}" name="{{ field }}" value="1"
+                 {% if system and system[field] %}checked{% endif %}
+                 onchange="dsUpdate()"
+                 style="margin-top:3px;accent-color:var(--cyan);width:15px;height:15px;flex-shrink:0">
+          <div style="flex:1;min-width:0">
+            <label for="{{ field }}" style="font-size:0.84em;font-weight:600;color:var(--text);cursor:pointer;display:block;margin-bottom:3px">
+              {{ label }}
+              <span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:0.72em;
+                           font-weight:700;letter-spacing:0.5px;text-transform:uppercase;
+                           background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2);
+                           margin-left:4px">{{ badge }}</span>
+            </label>
+            <div style="font-size:0.75em;color:var(--muted);line-height:1.5">{{ tip }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      {# FIPS recommendation output #}
+      <div id="ds-recommendation" style="display:none;padding:12px 16px;border-radius:6px;
+           border:1px solid rgba(255,179,0,0.3);background:rgba(255,179,0,0.06);margin-bottom:12px">
+        <div style="font-size:0.75em;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+                    color:var(--yellow);margin-bottom:6px">⚠ FIPS 199 Minimum Recommendation</div>
+        <div id="ds-rec-text" style="font-size:0.85em;color:var(--text);line-height:1.6"></div>
+      </div>
+
+      {# Override justification — shown when below minimum #}
+      <div id="ds-override-section" style="display:none">
+        <label style="font-size:0.78em;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+                      color:var(--yellow);display:block;margin-bottom:6px">
+          Override Justification <span style="color:var(--red)">*</span>
+          <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">
+            — Required when CIA levels are below the recommended minimum
+          </span>
+        </label>
+        <textarea id="categorization_note" name="categorization_note" rows="3"
+                  style="width:100%;background:var(--surface);border:1px solid rgba(255,179,0,0.4);
+                         border-radius:4px;padding:8px 10px;color:var(--text);font-size:0.84em;
+                         font-family:var(--sans);resize:vertical;box-sizing:border-box"
+                  placeholder="Explain why the current CIA categorization is appropriate despite the data sensitivity flags…">{{ system.categorization_note or '' if system else '' }}</textarea>
+        <input type="hidden" name="categorization_status" id="cat_status_field" value="{{ system.categorization_status or 'draft' if system else 'draft' }}">
+      </div>
+      <div id="ds-override-hidden">
+        <input type="hidden" name="categorization_status" value="{{ system.categorization_status or 'draft' if system else 'draft' }}">
+        <input type="hidden" name="categorization_note" value="{{ system.categorization_note or '' if system else '' }}">
+      </div>
+    </div>
+
+    {# ════════════════════════════════════════════════════════════════════════
        SECTION 4 — Description
     ════════════════════════════════════════════════════════════════════════ #}
     <div class="form-section">
@@ -365,7 +473,8 @@
       </p>
 
       <div class="form-group">
-        <label for="purpose">System Purpose</label>
+        <label for="purpose">System Purpose
+          <span class="tip-icon" data-tip="Why does this system exist? What business problem does it solve? Write in plain language. Example: 'Processes payroll for 4,500 agency employees, calculating wages and issuing direct deposits bi-weekly.'">?</span></label>
         <textarea id="purpose" name="purpose" rows="3"
                   placeholder="Describe the primary mission or business purpose of this system…">{{ system.purpose or '' if system else '' }}</textarea>
         <p class="field-help">
@@ -375,7 +484,8 @@
       </div>
 
       <div class="form-group">
-        <label for="boundary">System Boundary</label>
+        <label for="boundary">System Boundary
+          <span class="tip-icon" data-tip="What components are within this system's security boundary? List servers, databases, applications, and user groups in scope. Explicitly note what is excluded. Example: 'Includes the web app server, Oracle DB, and HR staff. Excludes cloud infrastructure managed by the provider.'">?</span></label>
         <textarea id="boundary" name="boundary" rows="3"
                   placeholder="Describe the authorization boundary — what components, data, and users are in scope…">{{ system.boundary or '' if system else '' }}</textarea>
         <p class="field-help">
@@ -385,7 +495,8 @@
       </div>
 
       <div class="form-group" style="margin-bottom:0">
-        <label for="description">Additional Description</label>
+        <label for="description">Additional Description
+          <span class="tip-icon" data-tip="Any other relevant details: integrations with other systems, special handling requirements, known limitations, data types processed, or compliance notes not covered above.">?</span></label>
         <textarea id="description" name="description" rows="4"
                   placeholder="Any additional technical or operational context…">{{ system.description or '' if system else '' }}</textarea>
         <p class="field-help">
@@ -395,8 +506,9 @@
     </div>
 
     {# ════════════════════════════════════════════════════════════════════════
-       SECTION 5 — Authorization
+       SECTION 5 — Authorization  (AO / Admin only)
     ════════════════════════════════════════════════════════════════════════ #}
+    {% if user_role in ('ao', 'admin') %}
     <div class="form-section">
       <div class="section-header">Authorization</div>
       <p class="section-intro">
@@ -407,7 +519,8 @@
       </p>
 
       <div class="form-group">
-        <label for="auth_status">Authorization Status</label>
+        <label for="auth_status">Authorization Status
+          <span class="tip-icon" data-tip="The system's current ATO (Authorization to Operate) status.&#10;Not Authorized — hasn't started the formal authorization process.&#10;In Progress — security package is being prepared or is under AO review.&#10;Authorized — valid, active ATO signed by an Authorizing Official.&#10;Expired — ATO has lapsed; system needs re-authorization.">?</span></label>
         <select id="auth_status" name="auth_status">
           <option value="">— Select status —</option>
           <option value="not_authorized"
@@ -437,20 +550,30 @@
 
       <div class="form-row">
         <div class="form-group">
-          <label for="auth_date">Authorization Date</label>
+          <label for="auth_date">Authorization Date
+            <span class="tip-icon" data-tip="The date the Authorizing Official signed the ATO decision letter. Leave blank if the system is not yet authorized.">?</span></label>
           <input type="date" id="auth_date" name="auth_date"
                  value="{{ system.auth_date.strftime('%Y-%m-%d') if system and system.auth_date else '' }}"/>
           <p class="field-help">The date the Authorizing Official signed the ATO decision letter. Leave blank if not yet authorized.</p>
         </div>
 
         <div class="form-group" style="margin-bottom:0">
-          <label for="auth_expiry">Authorization Expiry</label>
+          <label for="auth_expiry">Authorization Expiry
+            <span class="tip-icon" data-tip="When the current ATO expires. Typically 3 years from the authorization date. BLACKSITE will alert you as expiry approaches so you can begin re-authorization in time.">?</span></label>
           <input type="date" id="auth_expiry" name="auth_expiry"
                  value="{{ system.auth_expiry.strftime('%Y-%m-%d') if system and system.auth_expiry else '' }}"/>
           <p class="field-help">When the current ATO expires. Typically 3 years from the authorization date. BLACKSITE will alert you when expiry is approaching.</p>
         </div>
       </div>
     </div>
+    {% else %}
+    <div class="form-section" style="background:rgba(255,179,0,0.04);border:1px solid rgba(255,179,0,0.2);border-radius:6px;padding:14px 18px;">
+      <div style="font-size:0.78em;color:var(--yellow);display:flex;align-items:center;gap:8px">
+        <span style="font-size:1.2em">⚠</span>
+        Authorization fields are restricted to Authorizing Officials (AO). Contact your AO to change authorization status, dates, or expiry.
+      </div>
+    </div>
+    {% endif %}
 
     {# ── Submit / Cancel ────────────────────────────────────────────────── #}
     <div class="form-actions">
@@ -496,6 +619,99 @@
 
   // Compute on page load (handles pre-filled edit form)
   compute_overall();
+})();
+</script>
+
+<script>
+// ── Data Sensitivity FIPS 199 recommendation logic ────────────────────────
+(function() {
+  // Map of checkbox id → {minC, minI, minA} where 1=Low, 2=Moderate, 3=High
+  var DS_RULES = {
+    has_pii:           { minC: 2, minI: 2, minA: 1 },  // Moderate C/I
+    has_phi:           { minC: 3, minI: 2, minA: 2 },  // High C
+    has_ephi:          { minC: 3, minI: 3, minA: 2 },  // High C/I
+    has_financial_data:{ minC: 3, minI: 3, minA: 2 },  // High C/I
+    is_public_facing:  { minC: 1, minI: 2, minA: 2 },  // Moderate I/A
+    has_cui:           { minC: 2, minI: 2, minA: 2 },  // Moderate
+    connects_to_federal:{ minC: 2, minI: 2, minA: 2 }, // Moderate
+  };
+  var RANK  = { 'low': 1, 'moderate': 2, 'high': 3, '': 0 };
+  var LABEL = { 0: '—', 1: 'Low', 2: 'Moderate', 3: 'High' };
+
+  window.dsUpdate = function() {
+    var minC = 0, minI = 0, minA = 0;
+    var reasons = [];
+
+    Object.keys(DS_RULES).forEach(function(id) {
+      var cb = document.getElementById(id);
+      if (!cb || !cb.checked) return;
+      var r = DS_RULES[id];
+      if (r.minC > minC) minC = r.minC;
+      if (r.minI > minI) minI = r.minI;
+      if (r.minA > minA) minA = r.minA;
+      reasons.push(id.replace(/^has_|^is_|^connects_to_/, '').replace(/_/g, ' '));
+    });
+
+    var recDiv  = document.getElementById('ds-recommendation');
+    var recText = document.getElementById('ds-rec-text');
+    var overSec = document.getElementById('ds-override-section');
+    var overHid = document.getElementById('ds-override-hidden');
+
+    if (minC === 0 && minI === 0 && minA === 0) {
+      if (recDiv) recDiv.style.display = 'none';
+      if (overSec) overSec.style.display = 'none';
+      if (overHid) overHid.style.display = '';
+      return;
+    }
+
+    // Build recommendation text
+    if (recText) {
+      recText.innerHTML =
+        'Based on selected data types, minimum recommended levels: ' +
+        '<strong>Confidentiality: ' + LABEL[minC] + '</strong> · ' +
+        '<strong>Integrity: '       + LABEL[minI] + '</strong> · ' +
+        '<strong>Availability: '    + LABEL[minA] + '</strong>.';
+    }
+    if (recDiv) recDiv.style.display = '';
+
+    // Check if current CIA meets minimum
+    var curC = RANK[document.getElementById('confidentiality_impact').value] || 0;
+    var curI = RANK[document.getElementById('integrity_impact').value] || 0;
+    var curA = RANK[document.getElementById('availability_impact').value] || 0;
+    var belowMin = (curC < minC) || (curI < minI) || (curA < minA);
+
+    if (overSec) overSec.style.display = belowMin ? '' : 'none';
+    if (overHid) overHid.style.display = belowMin ? 'none' : '';
+
+    // Set categorization_status
+    var catField = document.getElementById('cat_status_field');
+    if (catField) catField.value = belowMin ? 'pending_review' : 'draft';
+  };
+
+  // Hook CIA selects to re-evaluate on change
+  ['confidentiality_impact', 'integrity_impact', 'availability_impact'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('change', window.dsUpdate);
+  });
+
+  // Block form submit if below minimum and no justification
+  var form = document.querySelector('form[method="POST"]');
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      var overSec = document.getElementById('ds-override-section');
+      if (!overSec || overSec.style.display === 'none') return;
+      var note = document.getElementById('categorization_note');
+      if (!note || note.value.trim().length < 10) {
+        e.preventDefault();
+        note.style.border = '1px solid var(--red)';
+        note.focus();
+        alert('An override justification (at least 10 characters) is required when CIA levels are below the recommended minimum.');
+      }
+    });
+  }
+
+  // Run on load for edit form
+  window.dsUpdate();
 })();
 </script>
 {% endblock %}

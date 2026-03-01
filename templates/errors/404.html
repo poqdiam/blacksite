@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — 404 Asset Not Found{% endblock %}
+
+{% block content %}
+<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+            min-height:60vh;text-align:center;padding:40px 20px">
+
+  <div style="font-family:var(--mono);font-size:5em;font-weight:900;color:var(--cyan);
+              line-height:1;margin-bottom:16px;letter-spacing:-2px">404</div>
+
+  <div style="font-size:0.72em;letter-spacing:3px;text-transform:uppercase;
+              color:var(--cyan);margin-bottom:24px;font-family:var(--mono)">
+    ASSET NOT FOUND IN INVENTORY
+  </div>
+
+  <div style="max-width:480px;margin-bottom:32px">
+    <p style="color:var(--text);font-size:0.95em;margin-bottom:12px">
+      The requested resource could not be located in the system inventory.
+    </p>
+    <p style="color:var(--muted);font-size:0.82em">
+      This page has been redacted or was never provisioned.<br>
+      Reference: NIST SP 800-53 — AU-9 (Protection of Audit Information)
+    </p>
+  </div>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+    <a href="/" class="btn btn-ghost">← Return to Dashboard</a>
+    <a href="/systems" class="btn btn-ghost">Browse Systems</a>
+  </div>
+
+  <div style="margin-top:48px;font-family:var(--mono);font-size:0.7em;color:#333;
+              border:1px solid #222;border-radius:4px;padding:12px 20px;max-width:420px;text-align:left">
+    <div style="color:#555;margin-bottom:6px"># INVENTORY LOOKUP</div>
+    <div>QUERY: {{ request.url.path }}</div>
+    <div>STATUS: NOT_FOUND</div>
+    <div>TIMESTAMP: {{ now.strftime('%Y-%m-%dT%H:%M:%SZ') if now is defined else 'N/A' }}</div>
+    <div style="color:var(--cyan);margin-top:4px">RESULT: REDACTED / NOT PROVISIONED</div>
+  </div>
+</div>
+{% endblock %}

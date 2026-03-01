@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% from 'macros.html' import paginate %}
+{% block title %}{{ app_name }} — SIEM{% endblock %}
+
+{% block head %}
+<style>
+  .sev-info     { background: rgba(136,136,136,0.1); color: var(--muted); }
+  .sev-low      { background: rgba(0,200,83,0.1);    color: var(--green); }
+  .sev-medium   { background: rgba(255,179,0,0.1);   color: var(--yellow); }
+  .sev-high     { background: rgba(255,107,0,0.12);  color: #ff8c42; }
+  .sev-critical { background: rgba(244,67,54,0.12);  color: var(--red); }
+
+  .etype-failed_auth  { background: rgba(244,67,54,0.1);  color: var(--red); }
+  .etype-access_denied { background: rgba(255,107,0,0.1); color: #ff8c42; }
+  .etype-server_error { background: rgba(244,67,54,0.15); color: var(--red); }
+  .etype-http         { background: rgba(136,136,136,0.1);color: var(--muted); }
+
+  .siem-row-critical td { background: rgba(244,67,54,0.04); }
+  .siem-row-high     td { background: rgba(255,107,0,0.04); }
+  .siem-row-medium   td { background: rgba(255,179,0,0.03); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/admin">Admin</a>
+  <span class="sep">›</span>
+  <span>SIEM</span>
+</div>
+
+<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+  <div>
+    <h1 style="margin:0">Security Event Log</h1>
+    <p class="text-muted" style="margin-top:4px;font-size:0.85em">
+      HTTP anomalies, auth failures, and access denials
+    </p>
+  </div>
+  <a href="/admin" class="btn btn-ghost btn-sm">← Admin</a>
+</div>
+
+{# ── Stats row ─────────────────────────────────────────────────────────────── #}
+<div class="stats" style="margin-bottom:28px">
+  <div class="stat">
+    <div class="stat-value">{{ total_24h }}</div>
+    <div class="stat-label">Events (24h)</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--red)">{{ failed_24h }}</div>
+    <div class="stat-label">Failed Auth (24h)</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:#ff8c42">{{ high_crit_24h }}</div>
+    <div class="stat-label">High / Critical (24h)</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--cyan)">{{ unique_ips_24h }}</div>
+    <div class="stat-label">Unique IPs (24h)</div>
+  </div>
+</div>
+
+{# ── Filter bar ────────────────────────────────────────────────────────────── #}
+<form method="get" action="/admin/siem"
+      style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:20px">
+  <select name="severity" onchange="this.form.submit()"
+          style="background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 8px;font-size:0.8em">
+    <option value="">All Severities</option>
+    {% for sev in ['info','low','medium','high','critical'] %}
+    <option value="{{ sev }}" {% if filter_severity == sev %}selected{% endif %}>{{ sev | title }}</option>
+    {% endfor %}
+  </select>
+  <select name="event_type" onchange="this.form.submit()"
+          style="background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 8px;font-size:0.8em">
+    <option value="">All Event Types</option>
+    {% for et in ['http','failed_auth','access_denied','server_error','anomaly'] %}
+    <option value="{{ et }}" {% if filter_event_type == et %}selected{% endif %}>{{ et | replace('_',' ') | title }}</option>
+    {% endfor %}
+  </select>
+  <input type="hidden" name="per_page" value="{{ per_page }}">
+  {% if filter_severity or filter_event_type %}
+  <a href="/admin/siem" style="font-size:0.78em;color:var(--muted)">Clear</a>
+  {% endif %}
+</form>
+
+{# ── Events table ──────────────────────────────────────────────────────────── #}
+<div class="card" style="padding:0;overflow:hidden">
+  {% if events %}
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Type</th>
+          <th>Sev</th>
+          <th>IP</th>
+          <th>User</th>
+          <th>Method + Path</th>
+          <th style="text-align:center">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ev in events %}
+        <tr class="siem-row-{{ ev.severity }}">
+          <td style="font-family:var(--mono);font-size:0.78em;color:var(--muted);white-space:nowrap">
+            {{ ev.timestamp.strftime('%m-%d %H:%M:%S') if ev.timestamp else '—' }}
+          </td>
+          <td>
+            <span class="badge etype-{{ ev.event_type }}" style="font-size:0.65em">
+              {{ ev.event_type or 'http' }}
+            </span>
+          </td>
+          <td>
+            <span class="badge sev-{{ ev.severity }}" style="font-size:0.65em">
+              {{ ev.severity or 'info' }}
+            </span>
+          </td>
+          <td style="font-family:var(--mono);font-size:0.78em;color:var(--muted)">
+            {{ ev.remote_ip or '—' }}
+          </td>
+          <td style="font-size:0.82em">
+            {{ ev.remote_user or '<anon>' }}
+          </td>
+          <td style="font-size:0.8em;font-family:var(--mono)">
+            <span style="color:var(--muted)">{{ ev.method }}</span>
+            <span style="color:var(--text);margin-left:6px">{{ ev.path }}</span>
+          </td>
+          <td style="text-align:center">
+            <span style="font-family:var(--mono);font-size:0.8em;
+              {% if ev.status_code and ev.status_code >= 500 %}color:var(--red)
+              {% elif ev.status_code and ev.status_code >= 400 %}color:var(--yellow)
+              {% else %}color:var(--muted){% endif %}">
+              {{ ev.status_code or '—' }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="padding:64px;text-align:center;color:var(--muted)">
+    <div style="font-size:2em;font-family:var(--mono);color:#1e1e30;margin-bottom:12px">[ SIEM ]</div>
+    No security events recorded yet.
+  </div>
+  {% endif %}
+</div>
+
+{% if events %}
+{% set siem_params = "severity=" ~ filter_severity ~ "&event_type=" ~ filter_event_type %}
+{{ paginate(page, total_pages, per_page, "/admin/siem", siem_params) }}
+{% endif %}
+{% endblock %}

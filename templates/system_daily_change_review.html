@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Change Review: {{ system.name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:20px">
+  <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">
+    <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a> /
+    <a href="/systems/{{ system.id }}/daily" style="color:var(--muted)">Daily Ops</a> / Change Review
+  </div>
+  <h1 style="font-size:1.3em;margin:0">Change Control Review — {{ today }}</h1>
+</div>
+
+{% if existing %}
+<div style="padding:10px 14px;background:rgba(0,188,212,0.1);border:1px solid rgba(0,188,212,0.3);border-radius:6px;margin-bottom:16px;font-size:0.85em">
+  Record already submitted for today. Shown below for reference.
+</div>
+<div class="card" style="padding:20px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div><span style="color:var(--muted);font-size:0.75em">Ticket Refs</span><br>{{ existing.ticket_refs or '—' }}</div>
+    <div><span style="color:var(--muted);font-size:0.75em">High-Risk Count</span><br>{{ existing.high_risk_count }}</div>
+    <div><span style="color:var(--muted);font-size:0.75em">All Approved</span><br>{{ '✅ Yes' if existing.all_approved else '❌ No' }}</div>
+    <div><span style="color:var(--muted);font-size:0.75em">Backout Plans Exist</span><br>{{ '✅ Yes' if existing.backout_exists else '❌ No' }}</div>
+    <div><span style="color:var(--muted);font-size:0.75em">Untracked Changes Found</span><br>{{ '⚠️ Yes' if existing.untracked_found else '✅ No' }}</div>
+    <div><span style="color:var(--muted);font-size:0.75em">Notes</span><br>{{ existing.notes or '—' }}</div>
+  </div>
+</div>
+<a href="/systems/{{ system.id }}/daily" class="btn btn-ghost btn-sm" style="margin-top:12px">← Back to Daily Hub</a>
+{% else %}
+<div class="card" style="padding:20px">
+  <form method="post" action="/systems/{{ system.id }}/daily/change-review">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div>
+        <label style="display:block;font-size:0.75em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">
+          Ticket / Change IDs
+        </label>
+        <input type="text" name="ticket_refs" placeholder="CHG-001, CHG-002..."
+               style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px;color:var(--text);font-size:0.88em">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.75em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">
+          High-Risk Change Count
+        </label>
+        <input type="number" name="high_risk_count" value="0" min="0"
+               style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px;color:var(--text);font-size:0.88em">
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" name="all_approved" checked style="width:18px;height:18px;accent-color:var(--green)">
+        <span style="font-size:0.9em">All changes reviewed and approved by change board</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" name="backout_exists" checked style="width:18px;height:18px;accent-color:var(--green)">
+        <span style="font-size:0.9em">Backout / rollback plan exists for each high-risk change</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" name="untracked_found" style="width:18px;height:18px;accent-color:var(--red)">
+        <span style="font-size:0.9em">Untracked changes found (creates observation if checked)</span>
+      </label>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:0.75em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Notes</label>
+      <textarea name="notes" rows="3" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px;color:var(--text);font-size:0.88em;resize:vertical"></textarea>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button type="submit" class="btn btn-primary">Submit Review</button>
+      <a href="/systems/{{ system.id }}/daily" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

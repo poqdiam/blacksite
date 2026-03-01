@@ -148,6 +148,16 @@
 </div>
 
 {% if systems %}
+{% if not show_all and total_systems > rmf_default_cap %}
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;
+            padding:8px 14px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);
+            border-radius:6px;font-size:0.82em;color:var(--muted)">
+  <span style="color:var(--yellow)">&#9432;</span>
+  Showing first <strong style="color:var(--text)">{{ rmf_default_cap }}</strong> of
+  <strong style="color:var(--text)">{{ total_systems }}</strong> systems.
+  <a href="/rmf?show_all=1" style="color:var(--cyan);margin-left:4px">Show all {{ total_systems }} →</a>
+</div>
+{% endif %}
 <div class="card" style="padding:0;overflow:hidden">
   <div class="rmf-grid">
     <table class="rmf-table rmf-step-cols">

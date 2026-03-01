@@ -1,0 +1,202 @@
+NAV_CLEANUP_PLAN.txt
+BLACKSITE — Navigation Consolidation Plan + Before/After Map
+Generated: 2026-03-01  (LIST4-ITEM5)
+=============================================================
+
+OBJECTIVE
+---------
+Single source of truth for each navigation entry point.
+- Left sidebar:       Primary GRC workflows (systems, controls, POAM, risks, etc.)
+- Profile dropdown:   Identity/session items + Admin Tools (admin only)
+- No duplicate links across both surfaces
+- Admin-only tools hidden in UI + enforced server-side
+
+
+BEFORE — LEFT SIDEBAR (admin view)
+-----------------------------------
+GRC Workspace
+  ├── Dashboard
+  ├── Systems
+  ├── Controls
+  ├── POAM Tracker
+  ├── Risks
+  ├── Advisories
+
+Assessment                         ← PROBLEM: admin tools in workflow sidebar
+  ├── Upload SSP  → /upload
+  └── Assessments → /admin         ← this was /admin route (admin home)
+
+Administration
+  ├── Users
+  ├── System Settings
+  ├── Audit Log
+  ├── Auto-Fail Monitor
+  ├── Data Ingestion
+  └── SIEM
+
+Advisory Ticker
+(sidebar footer)
+
+
+AFTER — LEFT SIDEBAR (admin view)
+----------------------------------
+GRC Workspace
+  ├── Dashboard
+  ├── Systems
+  ├── Controls
+  ├── POAM Tracker
+  ├── Risks
+  └── Advisories
+
+                                   ← Assessment group REMOVED
+
+Administration
+  ├── Users
+  ├── System Settings
+  ├── Audit Log
+  ├── Auto-Fail Monitor
+  ├── Data Ingestion
+  └── SIEM
+
+Advisory Ticker
+(sidebar footer)
+
+
+BEFORE — PROFILE DROPDOWN (admin view)
+---------------------------------------
+[Avatar + username]
+──────────────────
+Personal                           ← section label
+  My Profile
+  Upload SSP                       ← PROBLEM: admin tool in personal section
+  My Feeds
+──────────────────
+[Role switch section if applicable]
+──────────────────
+GRC                                ← PROBLEM: entire section duplicates sidebar
+  Systems        → /systems
+  POAM           → /poam
+  Risks          → /risks
+  Assessments    → /admin          ← same as sidebar "Assessments"
+──────────────────
+Admin                              ← section label
+  Admin Dashboard
+  User Management
+  Audit Log
+  SIEM
+  SSP Analyzer
+  Data Ingestion
+  Auto-Fail Monitor
+──────────────────
+Sign Out / Reset
+
+
+AFTER — PROFILE DROPDOWN (admin view)
+--------------------------------------
+[Avatar + username]
+──────────────────
+Identity                           ← renamed from "Personal"
+  My Profile
+  My Feeds
+  Admin Dashboard  (or My Dashboard for non-admin)
+──────────────────
+[Role switch section if applicable]
+──────────────────
+Admin Tools                        ← renamed from "Admin"; GRC section removed
+  System Management → /admin/system-settings
+  User Management
+  Audit Log
+  SIEM
+  SSP Analyzer
+  Feed Sources     → /admin/feeds  ← NEW
+  Data Ingestion
+  Auto-Fail Monitor
+──────────────────
+Sign Out / Reset
+
+
+ROLE VISIBILITY MATRIX — Left Sidebar
+--------------------------------------
+Section / Link        admin  ao  ciso  issm  isso  sca  auditor  pen_tester  employee
+─────────────────────────────────────────────────────────────────────────────────────
+Dashboard             ✓      ✓   ✓     ✓     ✓     ✓    ✓        ✓           ✓
+Systems               ✓      ✓   ✓     ✓     ✓     ✓    ✓        ✓           —
+Controls              ✓      ✓   ✓     ✓     ✓     ✓    ✓        —           —
+POAM Tracker          ✓      ✓   ✓     ✓     ✓     ✓    ✓        —           —
+Risks                 ✓      ✓   ✓     ✓     ✓     ✓    ✓        —           —
+Advisories            ✓      ✓   ✓     ✓     ✓     ✓    ✓        ✓           ✓
+Administration group  ✓      —   —     —     —     —    —        —           —
+  Users               ✓      —   —     —     —     —    —        —           —
+  System Settings     ✓      —   —     —     —     —    —        —           —
+  Audit Log           ✓      —   —     —     —     —    —        —           —
+  Auto-Fail Monitor   ✓      —   —     —     —     —    —        —           —
+  Data Ingestion      ✓      —   —     —     —     —    —        —           —
+  SIEM                ✓      —   —     —     —     —    —        —           —
+
+
+ROLE VISIBILITY MATRIX — Profile Dropdown
+------------------------------------------
+Section / Link        admin  ao  ciso  issm  isso  sca  auditor  pen_tester  employee
+─────────────────────────────────────────────────────────────────────────────────────
+My Profile            ✓      ✓   ✓     ✓     ✓     ✓    ✓        ✓           ✓
+My Feeds              ✓      ✓   ✓     ✓     ✓     ✓    ✓        ✓           ✓
+Admin Dashboard       ✓      —   —     —     —     —    —        —           —
+My Dashboard          —      ✓   ✓     ✓     ✓     ✓    ✓        ✓           ✓
+Role switch section   ✓      ✓   ✓     ✓     —     ✓    —        —           —
+  (AO, CISO can view down; ISSO, SCA, admin can shell)
+Admin Tools section   ✓      —   —     —     —     —    —        —           —
+  System Management   ✓      —   —     —     —     —    —        —           —
+  User Management     ✓      —   —     —     —     —    —        —           —
+  Audit Log           ✓      —   —     —     —     —    —        —           —
+  SIEM                ✓      —   —     —     —     —    —        —           —
+  SSP Analyzer        ✓      —   —     —     —     —    —        —           —
+  Feed Sources        ✓      —   —     —     —     —    —        —           —
+  Data Ingestion      ✓      —   —     —     —     —    —        —           —
+  Auto-Fail Monitor   ✓      —   —     —     —     —    —        —           —
+
+
+CHANGES APPLIED
+---------------
+File: templates/base.html
+
+1. Left sidebar — removed Assessment group:
+   BEFORE (lines 1194-1202):
+     <div class="sb-group">
+       <div class="sb-group-label">Assessment</div>
+       <a href="/upload" class="sb-link ...">Upload SSP</a>
+       <a href="/admin" class="sb-link ...">Assessments</a>
+     </div>
+   AFTER: group deleted entirely
+
+2. Profile dropdown — removed GRC section:
+   BEFORE:
+     <div class="nav-dd-section">GRC</div>
+     <a href="/systems">Systems</a>
+     <a href="/poam">POAM</a>
+     <a href="/risks">Risks</a>
+     <a href="/admin">Assessments</a>
+   AFTER: entire block removed
+
+3. Profile dropdown — renamed + restructured:
+   "Personal" → "Identity"
+   Removed "Upload SSP" from Identity section
+   "Admin" → "Admin Tools"
+   Added "Feed Sources" link → /admin/feeds in Admin Tools
+
+4. Admin Tools section guarded:
+   {% if is_admin and not is_role_view|default(false) %}
+   → Admin Tools section is hidden from all non-admin users
+   → Also hidden when admin is in a role-shell view
+
+
+ENFORCEMENT MODEL
+-----------------
+UI visibility guards (Jinja2 {% if is_admin %}):
+  Prevents link from rendering in HTML for non-admin users.
+  Non-admin users never see admin entry points in the rendered DOM.
+
+Server-side guards (_is_admin() + HTTP 403):
+  Every /admin/* route enforces _is_admin() regardless of UI state.
+  Defense in depth — UI guard is convenience, not the security control.
+
+Both guards are required and in place for all admin routes.

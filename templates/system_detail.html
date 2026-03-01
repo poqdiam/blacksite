@@ -310,8 +310,10 @@
     <a href="/systems/{{ system.id }}/controls" class="btn btn-primary btn-sm">Control Plan</a>
     <a href="/systems/{{ system.id }}/report" class="btn btn-ghost btn-sm" style="color:var(--cyan);border-color:var(--cyan)">⎙ Report</a>
     <a href="/systems/{{ system.id }}/submit" class="btn btn-ghost btn-sm" style="color:var(--gold);border-color:var(--gold)">Submit for ATO</a>
-    {% if is_admin %}
+    {% if can_edit %}
     <a href="/systems/{{ system.id }}/edit" class="btn btn-ghost btn-sm">Edit</a>
+    {% endif %}
+    {% if is_admin %}
     <button class="btn btn-danger btn-sm" onclick="document.getElementById('deleteModal').classList.add('open')">Delete</button>
     {% endif %}
   </div>
@@ -405,85 +407,6 @@
   </div>
 </div>
 
-{# ── Collapsible description + boundary ──────────────────────────────────── #}
-{% if system.description %}
-<details class="collapse-section" style="margin-bottom:10px">
-  <summary>System Description</summary>
-  <div class="collapse-body">{{ system.description }}</div>
-</details>
-{% endif %}
-{% if system.boundary %}
-<details class="collapse-section" style="margin-bottom:20px">
-  <summary>System Boundary</summary>
-  <div class="collapse-body">{{ system.boundary }}</div>
-</details>
-{% endif %}
-
-{# ── Stats row ───────────────────────────────────────────────────────────── #}
-<div class="stats" style="margin-bottom:24px">
-  <div class="stat">
-    <div class="stat-value">{{ assessments | length }}</div>
-    <div class="stat-label">Assessments</div>
-  </div>
-  <div class="stat">
-    <div class="stat-value" style="color:{% if poam_overdue > 0 %}var(--red){% else %}var(--cyan){% endif %}">
-      {{ poam_open_ct }}
-    </div>
-    <div class="stat-label">
-      Open POA&amp;Ms
-      {% if poam_overdue > 0 %}
-        <span style="display:block;color:var(--red);font-size:0.85em">({{ poam_overdue }} overdue)</span>
-      {% endif %}
-    </div>
-  </div>
-  <div class="stat">
-    <div class="stat-value" style="color:var(--yellow)">{{ poam_due_week }}</div>
-    <div class="stat-label">Due This Week</div>
-  </div>
-  <div class="stat">
-    <div class="stat-value">{{ risks | length }}</div>
-    <div class="stat-label">Risks</div>
-  </div>
-  {% if sc_total > 0 %}
-  <div class="stat">
-    <div class="stat-value"
-         style="color:{% if sc_coverage_pct >= 80 %}var(--green){% elif sc_coverage_pct >= 50 %}var(--yellow){% else %}var(--red){% endif %}">
-      {{ sc_coverage_pct }}%
-    </div>
-    <div class="stat-label">Control Coverage</div>
-  </div>
-  {% endif %}
-</div>
-
-{# ── Control Family Coverage ─────────────────────────────────────────────── #}
-{% if family_coverage %}
-<div class="card" style="margin-bottom:16px;padding:20px">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-    <div class="card-title" style="margin-bottom:0">Control Coverage by Family</div>
-    <a href="/systems/{{ system.id }}/controls" class="btn btn-ghost btn-sm">
-      Full Plan →
-    </a>
-  </div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
-    {% for f in family_coverage %}
-    {% set bar_color = 'var(--green)' if f.pct >= 80 else ('var(--yellow)' if f.pct >= 50 else 'var(--red)') %}
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:10px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span class="mono" style="font-size:0.78em;color:var(--cyan);font-weight:700">{{ f.family }}</span>
-        <span style="font-size:0.75em;color:{{ bar_color }};font-weight:700">{{ f.pct }}%</span>
-      </div>
-      <div style="background:var(--border);border-radius:2px;height:4px;overflow:hidden">
-        <div style="width:{{ f.pct }}%;height:100%;background:{{ bar_color }};border-radius:2px"></div>
-      </div>
-      <div style="font-size:0.62em;color:var(--muted);margin-top:4px">
-        {{ f.impl }}/{{ f.total }} controls
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-</div>
-{% endif %}
-
 {# ── RMF / ATO Process Timeline ──────────────────────────────────────────── #}
 <div class="card" style="margin-bottom:16px">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -556,6 +479,143 @@
     </span>
   </div>
 </div>
+
+{# ── Collapsible description + boundary ──────────────────────────────────── #}
+{% if system.description %}
+<details class="collapse-section" style="margin-bottom:10px">
+  <summary>System Description</summary>
+  <div class="collapse-body">{{ system.description }}</div>
+</details>
+{% endif %}
+{% if system.boundary %}
+<details class="collapse-section" style="margin-bottom:20px">
+  <summary>System Boundary</summary>
+  <div class="collapse-body">{{ system.boundary }}</div>
+</details>
+{% endif %}
+
+{# ── Phase 12 Quick-links row ─────────────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px">
+  <a href="/systems/{{ system.id }}/inventory"
+     style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+            background:var(--surface);border:1px solid var(--border);border-radius:8px;
+            padding:16px 10px;text-decoration:none;transition:border-color .15s"
+     onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor='var(--border)'">
+    <div style="font-size:1.4em;color:var(--cyan);margin-bottom:6px">⊞</div>
+    <div style="font-size:.72em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Inventory</div>
+    <div style="font-size:.85em;color:var(--text);margin-top:2px">
+      {{ inv_count }} item{{ 's' if inv_count != 1 else '' }}
+    </div>
+  </a>
+  <a href="/systems/{{ system.id }}/connections"
+     style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+            background:var(--surface);border:1px solid var(--border);border-radius:8px;
+            padding:16px 10px;text-decoration:none;transition:border-color .15s"
+     onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor='var(--border)'">
+    <div style="font-size:1.4em;color:var(--cyan);margin-bottom:6px">⟷</div>
+    <div style="font-size:.72em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Connections</div>
+    <div style="font-size:.85em;color:var(--text);margin-top:2px">
+      {{ conn_count }} connection{{ 's' if conn_count != 1 else '' }}
+    </div>
+  </a>
+  <a href="/systems/{{ system.id }}/artifacts"
+     style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+            background:var(--surface);border:1px solid var(--border);border-radius:8px;
+            padding:16px 10px;text-decoration:none;transition:border-color .15s"
+     onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor='var(--border)'">
+    <div style="font-size:1.4em;color:var(--cyan);margin-bottom:6px">📎</div>
+    <div style="font-size:.72em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Evidence</div>
+    <div style="font-size:.85em;color:var(--text);margin-top:2px">
+      {{ art_count }} artifact{{ 's' if art_count != 1 else '' }}
+    </div>
+  </a>
+  <a href="/observations?system_id={{ system.id }}"
+     style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+            background:var(--surface);border:1px solid {% if obs_open_count > 0 %}rgba(244,67,54,.4){% else %}var(--border){% endif %};
+            border-radius:8px;padding:16px 10px;text-decoration:none;transition:border-color .15s"
+     onmouseover="this.style.borderColor='var(--cyan)'" onmouseout="this.style.borderColor='{% if obs_open_count > 0 %}rgba(244,67,54,.4){% else %}var(--border){% endif %}'">
+    <div style="font-size:1.4em;color:{% if obs_open_count > 0 %}var(--red){% else %}var(--cyan){% endif %};margin-bottom:6px">⚐</div>
+    <div style="font-size:.72em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Observations</div>
+    <div style="font-size:.85em;color:{% if obs_open_count > 0 %}var(--red){% else %}var(--text){% endif %};font-weight:{% if obs_open_count > 0 %}700{% else %}400{% endif %};margin-top:2px">
+      {{ obs_open_count }} open
+    </div>
+  </a>
+  {% if system.is_eis %}
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+              background:rgba(0,255,204,.04);border:1px solid rgba(0,255,204,.2);border-radius:8px;
+              padding:16px 10px">
+    <div style="font-size:1.2em;color:var(--cyan);margin-bottom:6px">◎</div>
+    <div style="font-size:.72em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--cyan)">EIS Designated</div>
+    <div style="font-size:.75em;color:var(--muted);margin-top:2px">External IT System</div>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Stats row ───────────────────────────────────────────────────────────── #}
+<div class="stats" style="margin-bottom:24px">
+  <div class="stat">
+    <div class="stat-value">{{ assessments | length }}</div>
+    <div class="stat-label">Assessments</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:{% if poam_overdue > 0 %}var(--red){% else %}var(--cyan){% endif %}">
+      {{ poam_open_ct }}
+    </div>
+    <div class="stat-label">
+      Open POA&amp;Ms
+      {% if poam_overdue > 0 %}
+        <span style="display:block;color:var(--red);font-size:0.85em">({{ poam_overdue }} overdue)</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--yellow)">{{ poam_due_week }}</div>
+    <div class="stat-label">Due This Week</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{{ risks | length }}</div>
+    <div class="stat-label">Risks</div>
+  </div>
+  {% if sc_total > 0 %}
+  <div class="stat">
+    <div class="stat-value"
+         style="color:{% if sc_coverage_pct >= 80 %}var(--green){% elif sc_coverage_pct >= 50 %}var(--yellow){% else %}var(--red){% endif %}">
+      {{ sc_coverage_pct }}%
+    </div>
+    <div class="stat-label">Control Coverage</div>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Control Family Coverage ─────────────────────────────────────────────── #}
+{% if family_coverage %}
+<div class="card" style="margin-bottom:16px;padding:20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div class="card-title" style="margin-bottom:0">Control Coverage by Family</div>
+    <a href="/systems/{{ system.id }}/controls" class="btn btn-ghost btn-sm">
+      Full Plan →
+    </a>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+    {% for f in family_coverage %}
+    {% set bar_color = 'var(--green)' if f.pct >= 80 else ('var(--yellow)' if f.pct >= 50 else 'var(--red)') %}
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span class="mono" style="font-size:0.78em;color:var(--cyan);font-weight:700">{{ f.family }}</span>
+        <span style="font-size:0.75em;color:{{ bar_color }};font-weight:700">{{ f.pct }}%</span>
+      </div>
+      <div style="background:var(--border);border-radius:2px;height:4px;overflow:hidden">
+        <div style="width:{{ f.pct }}%;height:100%;background:{{ bar_color }};border-radius:2px"></div>
+      </div>
+      <div style="font-size:0.62em;color:var(--muted);margin-top:4px">
+        {{ f.impl }}/{{ f.total }} controls
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 
 {# ── Access Control — Assigned Users ─────────────────────────────────────── #}
 <div class="card" style="margin-bottom:16px">
@@ -632,16 +692,21 @@
 
   <div class="tab-nav" role="tablist">
     <button class="tab-btn active" role="tab" onclick="switchTab(event,'tab-assessments')">
-      Assessments <span class="tab-count">{{ assessments | length }}</span>
+      Assessments <span class="tab-count">{{ asmt_total_ct }}</span>
     </button>
     <button class="tab-btn" role="tab" onclick="switchTab(event,'tab-poam')">
-      POA&amp;M <span class="tab-count" style="{% if poam_overdue > 0 %}background:rgba(244,67,54,0.2);color:var(--red){% endif %}">{{ poam_items | length }}</span>
+      POA&amp;M <span class="tab-count" style="{% if poam_overdue > 0 %}background:rgba(244,67,54,0.2);color:var(--red){% endif %}">{{ poam_total_ct }}</span>
     </button>
     <button class="tab-btn" role="tab" onclick="switchTab(event,'tab-risks')">
-      Risks <span class="tab-count">{{ risks | length }}</span>
+      Risks <span class="tab-count">{{ risk_total_ct }}</span>
     </button>
     <button class="tab-btn" role="tab" onclick="switchTab(event,'tab-audit')">
       Audit History <span class="tab-count">{{ audit_entries | length }}</span>
+    </button>
+    <button class="tab-btn" role="tab" onclick="switchTab(event,'tab-daily')">
+      Daily Ops <span class="tab-count" style="{% if daily_tasks_done is defined and daily_tasks_total is defined and daily_tasks_done == daily_tasks_total and daily_tasks_total > 0 %}background:rgba(76,175,80,0.2);color:var(--green){% endif %}">
+        {% if daily_tasks_done is defined %}{{ daily_tasks_done }}/{{ daily_tasks_total }}{% else %}—{% endif %}
+      </span>
     </button>
   </div>
 
@@ -687,6 +752,13 @@
         {% endfor %}
       </tbody>
     </table>
+    {% if asmt_total_ct > assessments | length %}
+    <div style="padding:10px 16px;border-top:1px solid var(--border);text-align:right">
+      <a href="/results?system_id={{ system.id }}" style="font-size:0.8em;color:var(--cyan)">
+        View all {{ asmt_total_ct }} assessments →
+      </a>
+    </div>
+    {% endif %}
     {% else %}
     <div style="padding:48px;text-align:center">
       <div style="color:#1e1e30;font-size:1.8em;margin-bottom:10px;font-family:var(--mono)">[ ]</div>
@@ -740,6 +812,13 @@
         {% endfor %}
       </tbody>
     </table>
+    {% if poam_total_ct > poam_items | length %}
+    <div style="padding:10px 16px;border-top:1px solid var(--border);text-align:right">
+      <a href="/poam?system_id={{ system.id }}" style="font-size:0.8em;color:var(--cyan)">
+        View all {{ poam_total_ct }} POA&amp;M items →
+      </a>
+    </div>
+    {% endif %}
     {% else %}
     <div style="padding:48px;text-align:center">
       <div style="color:var(--green);font-size:1.8em;margin-bottom:10px;font-family:var(--mono)">[OK]</div>
@@ -788,6 +867,13 @@
         {% endfor %}
       </tbody>
     </table>
+    {% if risk_total_ct > risks | length %}
+    <div style="padding:10px 16px;border-top:1px solid var(--border);text-align:right">
+      <a href="/risks?system_id={{ system.id }}" style="font-size:0.8em;color:var(--cyan)">
+        View all {{ risk_total_ct }} risks →
+      </a>
+    </div>
+    {% endif %}
     {% else %}
     <div style="padding:48px;text-align:center">
       <div style="color:var(--green);font-size:1.8em;margin-bottom:10px;font-family:var(--mono)">[OK]</div>
@@ -838,6 +924,50 @@
     {% else %}
     <div style="padding:48px;text-align:center">
       <div class="text-muted" style="font-size:0.88em">No audit events recorded for this system.</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Tab 5: Daily Ops ───────────────────────────────────────────────────── #}
+  <div id="tab-daily" class="tab-panel" style="padding:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <h3 style="margin:0;font-size:0.95em;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Daily Operations</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="/systems/{{ system.id }}/daily" class="btn btn-primary btn-sm">Open Daily Hub</a>
+        <a href="/systems/{{ system.id }}/rotation" class="btn btn-ghost btn-sm">Rotation</a>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px">
+      <a href="/systems/{{ system.id }}/vendors" style="display:block;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text)">
+        <div style="font-size:0.65em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Vendors & BAAs</div>
+        <div style="font-size:0.85em;font-weight:600">Registry →</div>
+      </a>
+      <a href="/systems/{{ system.id }}/interconnections" style="display:block;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text)">
+        <div style="font-size:0.65em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Interconnections</div>
+        <div style="font-size:0.85em;font-weight:600">ISA Records →</div>
+      </a>
+      <a href="/systems/{{ system.id }}/dataflows" style="display:block;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text)">
+        <div style="font-size:0.65em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Data Flows</div>
+        <div style="font-size:0.85em;font-weight:600">Integration Map →</div>
+      </a>
+      <a href="/systems/{{ system.id }}/privacy-assessments" style="display:block;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text)">
+        <div style="font-size:0.65em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Privacy (PTA/PIA)</div>
+        <div style="font-size:0.85em;font-weight:600">Assessments →</div>
+      </a>
+      <a href="/systems/{{ system.id }}/restore-tests" style="display:block;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text)">
+        <div style="font-size:0.65em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Restore Tests</div>
+        <div style="font-size:0.85em;font-weight:600">BCDR Records →</div>
+      </a>
+      <a href="/systems/{{ system.id }}/reports" style="display:block;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text)">
+        <div style="font-size:0.65em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Reports</div>
+        <div style="font-size:0.85em;font-weight:600">Generated Files →</div>
+      </a>
+    </div>
+    {% if daily_tasks_done is defined %}
+    <div style="font-size:0.8em;color:var(--muted)">
+      Today's logbook: <strong style="color:{% if daily_tasks_done == daily_tasks_total %}var(--green){% else %}var(--yellow){% endif %}">
+        {{ daily_tasks_done }}/{{ daily_tasks_total }} tasks complete
+      </strong>
     </div>
     {% endif %}
   </div>

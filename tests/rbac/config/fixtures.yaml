@@ -1,0 +1,17 @@
+bcdr:
+  test_event_id: '1'
+bootstrapped: true
+bootstrapped_at: '2026-03-01T07:25:47.602993+00:00'
+poam:
+  test_poam_id: a170c3fa-7190-414c-8bb8-08d4c3ba57bd
+risks:
+  test_risk_id: 2d5b74b2-66a3-40b6-a70c-121dd1287cec
+systems:
+  alpha_id: baf0841f-af93-4d69-8f19-51e9b4725b0c
+  bravo_id: 7c64d81b-c116-4289-8354-cf036748ba44
+  charlie_id: e62d17e1-6f0c-4b90-b774-412c0f936737
+users:
+  analyst_user: bsv_test_analyst
+  executive_user: bsv_test_executive
+  manager_user: bsv_test_manager
+  principal_user: bsv_test_principal

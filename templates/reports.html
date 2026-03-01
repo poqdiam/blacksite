@@ -537,4 +537,47 @@
   </div>
 </div>
 
+{% if is_admin %}
+{# ── Daily Work Bundle ─────────────────────────────────────────────────────── #}
+<div class="card" style="margin-top:24px;padding:20px 24px">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+    <div>
+      <div style="font-weight:700;font-size:0.95em;margin-bottom:4px">📦 Daily Work Bundle</div>
+      <div style="font-size:0.78em;color:var(--muted);max-width:480px">
+        Collect today's generated files (SSP reviews, RBAC runs, ATO docs, POAM evidence) into a dated
+        zip with an index, then email it to you.
+      </div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="exportBundle()" id="bundleBtn" style="flex-shrink:0">
+      Export Today's Bundle →
+    </button>
+  </div>
+  <div id="bundleFeedback" style="font-size:0.78em;color:var(--muted);margin-top:10px;min-height:1.2em"></div>
+</div>
+<script>
+async function exportBundle() {
+  const btn = document.getElementById('bundleBtn');
+  const fb  = document.getElementById('bundleFeedback');
+  btn.disabled = true; btn.textContent = 'Building…';
+  fb.textContent = '';
+  try {
+    const r = await fetch('/admin/bundle/daily', { method: 'POST' });
+    const j = await r.json();
+    if (j.ok) {
+      fb.textContent = `✓ Bundle "${j.zip}" — ${j.items} item(s) — SHA256 prefix: ${j.sha256}` +
+                       (j.sent ? ` — emailed to ${j.email}` : ' — (email not sent; check email config)');
+      fb.style.color = 'var(--green)';
+    } else {
+      fb.textContent = j.detail || 'Error building bundle.';
+      fb.style.color = 'var(--red)';
+    }
+  } catch(e) {
+    fb.textContent = 'Network error.';
+    fb.style.color = 'var(--red)';
+  }
+  btn.disabled = false; btn.textContent = 'Export Today\'s Bundle →';
+}
+</script>
+{% endif %}
+
 {% endblock %}

@@ -1,0 +1,1121 @@
+{
+  "scraped_at_utc": "2026-02-28T20:53:21+00:00",
+  "source": "app.xylok.io",
+  "counts": {
+    "controls": 30,
+    "ccis": 30,
+    "benchmarks": 0,
+    "overlays": 16,
+    "errors": 0
+  },
+  "controls": [
+    {
+      "control_id": "AC-1",
+      "title": "Policy and Procedures",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "Classified",
+        "DAF Baseline",
+        "Int-A",
+        "Int-B",
+        "Int-C",
+        "NC3",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)",
+        "Privacy Control Baseline (CNSSI 1253)"
+      ],
+      "csf_categories": [
+        "DE.DP-2",
+        "ID.GV-1",
+        "ID.GV-3",
+        "PR.AC-3",
+        "PR.AC-4"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-1/"
+    },
+    {
+      "control_id": "AC-2",
+      "title": "Account Management",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "DAF Baseline",
+        "NC3",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)"
+      ],
+      "csf_categories": [
+        "DE.CM-3",
+        "PR.AC-4"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-2/"
+    },
+    {
+      "control_id": "AC-3",
+      "title": "Access Enforcement",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "DAF Baseline",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)"
+      ],
+      "csf_categories": [
+        "PR.AC-4",
+        "PR.PT-3"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-3/"
+    },
+    {
+      "control_id": "AC-4",
+      "title": "Information Flow Enforcement",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "DAF Baseline",
+        "Int-B",
+        "Int-C",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)"
+      ],
+      "csf_categories": [
+        "DE.AE-1",
+        "ID.AM-3",
+        "PR.AC-5",
+        "PR.DS-5"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-4/"
+    },
+    {
+      "control_id": "AC-5",
+      "title": "Separation of Duties",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "Classified",
+        "DAF Baseline",
+        "Int-A",
+        "Int-B",
+        "Int-C",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)"
+      ],
+      "csf_categories": [
+        "PR.AC-4",
+        "PR.DS-5"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-5/"
+    },
+    {
+      "control_id": "AC-6",
+      "title": "Least Privilege",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "Classified",
+        "DAF Baseline",
+        "Int-A",
+        "Int-B",
+        "Int-C",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)"
+      ],
+      "csf_categories": [
+        "PR.AC-4",
+        "PR.DS-5"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-6/"
+    },
+    {
+      "control_id": "AC-7",
+      "title": "Unsuccessful Logon Attempts",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "DAF Baseline"
+      ],
+      "csf_categories": [],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-7/"
+    },
+    {
+      "control_id": "AC-8",
+      "title": "System Use Notification",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "DAF Baseline",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)",
+        "Privacy Control Baseline (CNSSI 1253)"
+      ],
+      "csf_categories": [],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-8/"
+    },
+    {
+      "control_id": "AC-9",
+      "title": "Previous Logon Notification",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "DAF Baseline",
+        "Int-A",
+        "Int-B",
+        "Int-C"
+      ],
+      "csf_categories": [],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-9/"
+    },
+    {
+      "control_id": "AC-10",
+      "title": "Concurrent Session Control",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "DAF Baseline",
+        "Int-B",
+        "Int-C"
+      ],
+      "csf_categories": [
+        "PR.AC-5"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-10/"
+    },
+    {
+      "control_id": "AC-11",
+      "title": "Device Lock",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "Classified",
+        "DAF Baseline",
+        "Int-A",
+        "Int-B",
+        "Int-C",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)"
+      ],
+      "csf_categories": [],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-11/"
+    },
+    {
+      "control_id": "AC-12",
+      "title": "Session Termination",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "DAF Baseline",
+        "Int-A",
+        "Int-B",
+        "Int-C"
+      ],
+      "csf_categories": [
+        "PR.PT-4"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-12/"
+    },
+    {
+      "control_id": "AC-14",
+      "title": "Permitted Actions Without Identification or Authentication",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "DAF Baseline"
+      ],
+      "csf_categories": [
+        "PR.AC-4",
+        "PR.AC-7"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-14/"
+    },
+    {
+      "control_id": "AC-16",
+      "title": "Security and Privacy Attributes",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "Classified",
+        "DAF Baseline",
+        "Int-A",
+        "Int-B",
+        "Int-C",
+        "Privacy (high)",
+        "Privacy (moderate)"
+      ],
+      "csf_categories": [
+        "PR.AC-4",
+        "PR.AC-6"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-16/"
+    },
+    {
+      "control_id": "AC-17",
+      "title": "Remote Access",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "DAF Baseline",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)"
+      ],
+      "csf_categories": [
+        "PR.AC-3",
+        "PR.PT-4"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-17/"
+    },
+    {
+      "control_id": "AC-18",
+      "title": "Wireless Access",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "Classified",
+        "DAF Baseline",
+        "Int-A",
+        "Int-B",
+        "Int-C"
+      ],
+      "csf_categories": [
+        "PR.PT-4"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-18/"
+    },
+    {
+      "control_id": "AC-19",
+      "title": "Access Control for Mobile Devices",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "Classified",
+        "DAF Baseline",
+        "Int-A",
+        "Int-B",
+        "Int-C",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)"
+      ],
+      "csf_categories": [
+        "PR.AC-3"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-19/"
+    },
+    {
+      "control_id": "AC-20",
+      "title": "Use of External Systems",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "Classified",
+        "DAF Baseline",
+        "Int-A",
+        "Int-B",
+        "Int-C",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)"
+      ],
+      "csf_categories": [
+        "ID.AM-4",
+        "PR.AC-3"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-20/"
+    },
+    {
+      "control_id": "AC-21",
+      "title": "Information Sharing",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "Classified",
+        "DAF Baseline",
+        "Int-A",
+        "Int-B",
+        "Int-C",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)"
+      ],
+      "csf_categories": [
+        "PR.IP-8"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-21/"
+    },
+    {
+      "control_id": "AC-22",
+      "title": "Publicly Accessible Content",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "DAF Baseline",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)"
+      ],
+      "csf_categories": [],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-22/"
+    },
+    {
+      "control_id": "AC-23",
+      "title": "Data Mining Protection",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "Classified",
+        "DAF Baseline",
+        "Int-A",
+        "Int-B",
+        "Int-C"
+      ],
+      "csf_categories": [],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-23/"
+    },
+    {
+      "control_id": "AC-24",
+      "title": "Access Control Decisions",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "DAF Baseline",
+        "Int-B",
+        "Int-C"
+      ],
+      "csf_categories": [
+        "PR.AC-4"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-24/"
+    },
+    {
+      "control_id": "AC-25",
+      "title": "Reference Monitor",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CDS - Access",
+        "CDS - Multilevel",
+        "CDS - Transfer",
+        "DAF Baseline",
+        "Space Platform"
+      ],
+      "csf_categories": [],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AC-25/"
+    },
+    {
+      "control_id": "AT-1",
+      "title": "Policy and Procedures",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "DAF Baseline",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)",
+        "Privacy Control Baseline (CNSSI 1253)"
+      ],
+      "csf_categories": [
+        "DE.DP-2",
+        "ID.GV-1",
+        "ID.GV-3"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AT-1/"
+    },
+    {
+      "control_id": "AT-2",
+      "title": "Literacy Training and Awareness",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "Classified",
+        "DAF Baseline",
+        "Int-A",
+        "Int-B",
+        "Int-C",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)",
+        "Privacy Control Baseline (CNSSI 1253)"
+      ],
+      "csf_categories": [
+        "PR.AT-1"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AT-2/"
+    },
+    {
+      "control_id": "AT-3",
+      "title": "Role-based Training",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "DAF Baseline",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)",
+        "Privacy Control Baseline (CNSSI 1253)"
+      ],
+      "csf_categories": [
+        "PR.AT-2",
+        "PR.AT-3",
+        "PR.AT-4",
+        "PR.AT-5"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AT-3/"
+    },
+    {
+      "control_id": "AT-4",
+      "title": "Training Records",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "DAF Baseline",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)",
+        "Privacy Control Baseline (CNSSI 1253)"
+      ],
+      "csf_categories": [],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AT-4/"
+    },
+    {
+      "control_id": "AT-6",
+      "title": "Training Feedback",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "DAF Baseline",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)",
+        "Privacy Control Baseline (CNSSI 1253)"
+      ],
+      "csf_categories": [],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AT-6/"
+    },
+    {
+      "control_id": "AU-1",
+      "title": "Policy and Procedures",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "DAF Baseline",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)",
+        "Privacy Control Baseline (CNSSI 1253)"
+      ],
+      "csf_categories": [
+        "DE.DP-2",
+        "ID.GV-1",
+        "ID.GV-3",
+        "PR.PT-1"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AU-1/"
+    },
+    {
+      "control_id": "AU-2",
+      "title": "Event Logging",
+      "statement": "",
+      "supplemental": "",
+      "cia": {},
+      "overlays": [
+        "CMMC",
+        "DAF Baseline",
+        "Int-A",
+        "Int-B",
+        "Int-C",
+        "Privacy (accountability)",
+        "Privacy (high)",
+        "Privacy (low)",
+        "Privacy (moderate)",
+        "Privacy Control Baseline (CNSSI 1253)"
+      ],
+      "csf_categories": [
+        "PR.PT-1"
+      ],
+      "related_controls": [],
+      "enhancements": [],
+      "related_ccis": [],
+      "source_url": "https://app.xylok.io/reference/controls/control/AU-2/"
+    }
+  ],
+  "ccis": [
+    {
+      "cci_id": "CCI-000001",
+      "definition": "The organization develops an access control policy that addresses purpose, scope, roles, responsibilities, management commitment, coordination among organizational entities, and compliance.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "",
+      "validation_procedures": "",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/1/"
+    },
+    {
+      "cci_id": "CCI-000002",
+      "definition": "Disseminate the organization-level; mission/business process-level; and/or system-level access control policy that addresses purpose, scope, roles, responsibilities, management commitment, coordination among organizational entities, and compliance to organization-defined personnel or roles.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if:\n- an access control policy is developed and documented.\n- the access control policy is disseminated to [AC-01_ODP[01]; personnel or roles to whom the access control policy is to be disseminated is/are defined].",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy and procedures; system security plan; privacy plan; other relevant documents or records].\nInterview: [SELECT FROM: Organizational personnel with access control responsibilities; organizational personnel with information security with information security and privacy responsibilities].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/2/"
+    },
+    {
+      "cci_id": "CCI-000003",
+      "definition": "Review and update the current access control policy on an organization-defined frequency.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if:\n- the current access control policy is reviewed and updated [AC-01_ODP[05]; the frequency at which the current access control policy is reviewed and updated is defined].\n- the current access control policy is reviewed and updated following [AC-01_ODP[06]; events that would require the current access control policy to be reviewed and updated are defined].",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy and procedures; system security plan; privacy plan; other relevant documents or records].\nInterview: [SELECT FROM: Organizational personnel with access control responsibilities; organizational personnel with information security with information security and privacy responsibilities].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/3/"
+    },
+    {
+      "cci_id": "CCI-000004",
+      "definition": "The organization develops procedures to facilitate the implementation of the access control policy and associated access controls.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "",
+      "validation_procedures": "",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/4/"
+    },
+    {
+      "cci_id": "CCI-000005",
+      "definition": "Disseminate procedures to facilitate the implementation of the organization-level; mission/business process-level; and/or system-level access control policy and associated access controls to the organization-defined personnel or roles.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if:\n- access control procedures to facilitate the implementation of the access control policy and associated controls are developed and documented.\n- the access control procedures are disseminated to [AC-01_ODP[02]; personnel or roles to whom the access control procedures are to be disseminated is/are defined].",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy and procedures; system security plan; privacy plan; other relevant documents or records].\nInterview: [SELECT FROM: Organizational personnel with access control responsibilities; organizational personnel with information security with information security and privacy responsibilities].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/5/"
+    },
+    {
+      "cci_id": "CCI-000006",
+      "definition": "Review and update the current access control procedures on an organization-defined frequency.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if:\n- the current access control procedures are reviewed and updated [AC-01_ODP[07]; the frequency at which the current access control procedures are reviewed and updated is defined;].\n- the current access control procedures are reviewed and updated following [AC-01_ODP[08]; events that would require procedures to be reviewed and updated are defined].",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy and procedures; system security plan; privacy plan; other relevant documents or records].\nInterview: [SELECT FROM: Organizational personnel with access control responsibilities; organizational personnel with information security with information security and privacy responsibilities].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/6/"
+    },
+    {
+      "cci_id": "CCI-000007",
+      "definition": "The organization manages information system accounts by identifying account types (i.e., individual, group, system, application, guest/anonymous, and temporary).",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "",
+      "validation_procedures": "",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/7/"
+    },
+    {
+      "cci_id": "CCI-000008",
+      "definition": "The organization establishes conditions for group membership.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "",
+      "validation_procedures": "",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/8/"
+    },
+    {
+      "cci_id": "CCI-000009",
+      "definition": "The organization manages information system accounts by identifying authorized users of the information system and specifying access privileges.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "",
+      "validation_procedures": "",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/9/"
+    },
+    {
+      "cci_id": "CCI-000010",
+      "definition": "Require approvals by organization-defined personnel or roles for requests to create accounts.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if approvals are required by [AC-02_ODP[03]; personnel or roles required to approve requests to create accounts is/are defined] for requests to create accounts.",
+      "validation_procedures": "\"Examine: [SELECT FROM: Access control policy; personnel termination policy and procedure; personnel transfer policy and procedure; procedures for addressing account management; system design documentation; system configuration settings and associated documentation; list of active system accounts along with the name of the individual associated with each account; list of recently disabled system accounts and the name of the individual associated with each account; list of conditions for group and role membership; notifications of recent transfers, separations, or terminations of employees; access authorization records; account management compliance reviews; system monitoring records; system audit records; system security plan; privacy plan; other relevant documents or records].\nInterview: [SELECT FROM: Organizational personnel with account management responsibilities; system/network administrators; organizational personnel with information security with information security and privacy responsibilities].\nTest: [SELECT FROM: Organizational processes for account management on the system; mechanisms for implementing account management].\"",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/10/"
+    },
+    {
+      "cci_id": "CCI-000011",
+      "definition": "Create, enable, modify, disable, and remove system accounts in accordance with organization-defined procedures.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if:\n- accounts are created in accordance with [AC-02_ODP[04]; policy, procedures, prerequisites, and criteria for account creation, enabling, modification, disabling, and removal are defined].\n- accounts are enabled in accordance with [AC-02_ODP[04]; policy, procedures, prerequisites, and criteria for account creation, enabling, modification, disabling, and removal are defined].\n- accounts are modified in accordance with [AC-02_ODP[04]; policy, procedures, prerequisites, and criteria for account creation, enabling, modification, disabling, and removal are defined].\n- accounts are disabled in accordance with [AC-02_ODP[04]; policy, procedures, prerequisites, and criteria for account creation, enabling, modification, disabling, and removal are defined].\n- accounts are removed in accordance with [AC-02_ODP[04]; policy, procedures, prerequisites, and criteria for account creation, enabling, modification, disabling, and removal are defined].",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy; personnel termination policy and procedure; personnel transfer policy and procedure; procedures for addressing account management; system design documentation; system configuration settings and associated documentation; list of active system accounts along with the name of the individual associated with each account; list of recently disabled system accounts and the name of the individual associated with each account; list of conditions for group and role membership; notifications of recent transfers, separations, or terminations of employees; access authorization records; account management compliance reviews; system monitoring records; system audit records; system security plan; privacy plan; other relevant documents or records].\nInterview: [SELECT FROM: Organizational personnel with account management responsibilities; system/network administrators; organizational personnel with information security with information security and privacy responsibilities].\nTest: [SELECT FROM: Organizational processes for account management on the system; mechanisms for implementing account management].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/11/"
+    },
+    {
+      "cci_id": "CCI-000012",
+      "definition": "Review accounts for compliance with account management requirements per organization-defined frequency.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if accounts are reviewed for compliance with account management requirements [AC-02_ODP[10]; the frequency of account review is defined].",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy; personnel termination policy and procedure; personnel transfer policy and procedure; procedures for addressing account management; system design documentation; system configuration settings and associated documentation; list of active system accounts along with the name of the individual associated with each account; list of recently disabled system accounts and the name of the individual associated with each account; list of conditions for group and role membership; notifications of recent transfers, separations, or terminations of employees; access authorization records; account management compliance reviews; system monitoring records; system audit records; system security plan; privacy plan; other relevant documents or records].\nInterview: [SELECT FROM: Organizational personnel with account management responsibilities; system/network administrators; organizational personnel with information security with information security and privacy responsibilities].\nTest: [SELECT FROM: Organizational processes for account management on the system; mechanisms for implementing account management].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/12/"
+    },
+    {
+      "cci_id": "CCI-000013",
+      "definition": "The organization manages information system accounts by notifying account managers when temporary accounts are no longer required and when information system users are terminated, transferred, or information system usage or need-to-know/need-to-share changes.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "",
+      "validation_procedures": "",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/13/"
+    },
+    {
+      "cci_id": "CCI-000014",
+      "definition": "The organization manages information system accounts by granting access to the system based on a valid access authorization; intended system usage; and other attributes as required by the organization or associated missions/business functions.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "",
+      "validation_procedures": "",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/14/"
+    },
+    {
+      "cci_id": "CCI-000015",
+      "definition": "Support the management of system accounts using organization-defined automated mechanisms.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if the management of system accounts is supported using [AC-02(01)_ODP; automated mechanisms used to support the management of system accounts are defined].",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy; procedures for addressing account management; system design documentation; system configuration settings and associated documentation; system audit records; system security plan; other relevant documents or records].\nInterview: [SELECT FROM: Organizational personnel with account management responsibilities; system/network administrators; organizational personnel with information security with information security responsibilities; system developers].\nTest: [SELECT FROM: Automated mechanisms for implementing account management functions].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/15/"
+    },
+    {
+      "cci_id": "CCI-000016",
+      "definition": "Automatically remove or disable temporary and emergency accounts after an organization-defined time-period for each type of account.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if temporary and emergency accounts are automatically [AC-02(02)_ODP[01]; one of the following PARAMETER VALUES is selected: {remove; disable}] after [AC-02(02)_ODP[02]; the time period after which to automatically remove or disable temporary or emergency accounts is defined].",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy; procedures for addressing account management; system design documentation; system configuration settings and associated documentation; system-generated list of temporary accounts removed and/or disabled; system-generated list of emergency accounts removed and/or disabled; system audit records; system security plan; other relevant documents or records].\nInterview: [SELECT FROM: Organizational personnel with account management responsibilities; system/network administrators; organizational personnel with information security with information security responsibilities; system developers].\nTest: [SELECT FROM: Automated mechanisms for implementing account management functions].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/16/"
+    },
+    {
+      "cci_id": "CCI-000017",
+      "definition": "Disable accounts when the accounts have been inactive for the organization-defined time-period.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if accounts are disabled within [AC-02(03)_ODP[01]; time period within which to disable accounts is defined] when the accounts have been inactive for [AC-02(03)_ODP[02]; time period for account inactivity before disabling is defined].",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy; procedures for addressing account management; system security plan; system design documentation; system configuration settings and associated documentation; system-generated list of accounts removed; system-generated list of emergency accounts disabled; system audit records; system security plan; other relevant documents or records].\nInterview: [SELECT FROM: Organizational personnel with account management responsibilities; system/network administrators; organizational personnel with information security responsibilities; system developers].\nTest: [SELECT FROM: Mechanisms for implementing account management functions].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/17/"
+    },
+    {
+      "cci_id": "CCI-000018",
+      "definition": "Automatically audit account creation actions.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if:\n- account creation is automatically audited.\n- account modification is automatically audited.\n- account disabling is automatically audited.\n- account removal actions are automatically audited.",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy; procedures addressing account management; system design documentation; system configuration settings and associated documentation; notifications/alerts of account creation, modification, enabling, disabling, and removal actions; system audit records; system security plan; other relevant documents or records].\nInterview: [SELECT FROM: Organizational personnel with account management responsibilities; system/network administrators; organizational personnel with information security responsibilities].\nTest: [SELECT FROM: Automated mechanisms implementing account management functions].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/18/"
+    },
+    {
+      "cci_id": "CCI-000019",
+      "definition": "Require that users log out in accordance with the organization-defined time-period of expected inactivity or description of when to log out.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if users are required to log out when [AC-02(05)_ODP; the time period of expected inactivity or description of when to log out is defined].",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy; procedures addressing account management; system design documentation; system configuration settings and associated documentation; security violation reports; system audit records; system security plan; other relevant documents or records].\nInterview: [SELECT FROM: Organizational personnel with account management responsibilities; system/network administrators; organizational personnel with information security responsibilities; users that must comply with inactivity logout policy].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/19/"
+    },
+    {
+      "cci_id": "CCI-000020",
+      "definition": "The information system dynamically manages user privileges and associated access authorizations.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "",
+      "validation_procedures": "",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/20/"
+    },
+    {
+      "cci_id": "CCI-000021",
+      "definition": "Enforce dual authorization for organization-defined privileged commands and/or other organization-defined actions.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if dual authorization is enforced for [AC-03(02)_ODP; privileged commands and/or other actions requiring dual authorization are defined].",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy; procedures addressing access enforcement and dual authorization; system design documentation; system configuration settings and associated documentation; list of privileged commands requiring dual authorization; list of actions requiring dual authorization; list of approved authorizations (user privileges); system security plan; other relevant documents or records].\nInterview: [SELECT FROM: Organizational personnel with access enforcement responsibilities; system/network administrators; organizational personnel with information security responsibilities; system developers].\nTest: [SELECT FROM: Dual authorization mechanisms implementing access control policy].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/21/"
+    },
+    {
+      "cci_id": "CCI-000022",
+      "definition": "The information system enforces one or more organization-defined nondiscretionary access control policies over an organization-defined set of users and resources.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "",
+      "validation_procedures": "",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/22/"
+    },
+    {
+      "cci_id": "CCI-000023",
+      "definition": "The organization develops an organization-wide information security program plan that provides sufficient information about the program management controls and common controls (including specification of parameters for any assignment and selection operations either explicitly or by reference) to enable an implementation that is unambiguously compliant with the intent of the plan, and a determination of the risk to be incurred if the plan is implemented as intended.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "",
+      "validation_procedures": "",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/23/"
+    },
+    {
+      "cci_id": "CCI-000024",
+      "definition": "Prevent access to organization-defined security-relevant information except during secure, non-operable system states.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if access to [AC-03(05)_ODP; security-relevant information to which access is prevented except during secure, non-operable system states is defined] is prevented except during secure, non-operable system states.",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy; procedures addressing access enforcement; system design documentation; system configuration settings and associated documentation; system audit records; system security plan; other relevant documents or records].\nInterview: [SELECT FROM: Organizational personnel with access enforcement responsibilities; system/network administrators; organizational personnel with information security responsibilities; system developers].\nTest: [SELECT FROM: Mechanisms preventing access to security-relevant information within the system].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/24/"
+    },
+    {
+      "cci_id": "CCI-000025",
+      "definition": "The information system enforces information flow control using explicit security attributes on information, source, and destination objects as a basis for flow control decisions.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "",
+      "validation_procedures": "",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/25/"
+    },
+    {
+      "cci_id": "CCI-000026",
+      "definition": "Use protected processing domains to enforce organization-defined information flow control policies as a basis for flow control decisions.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if protected processing domains are used to enforce [AC-04(02)_ODP; information flow control policies to be enforced by use of protected processing domains are defined] as a basis for flow control decisions.",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy; information flow control policies; procedures addressing information flow enforcement; system design documentation; system security architecture and associated documentation; system configuration settings and associated documentation; system audit records; system security plan; other relevant documents or records].\nInterview: [SELECT FROM: System/network administrators; organizational personnel with information security responsibilities].\nTest: [SELECT FROM: Mechanisms implementing information flow enforcement policy].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/26/"
+    },
+    {
+      "cci_id": "CCI-000027",
+      "definition": "Enforce organization-defined information flow control policies.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if [AC-04(03)_ODP; information flow control policies to be enforced are defined] are enforced.",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy; information flow control policies; procedures addressing information flow enforcement; system design documentation; system security architecture and associated documentation; system configuration settings and associated documentation; system audit records; system security plan; other relevant documents or records].\nInterview: [SELECT FROM: System/network administrators; organizational personnel with information security responsibilities; system developers].\nTest: [SELECT FROM: Mechanisms implementing information flow enforcement policy].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/27/"
+    },
+    {
+      "cci_id": "CCI-000028",
+      "definition": "Prevent encrypted information from bypassing organization-defined flow control mechanisms by employing organization-defined procedures or methods.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if encrypted information is prevented from bypassing [AC-04(04)_ODP[01]; information flow control mechanisms that encrypted information is prevented from bypassing are defined] by [AC-04(04)_ODP[02]; one or more of the following PARAMETER VALUES is/are selected: {decrypting the information; blocking the flow of the encrypted information; terminating communications sessions attempting to pass encrypted information; [AC-04(04)_ODP[03]; the organization-defined procedure or method used to prevent encrypted information from bypassing information flow control mechanisms is defined (if selected)]].",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy; information flow control policies; procedures addressing information flow enforcement; system design documentation; system configuration settings and associated documentation; system audit records; system security plan; other relevant documents or records].\nInterview: [SELECT FROM: System/network administrators; organizational personnel with information security responsibilities; system developers].\nTest: [SELECT FROM: Mechanisms implementing information flow enforcement policy].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/28/"
+    },
+    {
+      "cci_id": "CCI-000029",
+      "definition": "Enforce organization-defined limitations on embedding data types within other data types.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if [AC-04(05)_ODP; limitations on embedding data types within other data types are defined] are enforced on embedding data types within other data types.",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy; procedures addressing information flow enforcement; system design documentation; system configuration settings and associated documentation; list of limitations to be enforced on embedding data types within other data types; system audit records; system security plan; other relevant documents or records].\nInterview: [SELECT FROM: System/network administrators; organizational personnel with information security responsibilities; system developers].\nTest: [SELECT FROM: Mechanisms implementing information flow enforcement policy].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/29/"
+    },
+    {
+      "cci_id": "CCI-000030",
+      "definition": "Enforce information flow control based on organization-defined metadata.",
+      "status": "Type",
+      "cci_type": "",
+      "implementation_guidance": "Determine if information flow control enforcement is based on [AC-04(06)_ODP; metadata on which to base enforcement of information flow control is defined].",
+      "validation_procedures": "Examine: [SELECT FROM: Access control policy; information flow control policies; procedures addressing information flow enforcement; system design documentation; system configuration settings and associated documentation; types of metadata used to enforce information flow control decisions; system audit records; system security plan; other relevant documents or records].\nInterview: [SELECT FROM: System/network administrators; organizational personnel with information security responsibilities; system developers].\nTest: [SELECT FROM: Mechanisms implementing information flow enforcement policy].",
+      "related_controls": [],
+      "source_url": "https://app.xylok.io/reference/controls/cci/30/"
+    }
+  ],
+  "benchmarks": [],
+  "overlays": [
+    {
+      "overlay_name": "CDS - Access",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/CDS%20-%20Access/"
+    },
+    {
+      "overlay_name": "CDS - Multilevel",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/CDS%20-%20Multilevel/"
+    },
+    {
+      "overlay_name": "CDS - Transfer",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/CDS%20-%20Transfer/"
+    },
+    {
+      "overlay_name": "CMMC",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/CMMC/"
+    },
+    {
+      "overlay_name": "Classified",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/Classified/"
+    },
+    {
+      "overlay_name": "DAF Baseline",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/DAF%20Baseline/"
+    },
+    {
+      "overlay_name": "Int-A",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/Int-A/"
+    },
+    {
+      "overlay_name": "Int-B",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/Int-B/"
+    },
+    {
+      "overlay_name": "Int-C",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/Int-C/"
+    },
+    {
+      "overlay_name": "NC3",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/NC3/"
+    },
+    {
+      "overlay_name": "Privacy (accountability)",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/Privacy%20%28accountability%29/"
+    },
+    {
+      "overlay_name": "Privacy (high)",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/Privacy%20%28high%29/"
+    },
+    {
+      "overlay_name": "Privacy (low)",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/Privacy%20%28low%29/"
+    },
+    {
+      "overlay_name": "Privacy (moderate)",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/Privacy%20%28moderate%29/"
+    },
+    {
+      "overlay_name": "Privacy Control Baseline (CNSSI 1253)",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/Privacy%20Control%20Baseline%20%28CNSSI%201253%29/"
+    },
+    {
+      "overlay_name": "Space Platform",
+      "additions": [],
+      "removals": [],
+      "modifications": [],
+      "source_url": "https://app.xylok.io/reference/controls/overlay/Space%20Platform/"
+    }
+  ],
+  "errors": []
+}

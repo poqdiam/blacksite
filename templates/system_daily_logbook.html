@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Logbook {{ log_date }}: {{ system.name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:20px">
+  <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">
+    <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a> /
+    <a href="/systems/{{ system.id }}/daily" style="color:var(--muted)">Daily Ops</a> /
+    <a href="/systems/{{ system.id }}/daily/history" style="color:var(--muted)">History</a> / {{ log_date }}
+  </div>
+  <h1 style="font-size:1.3em;margin:0">Logbook — {{ log_date }}</h1>
+</div>
+
+<div class="card" style="padding:20px;margin-bottom:16px">
+  <h2 style="font-size:0.85em;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:16px">Task Completion</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px">
+    {% for t in task_nums %}
+    {% set done = flags.get(t|string, false) %}
+    <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:6px;border:1px solid var(--border)">
+      <span style="font-size:1.1em">{% if done %}✅{% else %}⬜{% endif %}</span>
+      <div>
+        <div style="font-size:0.65em;color:var(--muted);letter-spacing:1px">TASK {{ t }}</div>
+        <div style="font-size:0.88em;font-weight:600">{{ task_labels[t] }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card" style="padding:20px;margin-bottom:16px">
+  <h2 style="font-size:0.85em;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Metric Snapshot</h2>
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">
+    <div style="text-align:center">
+      <div style="font-size:1.4em;font-weight:900;color:var(--cyan)">{{ logbook.snap_open_poams }}</div>
+      <div style="font-size:0.65em;color:var(--muted)">Open POA&Ms</div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:1.4em;font-weight:900;color:{% if logbook.snap_overdue_poams > 0 %}var(--red){% else %}var(--cyan){% endif %}">{{ logbook.snap_overdue_poams }}</div>
+      <div style="font-size:0.65em;color:var(--muted)">Overdue</div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:1.4em;font-weight:900;color:var(--cyan)">{{ logbook.snap_open_risks }}</div>
+      <div style="font-size:0.65em;color:var(--muted)">Open Risks</div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:1.4em;font-weight:900;color:var(--cyan)">{{ logbook.snap_open_obs }}</div>
+      <div style="font-size:0.65em;color:var(--muted)">Observations</div>
+    </div>
+    <div style="text-align:center">
+      <div style="font-size:1.4em;font-weight:900;color:var(--cyan)">{{ logbook.snap_open_incidents }}</div>
+      <div style="font-size:0.65em;color:var(--muted)">Incidents</div>
+    </div>
+  </div>
+</div>
+
+{% if logbook.notes %}
+<div class="card" style="padding:20px">
+  <h2 style="font-size:0.85em;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Notes</h2>
+  <p style="font-size:0.9em;white-space:pre-wrap;margin:0">{{ logbook.notes }}</p>
+</div>
+{% endif %}
+
+<div style="margin-top:16px">
+  <a href="/systems/{{ system.id }}/daily/history" class="btn btn-ghost btn-sm">← Back to History</a>
+</div>
+{% endblock %}

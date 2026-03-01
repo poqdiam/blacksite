@@ -1,3 +1,4 @@
+{% from "macros.html" import paginate %}
 {% extends "base.html" %}
 {% block title %}{{ app_name }} — {{ system.name }} Control Plan{% endblock %}
 
@@ -172,7 +173,13 @@
   <a href="/systems/{{ system.id }}/controls" class="btn btn-ghost" style="font-size:0.82em;color:var(--muted)">Clear</a>
   {% endif %}
 
-  <span style="color:var(--muted);font-size:0.82em;margin-left:auto">{{ controls|length }} controls</span>
+  <span style="color:var(--muted);font-size:0.82em;margin-left:auto">
+    {% if total_count is defined and total_count != controls|length %}
+      {{ total_count }} total · showing {{ controls|length }}
+    {% else %}
+      {{ controls|length }} controls
+    {% endif %}
+  </span>
 </form>
 
 {# ── Control list ── #}
@@ -195,6 +202,14 @@
         <span class="status-badge" id="badge-{{ c.id }}" style="color:{{ c.color }};border-color:{{ c.color }}22">
           {{ c.status | replace('_',' ') | title }}
         </span>
+        <a href="/systems/{{ system.id }}/workspace/{{ c.id }}"
+           onclick="event.stopPropagation()"
+           title="Open ISSO workspace for {{ c.id | upper }}"
+           style="color:var(--cyan);font-size:0.75em;text-decoration:none;padding:2px 6px;
+                  border:1px solid rgba(0,255,204,0.25);border-radius:3px;
+                  background:rgba(0,255,204,0.05);white-space:nowrap">
+          Workspace →
+        </a>
         <span style="color:var(--border);font-size:0.8em" id="chevron-{{ c.id }}">▾</span>
       </div>
     </div>
@@ -266,6 +281,15 @@
   </div>
   {% endif %}
 </div>
+
+{# ── Pagination ── #}
+{% if total_pages is defined %}
+{% set _ep = [] %}
+{% if family %}{% set _ep = _ep + ['family=' + family] %}{% endif %}
+{% if status_filter %}{% set _ep = _ep + ['status_filter=' + status_filter] %}{% endif %}
+{{ paginate(page, total_pages, per_page, '/systems/' + system.id + '/controls', _ep | join('&')) }}
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}

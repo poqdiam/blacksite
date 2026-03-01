@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Evidence Artifacts — {{ system.name }}{% endblock %}
+
+{% block head %}
+<style>
+  .freshness-fresh   { color: var(--green);  }
+  .freshness-expiring{ color: var(--yellow); }
+  .freshness-expired { color: var(--red);    }
+  .ap-pending  { background:rgba(255,179,0,.15); color:var(--yellow); border-radius:3px;padding:2px 7px;font-size:.72em;font-weight:700; }
+  .ap-approved { background:rgba(0,200,83,.15);  color:var(--green);  border-radius:3px;padding:2px 7px;font-size:.72em;font-weight:700; }
+  .ap-rejected { background:rgba(244,67,54,.15); color:var(--red);    border-radius:3px;padding:2px 7px;font-size:.72em;font-weight:700; }
+  .add-artifact-card { background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px; }
+  .af-grid { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+  @media(max-width:600px){.af-grid{grid-template-columns:1fr;}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/systems">Systems</a>
+  <span class="sep">/</span>
+  <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+  <span class="sep">/</span>
+  <span>Evidence Artifacts</span>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:22px">
+  <div>
+    <h1 style="margin:0">Evidence Artifacts</h1>
+    <p class="text-muted" style="font-size:.84em;margin-top:4px">
+      {{ system.name }} — {{ artifacts | length }} artifact{{ 's' if artifacts | length != 1 else '' }}
+    </p>
+  </div>
+  <a href="/systems/{{ system.id }}" class="btn btn-ghost btn-sm">← System</a>
+</div>
+
+{# Filter bar #}
+<form method="get" action="/systems/{{ system.id }}/artifacts"
+      style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:18px">
+  <div style="display:flex;flex-direction:column;gap:3px">
+    <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Control ID</label>
+    <input type="text" name="control_id" value="{{ filter_control_id }}" placeholder="e.g. ac-2"
+           style="background:var(--surface);border:1px solid var(--border);border-radius:5px;
+                  padding:7px 10px;font-size:.83em;color:var(--text);width:120px">
+  </div>
+  <div style="display:flex;flex-direction:column;gap:3px">
+    <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Type</label>
+    <select name="artifact_type"
+            style="background:var(--surface);border:1px solid var(--border);border-radius:5px;
+                   padding:7px 10px;font-size:.83em;color:var(--text)">
+      <option value="">All Types</option>
+      {% for t in ['screenshot','log','config','policy','report','scan_result','other'] %}
+      <option value="{{ t }}" {% if filter_type == t %}selected{% endif %}>{{ t | replace('_',' ') | title }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:3px">
+    <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Status</label>
+    <select name="approval_status"
+            style="background:var(--surface);border:1px solid var(--border);border-radius:5px;
+                   padding:7px 10px;font-size:.83em;color:var(--text)">
+      <option value="">All Status</option>
+      {% for st in ['pending','approved','rejected'] %}
+      <option value="{{ st }}" {% if filter_status == st %}selected{% endif %}>{{ st | title }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn btn-ghost btn-sm" style="align-self:flex-end">Filter</button>
+  <a href="/systems/{{ system.id }}/artifacts" class="btn btn-ghost btn-sm" style="align-self:flex-end;color:var(--muted)">Clear</a>
+</form>
+
+{% if artifacts %}
+<div class="card" style="padding:0;overflow:hidden;margin-bottom:24px">
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Control</th>
+          <th>Type</th>
+          <th>Source</th>
+          <th>Collected</th>
+          <th>Freshness</th>
+          <th>Owner</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for art in artifacts %}
+        {% set ap = art.approval_status or 'pending' %}
+        {# Freshness calculation #}
+        {% if art.collected_at and art.freshness_days %}
+          {% set collected_ts = art.collected_at.timestamp() %}
+          {% set now_ts = today_dt.timestamp() %}
+          {% set elapsed_days = ((now_ts - collected_ts) / 86400) | int %}
+          {% set remaining = art.freshness_days - elapsed_days %}
+          {% if remaining <= 0 %}
+            {% set freshness_cls = 'freshness-expired' %}
+            {% set freshness_label = 'Expired' %}
+          {% elif remaining <= 30 %}
+            {% set freshness_cls = 'freshness-expiring' %}
+            {% set freshness_label = remaining ~ 'd left' %}
+          {% else %}
+            {% set freshness_cls = 'freshness-fresh' %}
+            {% set freshness_label = remaining ~ 'd left' %}
+          {% endif %}
+        {% else %}
+          {% set freshness_cls = '' %}
+          {% set freshness_label = '—' %}
+        {% endif %}
+        <tr>
+          <td style="font-weight:600;font-size:.88em;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="{{ art.title }}">{{ art.title }}</td>
+          <td class="mono" style="font-size:.8em;color:var(--cyan)">{{ art.control_id or '—' }}</td>
+          <td style="font-size:.82em;color:var(--muted)">{{ (art.artifact_type or 'other') | replace('_',' ') | title }}</td>
+          <td style="font-size:.82em;color:var(--muted)">{{ art.source or '—' }}</td>
+          <td class="mono" style="font-size:.78em;color:var(--muted);white-space:nowrap">
+            {{ art.collected_at.strftime('%Y-%m-%d') if art.collected_at else '—' }}
+          </td>
+          <td class="{{ freshness_cls }}" style="font-size:.8em;font-weight:600;white-space:nowrap">
+            {{ freshness_label }}
+          </td>
+          <td style="font-size:.82em;color:var(--muted)">{{ art.owner or '—' }}</td>
+          <td><span class="ap-{{ ap }}">{{ ap | title }}</span></td>
+          <td style="white-space:nowrap">
+            {% if art.file_path %}
+            <a href="/systems/{{ system.id }}/artifacts/{{ art.id }}/download"
+               class="btn btn-ghost btn-sm" style="color:var(--cyan)">↓</a>
+            {% endif %}
+            {% if ap == 'pending' %}
+            <form method="post" action="/systems/{{ system.id }}/artifacts/{{ art.id }}/approve"
+                  style="display:inline">
+              <input type="hidden" name="decision" value="approved">
+              <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--green)">✓</button>
+            </form>
+            <form method="post" action="/systems/{{ system.id }}/artifacts/{{ art.id }}/approve"
+                  style="display:inline">
+              <input type="hidden" name="decision" value="rejected">
+              <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--red)">✗</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card" style="padding:48px;text-align:center;margin-bottom:24px">
+  <div style="color:#1e1e30;font-size:1.8em;font-family:var(--mono);margin-bottom:10px">[ ]</div>
+  <div class="text-muted" style="font-size:.88em">No evidence artifacts recorded yet.</div>
+</div>
+{% endif %}
+
+{# Add Artifact form #}
+<div class="add-artifact-card">
+  <div class="section-header">Add Evidence Artifact</div>
+  <form method="post" action="/systems/{{ system.id }}/artifacts" enctype="multipart/form-data">
+    <div class="af-grid" style="margin-bottom:12px">
+      <div>
+        <label class="form-label">Title <span style="color:var(--red)">*</span></label>
+        <input type="text" name="title" class="form-control" required placeholder="Artifact title">
+      </div>
+      <div>
+        <label class="form-label">Control ID</label>
+        <input type="text" name="control_id" class="form-control" placeholder="e.g. ac-2">
+      </div>
+      <div>
+        <label class="form-label">Type</label>
+        <select name="artifact_type" class="form-control">
+          {% for t in ['screenshot','log','config','policy','report','scan_result','other'] %}
+          <option value="{{ t }}">{{ t | replace('_',' ') | title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Source</label>
+        <input type="text" name="source" class="form-control" placeholder="e.g. Nessus scan, manual">
+      </div>
+      <div>
+        <label class="form-label">Owner</label>
+        <input type="text" name="owner" class="form-control" placeholder="username">
+      </div>
+      <div>
+        <label class="form-label">Freshness (days)</label>
+        <input type="number" name="freshness_days" class="form-control" value="365" min="1" max="3650">
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <label class="form-label">Description</label>
+      <textarea name="description" class="form-control" style="min-height:60px;resize:vertical"
+                placeholder="What does this artifact demonstrate?"></textarea>
+    </div>
+    <div style="margin-bottom:16px">
+      <label class="form-label">File Upload <span style="color:var(--muted);font-weight:400">(SHA-256 integrity hash computed automatically)</span></label>
+      <input type="file" name="file" class="form-control">
+    </div>
+    <button type="submit" class="btn btn-primary">Upload &amp; Record Artifact</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% from 'macros.html' import paginate %}
+{% block title %}{{ app_name }} — Observation Inbox{% endblock %}
+
+{% block head %}
+<style>
+  .obs-filter-bar {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;
+    margin-bottom: 18px;
+  }
+  .obs-filter-bar select, .obs-filter-bar input {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 5px; padding: 7px 10px; font-size: 0.83em;
+    color: var(--text); font-family: var(--sans);
+  }
+  .sev-critical { background: rgba(244,67,54,0.15);  color: var(--red);    border-radius:3px; padding:2px 7px; font-size:.72em; font-weight:700; letter-spacing:.5px; }
+  .sev-high     { background: rgba(255,107,53,0.15); color: #ff6b35;       border-radius:3px; padding:2px 7px; font-size:.72em; font-weight:700; }
+  .sev-moderate { background: rgba(255,179,0,0.15);  color: var(--yellow); border-radius:3px; padding:2px 7px; font-size:.72em; font-weight:700; }
+  .sev-low      { background: rgba(0,200,83,0.15);   color: var(--green);  border-radius:3px; padding:2px 7px; font-size:.72em; font-weight:700; }
+  .sev-info     { background: rgba(158,158,158,0.1); color: var(--grey);   border-radius:3px; padding:2px 7px; font-size:.72em; font-weight:700; }
+  .st-open          { background: rgba(158,158,158,0.1); color: var(--grey);   border-radius:3px; padding:2px 7px; font-size:.72em; font-weight:700; }
+  .st-promoted      { background: rgba(0,255,204,0.1);   color: var(--cyan);   border-radius:3px; padding:2px 7px; font-size:.72em; font-weight:700; }
+  .st-closed        { background: rgba(0,200,83,0.15);   color: var(--green);  border-radius:3px; padding:2px 7px; font-size:.72em; font-weight:700; }
+  .st-false_positive{ background: rgba(136,136,136,0.1); color: var(--muted);  border-radius:3px; padding:2px 7px; font-size:.72em; font-weight:700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:22px">
+  <div>
+    <h1 style="margin:0">Observation Inbox</h1>
+    <p class="text-muted" style="font-size:0.84em;margin-top:4px">
+      Findings from assessments, scans, and manual review — pre-POA&amp;M staging.
+    </p>
+  </div>
+  <a href="/observations/new" class="btn btn-primary">+ New Observation</a>
+</div>
+
+{# Filter bar #}
+<form method="get" action="/observations" class="obs-filter-bar">
+  <div style="display:flex;flex-direction:column;gap:3px">
+    <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">System</label>
+    <select name="system_id">
+      <option value="">All Systems</option>
+      {% for s in systems %}
+      <option value="{{ s.id }}" {% if filter_system_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:3px">
+    <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Severity</label>
+    <select name="severity">
+      <option value="">All</option>
+      {% for sv in ['Critical','High','Moderate','Low','Info'] %}
+      <option value="{{ sv }}" {% if filter_severity == sv %}selected{% endif %}>{{ sv }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:3px">
+    <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Source</label>
+    <select name="source">
+      <option value="">All</option>
+      {% for src in ['assessment','scan','audit','pentest','self_report','threat_intel'] %}
+      <option value="{{ src }}" {% if filter_source == src %}selected{% endif %}>{{ src | replace('_',' ') | title }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:3px">
+    <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Status</label>
+    <select name="status">
+      <option value="">All</option>
+      {% for st in ['open','promoted','closed','false_positive'] %}
+      <option value="{{ st }}" {% if filter_status == st %}selected{% endif %}>{{ st | replace('_',' ') | title }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn btn-ghost btn-sm" style="align-self:flex-end">Filter</button>
+  <a href="/observations" class="btn btn-ghost btn-sm" style="align-self:flex-end;color:var(--muted)">Clear</a>
+</form>
+
+{% if observations %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table>
+    <thead>
+      <tr>
+        <th style="width:32px">#</th>
+        <th>Title</th>
+        <th>System</th>
+        <th>Source</th>
+        <th>Severity</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for obs in observations %}
+      {% set sev = (obs.severity or 'Info') | lower %}
+      {% set st  = (obs.status or 'open') | replace('-','_') %}
+      <tr>
+        <td style="color:var(--muted);font-size:.75em;font-family:var(--mono)">{{ loop.index }}</td>
+        <td style="max-width:260px">
+          <a href="/observations/{{ obs.id }}"
+             style="font-weight:600;font-size:.88em;color:var(--text);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+             title="{{ obs.title }}">{{ obs.title }}</a>
+        </td>
+        <td style="font-size:.82em;color:var(--muted)">{{ sys_map.get(obs.system_id, '—') }}</td>
+        <td style="font-size:.82em;color:var(--muted)">{{ (obs.source or '—') | replace('_',' ') | title }}</td>
+        <td><span class="sev-{{ sev if sev in ['critical','high','moderate','low','info'] else 'info' }}">{{ obs.severity or 'Info' }}</span></td>
+        <td><span class="st-{{ st }}">{{ st | replace('_',' ') | title }}</span></td>
+        <td class="mono" style="font-size:.78em;color:var(--muted);white-space:nowrap">
+          {{ obs.created_at.strftime('%Y-%m-%d') if obs.created_at else '—' }}
+        </td>
+        <td style="white-space:nowrap">
+          <a href="/observations/{{ obs.id }}" class="btn btn-ghost btn-sm">View</a>
+          {% if obs.status == 'open' %}
+          <form method="post" action="/observations/{{ obs.id }}/promote" style="display:inline"
+                onsubmit="return confirm('Promote this observation to a POA&M item?')">
+            <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--cyan);border-color:var(--cyan)">Promote</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="padding:64px;text-align:center">
+  <div style="color:#1e1e30;font-size:2em;font-family:var(--mono);margin-bottom:12px">[ ]</div>
+  <div class="text-muted" style="font-size:.88em">No observations.
+    Findings from assessments, scans, and manual review appear here.</div>
+  <a href="/observations/new" class="btn btn-primary btn-sm" style="margin-top:16px;display:inline-block">+ Create First Observation</a>
+</div>
+{% endif %}
+{% if observations %}
+{% set obs_params = "system_id=" ~ filter_system_id ~ "&severity=" ~ filter_severity ~ "&source=" ~ filter_source ~ "&status=" ~ filter_status %}
+{{ paginate(page, total_pages, per_page, "/observations", obs_params) }}
+{% endif %}
+{% endblock %}

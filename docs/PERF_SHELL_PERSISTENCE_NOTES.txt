@@ -1,0 +1,165 @@
+PERF_SHELL_PERSISTENCE_NOTES.txt
+BLACKSITE — Sidebar + Advisory Ticker Navigation Persistence
+Root Cause, Fix, and Verification Notes
+Generated: 2026-03-01  (LIST4-ITEM4)
+=============================================================
+
+CONTEXT
+-------
+BLACKSITE uses HTMX 1.9.12 with hx-boost="true" on the <body> tag.
+hx-boost intercepts standard <a> clicks and performs partial page swaps:
+  hx-target="#main-content"   — only the main content div is replaced
+  hx-select="#main-content"   — only #main-content from the server response is used
+  hx-push-url="true"          — URL bar updates to reflect new route
+
+The left sidebar (<aside>) and top navigation bar are NOT inside #main-content.
+They persist in the DOM across all HTMX-boosted navigations.
+
+
+ISSUE 1 — Advisory Ticker Re-Fetching on Navigation
+-----------------------------------------------------
+Symptom:
+  Each page change caused the advisory ticker to re-fetch /api/feeds,
+  re-build the marquee HTML, and re-trigger the CSS marquee animation.
+  This caused visible flicker/restart of the scrolling ticker on every click.
+
+Root Cause:
+  initSbAdvisory() was called from both DOMContentLoaded and potentially from
+  htmx:afterSettle (if a re-init guard was added incorrectly).  More importantly,
+  no TTL cache existed — every call to the function would fetch fresh data and
+  rebuild innerHTML even if the advisory had been populated seconds earlier.
+
+  Because the sidebar advisory div is outside #main-content, its DOM node
+  persists — but this meant the JS "rebuild" code would inject duplicate HTML
+  into an already-populated element if called again.
+
+Fix:
+  1. Added module-level cache variables in base.html <script>:
+       var _bsvAdvFetchedAt = 0;      // Unix ms timestamp of last fetch
+       var _bsvAdvCached    = null;   // Cached marquee HTML string ('' = no items)
+
+  2. initSbAdvisory() guard logic at entry:
+       var now = Date.now();
+       if (_bsvAdvCached !== null && (now - _bsvAdvFetchedAt) < 900000) {
+         // Within 15-minute TTL
+         if (_bsvAdvCached === '') { box.style.display = 'none'; return; }
+         if (!inner.getAttribute('data-adv-loaded')) {
+           inner.innerHTML = _bsvAdvCached;
+           inner.setAttribute('data-adv-loaded', '1');
+         }
+         return;  // Skip fetch entirely
+       }
+
+  3. After successful fetch and render, cache the marquee HTML:
+       _bsvAdvCached    = loopHtml;
+       _bsvAdvFetchedAt = Date.now();
+
+  Effect: First page load fetches + renders normally. All subsequent navigation
+  within 15 minutes reads from memory cache, skips fetch, and skips re-render
+  if the inner element already has data-adv-loaded set.
+
+
+ISSUE 2 — Quiz Widget Re-Initialising on Navigation
+-----------------------------------------------------
+Symptom:
+  The sidebar quiz widget (compliance quiz card) could re-initialise on
+  navigation, potentially resetting state or causing double-event-binding.
+
+Root Cause:
+  initSbQuiz() had no guard against multiple invocations.
+
+Fix:
+  Added module-level flag:
+    var _bsvQuizReady = false;
+  initSbQuiz() returns immediately if _bsvQuizReady is already true:
+    async function initSbQuiz() {
+      if (_bsvQuizReady) return;
+      ...
+      _bsvQuizReady = true;
+    }
+
+
+ISSUE 3 — Sidebar Active Link Not Updating After Navigation
+------------------------------------------------------------
+Symptom:
+  After HTMX navigation, the active/highlighted sidebar link did not change.
+  The sidebar is server-rendered with active classes based on the route at
+  initial page load; since it's outside #main-content, it isn't re-rendered
+  on partial swaps.
+
+Root Cause:
+  No client-side code updated .active state after htmx:afterSettle.
+  The server-rendered active class for the previous route persisted.
+
+Fix:
+  Added _updateSbActiveLink() function:
+
+    function _updateSbActiveLink() {
+      var p = window.location.pathname;
+      document.querySelectorAll('.sb-link').forEach(function(a) {
+        var href = a.getAttribute('href') || '';
+        var isActive =
+          href === p ||
+          (href.length > 1 && p.startsWith(href + '/')) ||
+          (href.length > 1 && p === href);
+        a.classList.toggle('active', isActive);
+        a.style.outline = isActive ? '2px solid var(--cyan)' : '';
+      });
+    }
+
+  Matching logic:
+    - Exact match: href === pathname
+    - Prefix match: pathname starts with href + "/" (handles sub-routes)
+    - href.length > 1 guard prevents "/" from matching every path
+
+  Called from htmx:afterSettle listener:
+    document.body.addEventListener('htmx:afterSettle', function() {
+      _updateSbActiveLink();
+      // also re-runs observation badge fetch
+      (function() { fetch('/api/observations/summary')... })();
+    });
+
+
+ISSUE 4 — Observation Badge Not Refreshing After Navigation
+-----------------------------------------------------------
+Symptom:
+  Unread observation count badge in sidebar didn't update when navigating
+  to pages that might affect the count (e.g. after viewing observations).
+
+Fix:
+  Re-runs the observation summary fetch inside the htmx:afterSettle listener
+  (same listener as _updateSbActiveLink above). The fetch updates the badge
+  innerHTML on each partial page swap.
+
+
+VERIFICATION
+------------
+Test procedure:
+  1. Log in as any user. Navigate to /dashboard.
+  2. Note advisory ticker state (items loaded, marquee running).
+  3. Click Systems in sidebar → HTMX swap to /systems.
+     Expected: ticker unchanged, active link updates to Systems.
+  4. Click POAM in sidebar → swap to /poam.
+     Expected: ticker still not refetching (same session, within TTL).
+  5. Click Advisories → swap to /advisories.
+     Expected: no duplicate advisory fetch in Network tab.
+  6. Open DevTools Network tab. Filter by "api/feeds".
+     Expected: only 1 request visible over 15 minutes of navigation.
+  7. After 15+ minutes: navigate to any page.
+     Expected: new /api/feeds request fires, ticker refreshes.
+
+Results (2026-03-01 session):
+  Advisory ticker persists across navigation ✓
+  Active link updates correctly on each swap ✓
+  Observation badge refreshes on each navigation ✓
+  Quiz widget does not re-initialise (no double event binding) ✓
+  Only 1 /api/feeds request per 15-minute window ✓
+
+
+FILES CHANGED
+-------------
+templates/base.html:
+  - var _bsvQuizReady = false guard in initSbQuiz()
+  - var _bsvAdvFetchedAt, _bsvAdvCached cache vars + guard in initSbAdvisory()
+  - _updateSbActiveLink() function (new)
+  - htmx:afterSettle listener: calls _updateSbActiveLink() + observation badge re-fetch

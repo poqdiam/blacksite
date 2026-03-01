@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="{{ user_theme | default('midnight') }}">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -29,6 +29,135 @@
       --sidebar-active:   rgba(0,255,204,0.08);
       --sidebar-hover:    rgba(255,255,255,0.04);
     }
+    /* ── Colour palettes ─────────────────────────────────────── */
+    /* midnight = default (defined in :root above) */
+    html[data-theme="obsidian"] {
+      --bg:#08050f; --surface:#100c1c; --card:#160f26; --border:#25183c;
+      --text:#dcd8f2; --muted:#7e78a0; --cyan:#b08cff; --gold:#e8c060;
+      --sidebar-bg:#0d0919; --sidebar-border:#1e1430;
+      --sidebar-active:rgba(176,140,255,0.1); --sidebar-hover:rgba(255,255,255,0.04);
+    }
+    html[data-theme="void"] {
+      --bg:#030508; --surface:#080d14; --card:#0d1220; --border:#141e30;
+      --text:#c8d4e8; --muted:#5878a0; --cyan:#00c8ff; --gold:#ffc060;
+      --sidebar-bg:#060910; --sidebar-border:#101820;
+      --sidebar-active:rgba(0,200,255,0.1); --sidebar-hover:rgba(255,255,255,0.04);
+    }
+    html[data-theme="ember"] {
+      --bg:#0c0600; --surface:#180e00; --card:#201200; --border:#351e00;
+      --text:#f0d8c0; --muted:#907060; --cyan:#ff8c1a; --gold:#ffd060;
+      --sidebar-bg:#100800; --sidebar-border:#281400;
+      --sidebar-active:rgba(255,140,26,0.1); --sidebar-hover:rgba(255,255,255,0.04);
+    }
+    html[data-theme="pine"] {
+      --bg:#020c06; --surface:#081810; --card:#0c2016; --border:#153020;
+      --text:#c8ecd8; --muted:#507860; --cyan:#00e870; --gold:#d0e040;
+      --sidebar-bg:#040e08; --sidebar-border:#0e2018;
+      --sidebar-active:rgba(0,232,112,0.1); --sidebar-hover:rgba(255,255,255,0.04);
+    }
+    html[data-theme="steel"] {
+      --bg:#04080f; --surface:#0a1020; --card:#0e1628; --border:#182540;
+      --text:#d0dff4; --muted:#608090; --cyan:#4da6ff; --gold:#ffc040;
+      --sidebar-bg:#060c18; --sidebar-border:#10203a;
+      --sidebar-active:rgba(77,166,255,0.1); --sidebar-hover:rgba(255,255,255,0.04);
+    }
+    html[data-theme="arctic"] {
+      --bg:#eef3f8; --surface:#dce8f0; --card:#f4f8fc; --border:#c0d0e0;
+      --text:#1a2840; --muted:#506070; --cyan:#0064cc; --gold:#c07000;
+      --red:#c41010; --green:#006820; --yellow:#886000;
+      --sidebar-bg:#d4e4f0; --sidebar-border:#b0c8dc;
+      --sidebar-active:rgba(0,100,204,0.1); --sidebar-hover:rgba(0,0,0,0.05);
+    }
+    html[data-theme="parchment"] {
+      --bg:#f4ede0; --surface:#e8dcc8; --card:#f8f2e6; --border:#d0c0a0;
+      --text:#2a1f10; --muted:#806040; --cyan:#c05000; --gold:#905000;
+      --red:#b01010; --green:#406820; --yellow:#806000;
+      --sidebar-bg:#e0d0b8; --sidebar-border:#c8b090;
+      --sidebar-active:rgba(192,80,0,0.1); --sidebar-hover:rgba(0,0,0,0.05);
+    }
+    /* ── Phase 22: 6 New Themes ────────────────────────────────────────────── */
+    html[data-theme="terminal"] {
+      --bg:#000000; --surface:#080808; --card:#0d0d0d; --border:#1a2e1a;
+      --text:#00ff41; --muted:#287a28; --cyan:#00ff41; --gold:#aaff00;
+      --red:#ff2200; --green:#00ff41; --yellow:#ccff00;
+      --sidebar-bg:#030803; --sidebar-border:#0f1f0f;
+      --sidebar-active:rgba(0,255,65,0.1); --sidebar-hover:rgba(0,255,65,0.05);
+      font-family:'Courier New',Courier,monospace !important;
+    }
+    html[data-theme="terminal"] * { font-family:'Courier New',Courier,monospace !important; }
+    html[data-theme="terminal"] body {
+      background-image: repeating-linear-gradient(
+        0deg, rgba(0,255,65,0.015) 0px, rgba(0,255,65,0.015) 1px, transparent 1px, transparent 3px
+      );
+      background-size: 100% 3px;
+    }
+    html[data-theme="synthwave"] {
+      --bg:#0a0014; --surface:#120025; --card:#180035; --border:#330066;
+      --text:#f0e0ff; --muted:#8040a0; --cyan:#ff00ff; --gold:#00ffff;
+      --red:#ff2266; --green:#00ff88; --yellow:#ffff00;
+      --sidebar-bg:#0c0018; --sidebar-border:#28004a;
+      --sidebar-active:rgba(255,0,255,0.1); --sidebar-hover:rgba(255,0,255,0.04);
+    }
+    html[data-theme="synthwave"] body {
+      background-image:
+        linear-gradient(rgba(255,0,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,255,255,0.02) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    html[data-theme="crimson"] {
+      --bg:#0a0000; --surface:#140003; --card:#1c0005; --border:#3d0010;
+      --text:#f2d8dc; --muted:#8a4050; --cyan:#ff2244; --gold:#ff8800;
+      --red:#ff4466; --green:#44ff88; --yellow:#ffaa00;
+      --sidebar-bg:#0c0002; --sidebar-border:#2e0008;
+      --sidebar-active:rgba(255,34,68,0.1); --sidebar-hover:rgba(255,255,255,0.04);
+    }
+    html[data-theme="ocean"] {
+      --bg:#010810; --surface:#041828; --card:#072038; --border:#0e3858;
+      --text:#c0dff5; --muted:#4880b0; --cyan:#00e5ff; --gold:#40b8ff;
+      --red:#ff4466; --green:#00ffcc; --yellow:#80ddff;
+      --sidebar-bg:#030e18; --sidebar-border:#0c2840;
+      --sidebar-active:rgba(0,229,255,0.1); --sidebar-hover:rgba(0,229,255,0.04);
+    }
+    html[data-theme="ocean"] body {
+      background-image: radial-gradient(ellipse at 20% 50%, rgba(0,80,160,0.06) 0%, transparent 60%),
+        radial-gradient(circle, rgba(0,200,255,0.015) 1px, transparent 1px);
+      background-size: 100% 100%, 32px 32px;
+    }
+    html[data-theme="amber"] {
+      --bg:#0a0600; --surface:#140c00; --card:#1c1200; --border:#3a2800;
+      --text:#ffcc66; --muted:#a07030; --cyan:#ffb300; --gold:#ff8c00;
+      --red:#ff4400; --green:#aacc00; --yellow:#ffcc00;
+      --sidebar-bg:#0c0800; --sidebar-border:#2a1c00;
+      --sidebar-active:rgba(255,179,0,0.12); --sidebar-hover:rgba(255,179,0,0.05);
+    }
+    html[data-theme="amber"] body {
+      background-image: radial-gradient(circle, rgba(255,179,0,0.025) 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+    html[data-theme="noir"] {
+      --bg:#000000; --surface:#0d0d0d; --card:#141414; --border:#2a2a2a;
+      --text:#e8e8e8; --muted:#666666; --cyan:#ffffff; --gold:#cccccc;
+      --red:#ff4444; --green:#88ff88; --yellow:#ffff88;
+      --sidebar-bg:#060606; --sidebar-border:#1e1e1e;
+      --sidebar-active:rgba(255,255,255,0.08); --sidebar-hover:rgba(255,255,255,0.04);
+    }
+    html[data-theme="noir"] body {
+      background-image: none;
+    }
+    /* Light-theme overrides for elements with hardcoded dark colors */
+    html[data-theme="arctic"] body,
+    html[data-theme="parchment"] body {
+      background-image: radial-gradient(circle, rgba(0,0,0,0.04) 1px, transparent 1px);
+    }
+    html[data-theme="arctic"] .topbar,
+    html[data-theme="parchment"] .topbar {
+      background: var(--card); border-color: var(--border);
+    }
+    html[data-theme="arctic"] aside,
+    html[data-theme="parchment"] aside {
+      background: var(--sidebar-bg); border-color: var(--sidebar-border);
+    }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
     body {
@@ -138,7 +267,7 @@
       height: 28px;
       cursor: default;
     }
-    .sb-quiz-icon.pending { color: var(--cyan); animation: sb-quiz-pulse 2.4s ease-in-out infinite; }
+    .sb-quiz-icon.pending { color: var(--cyan); }
     .sb-advisory-icon {
       display: none;
       font-size: 1em;
@@ -274,9 +403,7 @@
     .sb-quiz-done-fail { color: var(--yellow); font-weight: 700; }
     .sb-quiz-pending {
       color: var(--cyan); font-weight: 700; text-decoration: none;
-      animation: sb-quiz-pulse 2.4s ease-in-out infinite;
     }
-    @keyframes sb-quiz-pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
 
     /* ── Sidebar advisory feed ─────────────────────── */
     .sb-advisory {
@@ -766,9 +893,24 @@
       #main-wrapper { margin-left: 0 !important; padding-top: 0 !important; }
     }
   </style>
+  {% if is_admin and chat_enabled %}
+  <link rel="stylesheet" href="/static/admin-chat.css">
+  {% endif %}
   {% block head %}{% endblock %}
+  {# H5: HTMX for nav-swap (main content only; sidebar/topbar remain stable) #}
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"
+          integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2uFgteaCF7KM2/2T6n5vw5F7QoS04cxTW2"
+          crossorigin="anonymous" defer></script>
 </head>
-<body{% if is_role_view|default(false) %} class="has-role-banner"{% endif %}>
+<body{% if is_role_view|default(false) %} class="has-role-banner"{% endif %}
+  style="--ui-font-size:{{ pref_font_size|default('14px') }};--ui-density:{% if pref_density|default('comfortable') == 'compact' %}0.85{% elif pref_density|default('comfortable') == 'spacious' %}1.15{% else %}1{% endif %}"
+  hx-boost="true"
+  hx-target="#main-content"
+  hx-select="#main-content"
+  hx-push-url="true"
+  hx-indicator="#hx-indicator"
+  hx-on:htmx:before-request="sessionStorage.setItem('bsv-sb-scroll', document.getElementById('sidebar')?.scrollTop || 0)"
+  hx-on:htmx:after-settle="(function(){var sb=document.getElementById('sidebar');if(sb){sb.scrollTop=parseInt(sessionStorage.getItem('bsv-sb-scroll')||'0',10);}if(typeof initPage==='function')initPage();})()">
 
 {# ── Role Shell banner — fixed above topbar, role-colored ─────────────────── #}
 {% if is_role_view|default(false) %}
@@ -789,9 +931,22 @@
 } %}
 {% set _rc = _role_colors.get(user_role|default('employee'), ('#9e9e9e','rgba(158,158,158,0.15)')) %}
 <div class="role-banner"
-     style="color:{{ _rc[0] }};background:{{ _rc[1] }};border-bottom:2px solid {{ _rc[0] }}">
-  <span>⬡ VIEWING AS {{ user_role | upper }}</span>
+     style="color:{{ _rc[0] }};background:var(--surface);border-bottom:2px solid {{ _rc[0] }};border-left:4px solid {{ _rc[0] }}">
+  <span>⬡ WORKING AS {{ user_role | replace('_',' ') | upper }}</span>
   <a href="/exit-shell" style="color:{{ _rc[0] }};text-decoration:none;opacity:0.85">← Reset Role</a>
+</div>
+{% endif %}
+
+{# ── View-As banner (manager viewing employee workspace) ──────────────────── #}
+{% if is_view_as %}
+<div style="position:fixed;top:{% if is_role_view %}var(--role-banner-h){% else %}0{% endif %};
+            left:0;right:0;height:var(--role-banner-h);
+            background:rgba(118,255,3,0.10);border-bottom:1px solid rgba(118,255,3,0.3);
+            display:flex;align-items:center;justify-content:center;gap:14px;
+            font-size:0.72em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+            color:#76ff03;z-index:{% if is_role_view %}399{% else %}400{% endif %}">
+  <span>👤 VIEWING {{ viewed_user | upper }} WORKSPACE</span>
+  <a href="/exit-view-as" style="color:#76ff03;opacity:0.75;text-decoration:none;font-size:0.9em">← Exit View</a>
 </div>
 {% endif %}
 
@@ -827,6 +982,33 @@
     </div>
   </form>
 
+  {# Notification bell #}
+  {% if remote_user %}
+  <a href="/notifications" id="nav-bell"
+     style="position:relative;display:flex;align-items:center;justify-content:center;
+            width:34px;height:34px;border-radius:50%;text-decoration:none;flex-shrink:0;
+            color:var(--muted);transition:color 0.15s;border:1px solid transparent"
+     title="Notifications"
+     onmouseover="this.style.borderColor='var(--border)';this.style.color='var(--text)'"
+     onmouseout="this.style.borderColor='transparent';this.style.color='var(--muted)'">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+      <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+    </svg>
+    {% if unread_notifications and unread_notifications > 0 %}
+    <span style="position:absolute;top:1px;right:1px;
+                 background:var(--red);color:#fff;font-family:var(--mono);
+                 font-size:0.58em;font-weight:700;
+                 min-width:14px;height:14px;border-radius:7px;
+                 display:flex;align-items:center;justify-content:center;
+                 padding:0 3px;line-height:1;pointer-events:none">
+      {{ unread_notifications if unread_notifications <= 99 else '99+' }}
+    </span>
+    {% endif %}
+  </a>
+  {% endif %}
+
   {# User menu #}
   {% if remote_user %}
   <details class="nav-user-menu">
@@ -860,48 +1042,30 @@
         </div>
       </div>
 
-      <div class="nav-dd-section">Personal</div>
+      <div class="nav-dd-section">Identity</div>
       <a href="/profile">My Profile</a>
+      <a href="/profile/feeds">My Feeds</a>
       {% if is_admin and view_mode == 'admin' %}
         <a href="/admin">Admin Dashboard</a>
-        <a href="/upload">Upload SSP</a>
       {% else %}
         <a href="/dashboard">My Dashboard</a>
       {% endif %}
 
-      <div class="nav-dd-divider"></div>
-
-      <div class="nav-dd-section">GRC</div>
-      <a href="/systems">System Catalog</a>
-      <a href="/controls">Control Catalog</a>
-      <a href="/poam">POA&amp;M Tracker</a>
-      <a href="/risks">Risk Register</a>
-      <a href="/rmf">RMF Lifecycle</a>
-      <a href="/submissions">Submissions</a>
-
       {% if is_admin and not is_role_view|default(false) %}
       <div class="nav-dd-divider"></div>
-      <div class="nav-dd-section">Admin</div>
+      <div class="nav-dd-section">Admin Tools</div>
+      <a href="/admin/system-settings">System Management</a>
       <a href="/admin/users">User Management</a>
       <a href="/admin/audit">Audit Log</a>
       <a href="/admin/siem">SIEM</a>
+      <a href="/admin/ssp">SSP Analyzer</a>
+      <a href="/admin/feeds">Feed Sources</a>
+      <a href="/admin/ingest">Data Ingestion</a>
+      <a href="/admin/autofail">Auto-Fail Monitor</a>
 
-      {% if employees %}
-      {% set real_employees = employees | selectattr("username") | list %}
-      {% if real_employees %}
-      <div class="nav-dd-viewas">
-        <select onchange="if(this.value) window.location='/admin/view-as/'+this.value">
-          <option value="">View Dashboard As…</option>
-          {% for emp in real_employees %}
-          <option value="{{ emp.username }}">{{ emp.name or emp.username }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      {% endif %}
-      {% endif %}
       {% elif is_admin and is_role_view|default(false) %}
       <div class="nav-dd-divider"></div>
-      <div class="nav-dd-section">Admin</div>
+      <div class="nav-dd-section">Admin Tools</div>
       <a href="/admin">Admin Dashboard</a>
       {% endif %}
 
@@ -931,15 +1095,10 @@
           {% endfor %}
         </select>
       </div>
-      {% if is_role_view|default(false) %}
-      <a href="/exit-shell" style="color:#ff8c42;font-weight:700;padding:2px 14px;display:block;font-size:0.85em">
-        ← Reset to {{ _actual_r | upper }}
-      </a>
-      {% endif %}
       {% endif %}
 
       <div class="nav-dd-divider"></div>
-      <a href="/logout" class="signout">Sign Out →</a>
+      <a href="/logout" class="signout" hx-boost="false">Sign Out →</a>
     </div>
   </details>
   {% endif %}
@@ -1022,16 +1181,6 @@
     </div>
 
     <div class="sb-group">
-      <div class="sb-group-label">Assessment</div>
-      <a href="/upload" class="sb-link{% if p == '/upload' %} active{% endif %}">
-        <span class="sb-icon">↑</span><span class="sb-text">Upload SSP</span>
-      </a>
-      <a href="/admin" class="sb-link{% if p.startswith('/admin') and not p.startswith('/admin/audit') and not p.startswith('/admin/users') %} active{% endif %}">
-        <span class="sb-icon">⊙</span><span class="sb-text">Assessments</span>
-      </a>
-    </div>
-
-    <div class="sb-group">
       <div class="sb-group-label">Administration</div>
       <a href="/admin/users" class="sb-link{% if p.startswith('/admin/users') %} active{% endif %}">
         <span class="sb-icon">◉</span><span class="sb-text">User Management</span>
@@ -1085,7 +1234,56 @@
     <div class="sb-group">
       <div class="sb-group-label">Reports</div>
       <a href="/reports" class="sb-link{% if p.startswith('/reports') %} active{% endif %}">
-        <span class="sb-icon">↓</span><span class="sb-text">Reports Center</span>
+        <span class="sb-icon">↓</span><span class="sb-text">Reports</span>
+      </a>
+    </div>
+
+    {% elif role == 'ciso' %}
+    {# ── CISO NAV (Chief Information Security Officer) ── #}
+    <div class="sb-group">
+      <div class="sb-group-label">Overview</div>
+      <a href="/ciso/dashboard" class="sb-link{% if p.startswith('/ciso') %} active{% endif %}">
+        <span class="sb-icon">◈</span><span class="sb-text">CISO Dashboard</span>
+      </a>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-label">Security Posture</div>
+      <a href="/posture" class="sb-link{% if p == '/posture' %} active{% endif %}">
+        <span class="sb-icon">⊙</span><span class="sb-text">Compliance Posture</span>
+      </a>
+      <a href="/systems" class="sb-link{% if p.startswith('/systems') %} active{% endif %}">
+        <span class="sb-icon">⊟</span><span class="sb-text">System Catalog</span>
+      </a>
+      <a href="/risks" class="sb-link{% if p.startswith('/risks') %} active{% endif %}">
+        <span class="sb-icon">⚠</span><span class="sb-text">Risk Register</span>
+      </a>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-label">Authorization</div>
+      <a href="/ato" class="sb-link{% if p.startswith('/ato') %} active{% endif %}">
+        <span class="sb-icon">⊙</span><span class="sb-text">ATO Package</span>
+      </a>
+      <a href="/rmf" class="sb-link{% if p.startswith('/rmf') %} active{% endif %}">
+        <span class="sb-icon">⟳</span><span class="sb-text">RMF Workflow</span>
+      </a>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-label">Operations</div>
+      <a href="/poam" class="sb-link{% if p.startswith('/poam') %} active{% endif %}">
+        <span class="sb-icon">⊡</span><span class="sb-text">POA&amp;M</span>
+      </a>
+      <a href="/observations" class="sb-link{% if p.startswith('/observations') %} active{% endif %}">
+        <span class="sb-icon">⚐</span><span class="sb-text">Observations</span>
+      </a>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-label">Reports</div>
+      <a href="/reports" class="sb-link{% if p.startswith('/reports') %} active{% endif %}">
+        <span class="sb-icon">↓</span><span class="sb-text">Reports</span>
       </a>
     </div>
 
@@ -1187,7 +1385,7 @@
     <div class="sb-group">
       <div class="sb-group-label">Reports</div>
       <a href="/posture" class="sb-link{% if p == '/posture' %} active{% endif %}">
-        <span class="sb-icon">◈</span><span class="sb-text">Posture</span>
+        <span class="sb-icon">◈</span><span class="sb-text">Compliance Posture</span>
       </a>
       <a href="/reports" class="sb-link{% if p.startswith('/reports') %} active{% endif %}">
         <span class="sb-icon">↓</span><span class="sb-text">Reports</span>
@@ -1212,7 +1410,7 @@
         <span class="sb-icon">↑</span><span class="sb-text">Upload SSP</span>
       </a>
       <a href="/controls" class="sb-link{% if p.startswith('/controls') %} active{% endif %}">
-        <span class="sb-icon">⊞</span><span class="sb-text">Control Edits</span>
+        <span class="sb-icon">⊞</span><span class="sb-text">Control Catalog</span>
       </a>
     </div>
 
@@ -1228,7 +1426,7 @@
         <span class="sb-icon">◈</span><span class="sb-text">Compliance Posture</span>
       </a>
       <a href="/reports" class="sb-link{% if p.startswith('/reports') %} active{% endif %}">
-        <span class="sb-icon">↓</span><span class="sb-text">Reports Center</span>
+        <span class="sb-icon">↓</span><span class="sb-text">Reports</span>
       </a>
     </div>
 
@@ -1260,15 +1458,15 @@
     <div class="sb-group">
       <div class="sb-group-label">Reports</div>
       <a href="/reports" class="sb-link{% if p.startswith('/reports') %} active{% endif %}">
-        <span class="sb-icon">↓</span><span class="sb-text">Reports Center</span>
+        <span class="sb-icon">↓</span><span class="sb-text">Reports</span>
       </a>
       <a href="/systems" class="sb-link{% if p.startswith('/systems') %} active{% endif %}">
         <span class="sb-icon">⊟</span><span class="sb-text">System Reports</span>
       </a>
-      <a href="/poam/export" class="sb-link{% if p == '/poam/export' %} active{% endif %}">
+      <a href="/poam/export" hx-boost="false" class="sb-link{% if p == '/poam/export' %} active{% endif %}">
         <span class="sb-icon">↓</span><span class="sb-text">POA&amp;M Export</span>
       </a>
-      <a href="/risks/export" class="sb-link{% if p == '/risks/export' %} active{% endif %}">
+      <a href="/risks/export" hx-boost="false" class="sb-link{% if p == '/risks/export' %} active{% endif %}">
         <span class="sb-icon">↓</span><span class="sb-text">Risk Export</span>
       </a>
     </div>
@@ -1297,7 +1495,7 @@
         <span class="sb-icon">⚑</span><span class="sb-text">POA&amp;M Tracker</span>
       </a>
       <a href="/posture" class="sb-link{% if p == '/posture' %} active{% endif %}">
-        <span class="sb-icon">◈</span><span class="sb-text">Posture</span>
+        <span class="sb-icon">◈</span><span class="sb-text">Compliance Posture</span>
       </a>
     </div>
 
@@ -1329,13 +1527,13 @@
     <div class="sb-group">
       <div class="sb-group-label">GRC</div>
       <a href="/rmf" class="sb-link{% if p.startswith('/rmf') %} active{% endif %}">
-        <span class="sb-icon">⟳</span><span class="sb-text">RMF Tracker</span>
+        <span class="sb-icon">⟳</span><span class="sb-text">RMF Workflow</span>
       </a>
       <a href="/poam" class="sb-link{% if p.startswith('/poam') %} active{% endif %}">
-        <span class="sb-icon">⚑</span><span class="sb-text">POA&amp;M</span>
+        <span class="sb-icon">⚑</span><span class="sb-text">POA&amp;M Tracker</span>
       </a>
       <a href="/risks" class="sb-link{% if p.startswith('/risks') %} active{% endif %}">
-        <span class="sb-icon">⚠</span><span class="sb-text">Risks</span>
+        <span class="sb-icon">⚠</span><span class="sb-text">Risk Register</span>
       </a>
       <a href="/ato" class="sb-link{% if p.startswith('/ato') %} active{% endif %}">
         <span class="sb-icon">⊕</span><span class="sb-text">ATO Package</span>
@@ -1401,6 +1599,35 @@
     </div>
     {% endif %}
 
+    {# ── Admin Chat (admin users only) ── #}
+    {% if is_admin and not is_role_view|default(false) %}
+    <div class="sb-group" id="sbAdminChatArea">
+      <div class="sb-group-label">
+        Admin Chat
+        <span id="sbChatConnDot" class="status-dot" style="background:#555"></span>
+      </div>
+      <div class="sb-link" id="sbGroupChatBtn" style="cursor:pointer">
+        <span class="sb-icon" style="font-size:0.9em">#</span>
+        <span class="sb-text">group</span>
+        <span class="unread-dot" id="unread-@group" style="display:none"></span>
+      </div>
+      <div id="sbChatUsers"></div>
+      <div style="padding:4px 12px 4px;display:flex;align-items:center;gap:6px">
+        <span class="status-dot status-online" id="myStatusDot"></span>
+        <select id="sbStatusToggle" style="background:transparent;border:none;
+                color:var(--muted);font-size:0.75em;cursor:pointer;outline:none;flex:1">
+          <option value="online">Online</option>
+          <option value="away">Away</option>
+        </select>
+      </div>
+      <div id="sbAwayMsgRow" style="display:none;padding:0 12px 6px">
+        <input id="sbAwayMsg" type="text" placeholder="Away message…"
+               style="width:100%;background:var(--surface);border:1px solid var(--border);
+                      border-radius:4px;padding:4px 8px;font-size:0.75em;color:var(--text)">
+      </div>
+    </div>
+    {% endif %}
+
     {# ── Help section (all roles) ── #}
     <div class="sb-group">
       <div class="sb-group-label">Help</div>
@@ -1442,12 +1669,16 @@
       <span class="sb-icon">◉</span>
       <span class="sb-text">{{ display_name or remote_user }}</span>
     </a>
+    <div class="sb-text" style="font-size:0.6em;color:var(--muted);margin-top:4px;padding:0 12px 4px;letter-spacing:0.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ app_name }} · {{ build_sha }} · {{ build_time }}">
+      {{ app_name }} · {{ build_sha }} · {{ build_time[:10] if build_time else '' }}
+    </div>
   </div>
 
   <div id="sb-resize-handle" class="sb-resize-handle" title="Drag to resize"></div>
 </aside>
 
-{# ── Main wrapper ─────────────────────────────────────────────────────────── #}
+{# ── Main wrapper — #main-content is the HTMX swap target ────────────────── #}
+<div id="main-content">
 <div id="main-wrapper">
   <div class="container page">
     {% block content %}{% endblock %}
@@ -1455,6 +1686,23 @@
 </div>
 
 {% block scripts %}{% endblock %}
+</div>{# end #main-content #}
+
+{# H5: HTMX loading indicator (slim progress bar) #}
+<div id="hx-indicator" style="
+  position:fixed;top:0;left:0;right:0;height:2px;z-index:9999;
+  background:linear-gradient(90deg,var(--cyan),var(--green));
+  opacity:0;transition:opacity 0.2s;pointer-events:none">
+</div>
+<style>
+  #hx-indicator.htmx-request { opacity:1; animation: hx-progress 1.5s infinite; }
+  @keyframes hx-progress {
+    0% { transform:scaleX(0); transform-origin:left; }
+    50% { transform:scaleX(0.7); transform-origin:left; }
+    100% { transform:scaleX(1); transform-origin:left; opacity:0; }
+  }
+  /* ITEM4: These links must NOT be HTMX-boosted — file downloads, logout, popups */
+</style>
 
 <script>
 // ── Sidebar toggle + width persist + resize handle ─────────────────────────────
@@ -1593,13 +1841,108 @@ document.addEventListener('DOMContentLoaded', initTicker);
   document.addEventListener('click', function(e){
     if (!e.target.closest('#nav-search-form')) sug.style.display='none';
   });
+
+  // Close user dropdown on outside click
+  document.addEventListener('click', function(e) {
+    const m = document.querySelector('.nav-user-menu');
+    if (m && m.open && !m.contains(e.target)) m.open = false;
+  });
+
+  // ── Theme switcher (Phase 22) ──────────────────────────────────────────────
+  (function() {
+    const THEMES = [
+      // name, label, swatch-bg, swatch-dot
+      ['midnight',  'Midnight',  '#060608', '#00ffcc'],
+      ['obsidian',  'Obsidian',  '#08050f', '#b08cff'],
+      ['void',      'Void',      '#030508', '#00c8ff'],
+      ['ember',     'Ember',     '#0c0600', '#ff8c1a'],
+      ['pine',      'Pine',      '#020c06', '#00e870'],
+      ['steel',     'Steel',     '#04080f', '#4da6ff'],
+      ['arctic',    'Arctic',    '#eef3f8', '#0064cc'],
+      ['parchment', 'Parchment', '#f4ede0', '#c05000'],
+      // Phase 22
+      ['terminal',  'Terminal',  '#000000', '#00ff41'],
+      ['synthwave', 'Synthwave', '#0a0014', '#ff00ff'],
+      ['crimson',   'Crimson',   '#0a0000', '#ff2244'],
+      ['ocean',     'Ocean',     '#010810', '#00e5ff'],
+      ['amber',     'Amber',     '#0a0600', '#ffb300'],
+      ['noir',      'Noir',      '#000000', '#ffffff'],
+    ];
+
+    const STORAGE_KEY = 'bsv-theme';
+
+    function applyTheme(name) {
+      document.documentElement.setAttribute('data-theme', name);
+      localStorage.setItem(STORAGE_KEY, name);
+      document.querySelectorAll('.theme-swatch').forEach(sw => {
+        sw.style.outline = sw.dataset.theme === name
+          ? '2px solid var(--cyan)' : '2px solid transparent';
+      });
+    }
+
+    // Restore saved theme immediately (before repaint)
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) applyTheme(saved);
+
+    // Build swatch grid
+    const picker = document.getElementById('theme-picker');
+    if (picker) {
+      THEMES.forEach(function([name, label, bg, dot]) {
+        const btn = document.createElement('button');
+        btn.className    = 'theme-swatch';
+        btn.dataset.theme = name;
+        btn.title        = label;
+        btn.style.cssText = `
+          width:28px;height:28px;border-radius:50%;border:none;cursor:pointer;
+          background:${bg};position:relative;outline:2px solid transparent;
+          outline-offset:2px;transition:outline-color 0.15s;
+        `;
+        // Accent dot
+        const dot_el = document.createElement('span');
+        dot_el.style.cssText = `
+          position:absolute;bottom:3px;right:3px;width:8px;height:8px;
+          border-radius:50%;background:${dot};pointer-events:none;
+        `;
+        btn.appendChild(dot_el);
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          applyTheme(name);
+        });
+        picker.appendChild(btn);
+      });
+      // Set initial outline
+      const cur = document.documentElement.getAttribute('data-theme') || 'midnight';
+      const active = picker.querySelector(`[data-theme="${cur}"]`);
+      if (active) active.style.outline = '2px solid var(--cyan)';
+    }
+  })();
+
+  // ── Session heartbeat (Phase 21) ──────────────────────────────────────────
+  {% if remote_user %}
+  (function() {
+    var _hbLogoutUrl = {{ (authelia_logout_url | default('/logout')) | tojson }};
+    function _sendHeartbeat() {
+      fetch('/api/heartbeat', {method: 'POST'}).then(function(r) {
+        if (!r.ok && r.status === 302) { window.location.href = _hbLogoutUrl; }
+      }).catch(function() {
+        // Swallow network errors — server-side timeout will catch true idle
+      });
+    }
+    // Send every 5 minutes
+    setInterval(_sendHeartbeat, 300000);
+    // Send on first load to register activity
+    _sendHeartbeat();
+  })();
+  {% endif %}
   inp.addEventListener('keydown', function(e){
     if (e.key === 'Escape') sug.style.display='none';
   });
 })();
 
-// ── Sidebar Daily Challenge widget ───────────────────────────────────────────
+// ── Sidebar Daily Challenge widget — guarded against re-runs ─────────────────
+var _bsvQuizReady = false;
 async function initSbQuiz() {
+  if (_bsvQuizReady) return;                      // ITEM4: don't re-run on HTMX nav
   const row = document.getElementById('sbQuizRow');
   if (!row) return;
   try {
@@ -1614,6 +1957,7 @@ async function initSbQuiz() {
     } else {
       row.innerHTML = `<a href="/dashboard/quiz" class="sb-quiz-pending">⬡ ${d.question_count}Q — Take Quiz →</a>`;
     }
+    _bsvQuizReady = true;                         // mark done — skip on next nav
   } catch(e) {
     const row = document.getElementById('sbQuizRow');
     if (row) row.innerHTML = '<span style="color:#333;font-size:0.75em">—</span>';
@@ -1621,32 +1965,86 @@ async function initSbQuiz() {
 }
 document.addEventListener('DOMContentLoaded', initSbQuiz);
 
-// ── Sidebar advisory feed ─────────────────────────────────────────────────────
+// ── Sidebar advisory feed — TTL-cached, no re-fetch within 15 min ────────────
+var _bsvAdvFetchedAt = 0;
+var _bsvAdvCached    = null;           // cached item HTML string
 async function initSbAdvisory() {
   const inner = document.getElementById('sbAdvisoryInner');
   const box   = document.getElementById('sbAdvisoryBox');
   if (!inner || !box) return;
+
+  // ITEM4: if cached and fresh (< 15 min), replay without network call
+  var now = Date.now();
+  if (_bsvAdvCached !== null && (now - _bsvAdvFetchedAt) < 900000) {
+    if (_bsvAdvCached === '') { box.style.display = 'none'; return; }
+    if (!inner.getAttribute('data-adv-loaded')) {
+      inner.innerHTML = _bsvAdvCached;
+      inner.setAttribute('data-adv-loaded', '1');
+    }
+    return;
+  }
+
   try {
     const d = await fetch('/api/feeds').then(r => r.json());
     const items = (d.items || []).slice(0, 10);
-    if (!items.length) { box.style.display = 'none'; return; }
+    if (!items.length) {
+      _bsvAdvCached = '';
+      box.style.display = 'none';
+      return;
+    }
     const html = items.map(function(i) {
       const lvl = i.score > 7 ? 'lvl-critical' : i.score > 4 ? 'lvl-high' : i.score > 0 ? 'lvl-warn' : '';
-      const txt = (i.title || '').substring(0, 72);
+      const txt = (i.title || '').substring(0, 72).replace(/</g,'&lt;').replace(/>/g,'&gt;');
       if (i.link) {
         return `<a href="${i.link}" target="_blank" rel="noopener noreferrer" class="sb-advisory-item ${lvl}" style="text-decoration:none;display:block">${txt}</a>`;
       }
       return `<div class="sb-advisory-item ${lvl}">${txt}</div>`;
     }).join('');
-    inner.innerHTML = html + html;   // duplicate for seamless loop
+    const loopHtml = html + html;   // duplicate for seamless loop
+    inner.innerHTML = loopHtml;
+    inner.setAttribute('data-adv-loaded', '1');
     const dur = Math.max(20, items.length * 2.8);
     inner.style.animationDuration = dur + 's';
+    _bsvAdvCached    = loopHtml;
+    _bsvAdvFetchedAt = Date.now();
   } catch(e) {
     const box = document.getElementById('sbAdvisoryBox');
     if (box) box.style.display = 'none';
   }
 }
 document.addEventListener('DOMContentLoaded', initSbAdvisory);
+
+// ── ITEM4: Update sidebar active link after HTMX navigation ──────────────────
+function _updateSbActiveLink() {
+  var p = window.location.pathname;
+  document.querySelectorAll('.sb-link').forEach(function(a) {
+    var href = a.getAttribute('href') || '';
+    var isActive = href === p || (href.length > 1 && p.startsWith(href + '/')) || (href.length > 1 && p === href);
+    a.classList.toggle('active', isActive);
+    a.style.outline = isActive ? '2px solid var(--cyan)' : '';
+  });
+}
+document.body.addEventListener('htmx:afterSettle', function() {
+  _updateSbActiveLink();
+  // Re-run observation badge on every nav (count may differ by user scope)
+  (function() {
+    var obsLinks = document.querySelectorAll('a[href="/observations"]');
+    if (obsLinks.length > 0) {
+      fetch('/api/observations/summary')
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(d) {
+          if (!d) return;
+          var count = d.open || 0;
+          if (!count) return;
+          ['obs-badge-admin','obs-badge-issm','obs-badge-isso','obs-badge-sca','obs-badge-auditor'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) { el.textContent = count; el.style.display = 'inline'; }
+          });
+        })
+        .catch(function() {});
+    }
+  })();
+});
 
 // ── Advisory section vertical resize ─────────────────────────────────────────
 (function() {
@@ -1725,5 +2123,22 @@ document.addEventListener('DOMContentLoaded', initSbAdvisory);
   }
 })();
 </script>
+{% if is_admin and chat_enabled %}
+<div id="chatWindowContainer"
+     style="position:fixed;bottom:0;right:16px;display:flex;gap:8px;
+            align-items:flex-end;z-index:9000;pointer-events:none"></div>
+<script src="/static/admin-chat.js" defer></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () =>
+    AdminChat.init(
+      {{ remote_user | tojson }},
+      {
+        visibleCount: {{ chat_visible_count }},
+        showAwayMsg:  {{ 'true' if chat_show_away_msg else 'false' }}
+      }
+    )
+  );
+</script>
+{% endif %}
 </body>
 </html>

@@ -1,15 +1,16 @@
 """
-BLACKSITE — RSS/Advisory Feed Module
+BLACKSITE — RSS/Advisory Feed Module  (LIST4-ITEM3 rewrite)
 
-Fetches and caches vulnerability advisories from reputable security sources.
-Cache is file-based (JSON), refreshed every 60 minutes per feed.
-Feeds are filtered by keywords derived from system names/descriptions.
+Feed sources are admin-configurable via the feed_sources DB table.
+The allowlist (FEED_ALLOWLIST in models.py) defines what sources can be enabled.
 
-Sources:
-  - CISA Alerts          (https://www.cisa.gov/uscert/ncas/alerts.xml)
-  - CISA Advisories      (https://www.cisa.gov/uscert/ncas/advisories.xml)
-  - SANS ISC             (https://isc.sans.edu/rssfeed_full.xml)
-  - US-CERT Bulletins    (https://www.cisa.gov/uscert/ncas/bulletins.xml)
+Fetch rules:
+  - Per-source file cache, 1-hour TTL (CACHE_TTL).
+  - Hard cap: MAX_ITEMS items per feed per fetch.
+  - HTTP timeout: FETCH_TIMEOUT seconds.
+  - Consecutive failure backoff: skip fetch if error_count >= BACKOFF_THRESHOLD.
+  - Deduplication: URL + SHA1(title) across all sources.
+  - HTML sanitized; summaries capped at 300 chars.
 """
 
 from __future__ import annotations
@@ -20,48 +21,23 @@ import logging
 import re
 import time
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 import xml.etree.ElementTree as ET
 
 log = logging.getLogger("blacksite.rss")
 
-CACHE_DIR   = Path("static/feed_cache")
-CACHE_TTL   = 3600  # seconds (1 hour)
-MAX_ITEMS   = 40    # items per feed fetch
-FETCH_TIMEOUT = 8   # seconds
-
-FEEDS = [
-    {
-        "id":    "cisa-alerts",
-        "name":  "CISA Alerts",
-        "url":   "https://www.cisa.gov/uscert/ncas/alerts.xml",
-        "color": "var(--red)",
-    },
-    {
-        "id":    "cisa-advisories",
-        "name":  "CISA Advisories",
-        "url":   "https://www.cisa.gov/uscert/ncas/advisories.xml",
-        "color": "var(--yellow)",
-    },
-    {
-        "id":    "sans-isc",
-        "name":  "SANS ISC",
-        "url":   "https://isc.sans.edu/rssfeed_full.xml",
-        "color": "var(--cyan)",
-    },
-    {
-        "id":    "cisa-bulletins",
-        "name":  "US-CERT Bulletins",
-        "url":   "https://www.cisa.gov/uscert/ncas/bulletins.xml",
-        "color": "var(--muted)",
-    },
-]
+CACHE_DIR         = Path("static/feed_cache")
+CACHE_TTL         = 3600   # seconds (1 hour)
+MAX_ITEMS         = 40     # items per feed fetch
+FETCH_TIMEOUT     = 8      # seconds
+BACKOFF_THRESHOLD = 3      # skip fetch if consecutive errors >= this
 
 
-def _cache_path(feed_id: str) -> Path:
+def _cache_path(feed_key: str) -> Path:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    return CACHE_DIR / f"{feed_id}.json"
+    return CACHE_DIR / f"{feed_key}.json"
 
 
 def _is_stale(path: Path) -> bool:
@@ -71,8 +47,20 @@ def _is_stale(path: Path) -> bool:
 
 
 def _ns_strip(tag: str) -> str:
-    """Strip XML namespace from tag."""
     return re.sub(r"\{[^}]+\}", "", tag)
+
+
+def _clean_html(text: str) -> str:
+    return re.sub(r"<[^>]+>", " ", text).strip()
+
+
+def _item_dedup_key(item: dict) -> str:
+    """Dedup key: URL if present, else SHA1(title). Never deduplicates on empty link."""
+    link = (item.get("link") or "").strip()
+    if link:
+        return link
+    title = (item.get("title") or "").strip()
+    return "title:" + hashlib.sha1(title.encode("utf-8", errors="replace")).hexdigest()
 
 
 def _fetch_feed(url: str) -> list[dict]:
@@ -83,16 +71,16 @@ def _fetch_feed(url: str) -> list[dict]:
             headers={"User-Agent": "BLACKSITE-GRC/1.0 (security advisory monitor)"},
         )
         with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT) as resp:
-            raw = resp.read(512 * 1024)  # cap at 512 KB
+            raw = resp.read(2 * 1024 * 1024)  # cap at 2 MB
     except Exception as e:
         log.warning("Feed fetch failed %s: %s", url, e)
-        return []
+        raise
 
     try:
         root = ET.fromstring(raw)
     except ET.ParseError as e:
-        log.warning("Feed parse failed %s: %s", url, e)
-        return []
+        log.warning("Feed XML parse failed %s: %s", url, e)
+        raise ValueError(f"XML parse error: {e}") from e
 
     items = []
     tag = _ns_strip(root.tag).lower()
@@ -109,123 +97,148 @@ def _fetch_feed(url: str) -> list[dict]:
             pub   = item.findtext("pubDate", "").strip()
             if title:
                 items.append({"title": title, "link": link,
-                               "desc":  _clean_html(desc)[:300], "pub": pub})
+                               "desc": _clean_html(desc)[:300], "pub": pub})
 
     # Atom
     elif tag == "feed":
         ns = {"a": "http://www.w3.org/2005/Atom"}
         for entry in root.findall("a:entry", ns)[:MAX_ITEMS]:
-            title = entry.findtext("a:title", "", ns).strip()
+            title   = entry.findtext("a:title", "", ns).strip()
             link_el = entry.find("a:link", ns)
-            link  = link_el.get("href", "") if link_el is not None else ""
-            summ  = entry.findtext("a:summary", "", ns).strip()
-            pub   = entry.findtext("a:published", "", ns).strip()
+            link    = link_el.get("href", "") if link_el is not None else ""
+            summ    = entry.findtext("a:summary", "", ns).strip()
+            pub     = entry.findtext("a:published", "", ns).strip()
             if title:
                 items.append({"title": title, "link": link,
-                               "desc":  _clean_html(summ)[:300], "pub": pub})
+                               "desc": _clean_html(summ)[:300], "pub": pub})
 
     return items
 
 
-def _clean_html(text: str) -> str:
-    """Strip HTML tags from a string."""
-    return re.sub(r"<[^>]+>", " ", text).strip()
-
-
-def _get_cached(feed: dict) -> list[dict]:
-    """Return cached items for a feed, refreshing if stale."""
-    path = _cache_path(feed["id"])
+def _get_cached(feed_key: str, url: str) -> tuple[list[dict], Optional[str]]:
+    """
+    Return (items, error). Refreshes cache if stale.
+    On fetch failure returns stale cache + error string.
+    """
+    path = _cache_path(feed_key)
     if not _is_stale(path):
         try:
-            return json.loads(path.read_text())
+            return json.loads(path.read_text()), None
         except Exception:
             pass
 
-    items = _fetch_feed(feed["url"])
-    if items:
-        try:
-            path.write_text(json.dumps(items))
-        except Exception:
-            pass
-        return items
-
-    # Return stale cache on fetch failure
-    if path.exists():
-        try:
-            return json.loads(path.read_text())
-        except Exception:
-            pass
-    return []
+    try:
+        items = _fetch_feed(url)
+        if items:
+            try:
+                path.write_text(json.dumps(items))
+            except Exception:
+                pass
+        return items, None
+    except Exception as e:
+        err_str = str(e)[:300]
+        # Fall back to stale cache
+        if path.exists():
+            try:
+                return json.loads(path.read_text()), err_str
+            except Exception:
+                pass
+        return [], err_str
 
 
 def _system_keywords(systems: list) -> set[str]:
-    """Extract searchable keywords from a list of system objects."""
     kw = set()
     for s in systems:
-        # Name words (2+ chars, strip [SEED] prefix)
         name = (s.name or "").replace("[SEED]", "").strip()
         for word in re.split(r"[\s\-_/]+", name):
             if len(word) >= 4:
                 kw.add(word.lower())
-        # Abbreviation
         if s.abbreviation:
             kw.add(s.abbreviation.lower())
-        # Description keywords
         if s.description:
             for word in re.split(r"\W+", s.description):
                 if len(word) >= 5:
                     kw.add(word.lower())
-    # Remove stop words
-    stops = {"system","platform","service","management","general","support",
-              "application","network","information","security","national","federal"}
+    stops = {"system", "platform", "service", "management", "general", "support",
+             "application", "network", "information", "security", "national", "federal"}
     return kw - stops
 
 
 def _score_item(item: dict, keywords: set[str]) -> int:
-    """Score an item by keyword relevance. Higher = more relevant."""
     text = (item["title"] + " " + item["desc"]).lower()
     return sum(1 for kw in keywords if kw in text)
 
 
 def get_feed_items(
+    sources: list[dict] | None = None,
     systems: list = None,
     max_items: int = 20,
     min_score: int = 0,
 ) -> list[dict]:
     """
-    Return merged, deduplicated feed items across all sources.
-    If systems are provided, items are scored by keyword relevance and sorted.
-    Items with score=0 are still included unless min_score > 0.
+    Merge and deduplicate items from the given sources list.
+    Each source dict must have: key, name, url, enabled, error_count.
+    If sources is None, falls back to the static FEEDS list (backward compat).
     """
+    if sources is None:
+        sources = _FALLBACK_FEEDS
+
     keywords = _system_keywords(systems) if systems else set()
-
     merged: list[dict] = []
-    seen_links: set[str] = set()
+    seen: set[str] = set()
 
-    for feed in FEEDS:
-        items = _get_cached(feed)
+    for src in sources:
+        if not src.get("enabled", True):
+            continue
+        if (src.get("error_count") or 0) >= BACKOFF_THRESHOLD:
+            log.debug("Skipping %s — error_count=%d >= backoff threshold",
+                      src["key"], src["error_count"])
+            continue
+
+        items, _err = _get_cached(src["key"], src["url"])
         for item in items:
-            link = item.get("link", "")
-            if link and link in seen_links:
+            dk = _item_dedup_key(item)
+            if dk in seen:
                 continue
-            if link:
-                seen_links.add(link)
+            seen.add(dk)
             score = _score_item(item, keywords)
             if score >= min_score:
                 merged.append({
                     **item,
-                    "source":       feed["name"],
-                    "source_color": feed["color"],
+                    "source":       src["name"],
+                    "source_key":   src["key"],
                     "score":        score,
                 })
 
-    # Sort: relevant items first, then by position in feed (preserved by order)
     if keywords:
         merged.sort(key=lambda x: -x["score"])
-
     return merged[:max_items]
 
 
-def get_all_feed_items(max_items: int = 30) -> list[dict]:
-    """Return all feed items merged, for the global advisory view."""
-    return get_feed_items(systems=None, max_items=max_items, min_score=0)
+def get_all_feed_items(
+    sources: list[dict] | None = None,
+    max_items: int = 30,
+) -> list[dict]:
+    return get_feed_items(sources=sources, systems=None,
+                          max_items=max_items, min_score=0)
+
+
+def fetch_one_for_test(url: str) -> dict:
+    """
+    Attempt to fetch a single feed URL and return a result summary dict.
+    Used by the admin test-fetch action — does NOT use or update the cache.
+    """
+    try:
+        items = _fetch_feed(url)
+        return {"ok": True, "item_count": len(items),
+                "sample": items[0]["title"] if items else "(no items)"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:300]}
+
+
+# Fallback static feeds (used if DB query fails or during first startup)
+_FALLBACK_FEEDS = [
+    {"key": "cisa_alerts",   "name": "CISA Alerts",     "url": "https://www.cisa.gov/uscert/ncas/alerts.xml",      "enabled": True, "error_count": 0},
+    {"key": "cisa_adv",      "name": "CISA Advisories",  "url": "https://www.cisa.gov/uscert/ncas/advisories.xml",  "enabled": True, "error_count": 0},
+    {"key": "sans",          "name": "SANS ISC",          "url": "https://isc.sans.edu/rssfeed_full.xml",            "enabled": True, "error_count": 0},
+]

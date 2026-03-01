@@ -1,0 +1,181 @@
+---
+# BLACKSITE RBAC — Role and lens definitions
+# Used by the RBAC regression runner to drive persona construction and negative testing.
+
+platform_roles:
+  principal:
+    description: "GRC Program Owner — full cross-portfolio visibility"
+    # test_user: admin account — _is_admin() returns True, all lenses accessible
+    test_user: ""   # falls back to BSV_TEST_USER env var (dan)
+    lenses:
+      - ao
+      - aodr
+      - ciso
+      - issm
+      - isso
+      - sca
+      - system_owner
+      - pmo
+      - incident_responder
+      - bcdr_coordinator
+      - data_owner
+      - pen_tester
+      - auditor
+  executive:
+    description: "Senior leadership — AO + CISO views"
+    # test_user: non-admin fixture user — _is_admin() returns False
+    test_user: "bsv_test_executive"
+    lenses: [ao, ciso]
+  manager:
+    description: "System/program owner — ISSM + System Owner + PMO"
+    test_user: "bsv_test_manager"
+    lenses: [issm, system_owner, pmo]
+  analyst:
+    description: "Operational staff — ISSO + SCA views"
+    test_user: "bsv_test_analyst"
+    lenses: [isso, sca]
+
+# The app uses 'role' column in user_profiles (legacy) for shell switching.
+# company_tier drives which shell_allowed_roles are offered.
+# For testing: admin users (in config.yaml admin_users) get all lenses via /switch-role-view.
+# Non-admin users get lenses from ROLE_CAN_VIEW_DOWN hierarchy.
+# Test strategy: use a single admin test account and shell into each lens.
+
+system_roles:
+  ao:
+    label: "Authorizing Official"
+    scope: program_wide
+    nav_dashboard: /ao/decisions
+    write_actions:
+      - POST /ao/decisions/{system_id}
+      - POST /risks
+      - POST /risks/{id}/update
+      - POST /poam
+      - POST /poam/{id}/update
+  aodr:
+    label: "AO Designated Representative"
+    scope: program_or_system
+    nav_dashboard: /dashboard
+    write_actions: []
+  ciso:
+    label: "Chief Information Security Officer"
+    scope: program_wide
+    nav_dashboard: /ciso/dashboard
+    write_actions:
+      - POST /systems
+      - POST /risks
+      - POST /risks/{id}/update
+      - POST /poam
+      - POST /poam/{id}/update
+  issm:
+    label: "Information System Security Manager"
+    scope: program_or_system_family
+    nav_dashboard: /issm/dashboard
+    write_actions:
+      - POST /systems/{id}/controls/{ctrl_id}
+      - POST /poam
+      - POST /poam/{id}/update
+      - POST /rmf/{id}/step/{step}
+  isso:
+    label: "Information System Security Officer"
+    scope: system_scoped
+    nav_dashboard: /dashboard
+    write_actions:
+      - POST /systems/{id}/controls/{ctrl_id}
+      - POST /poam
+      - POST /poam/{id}/update
+      - POST /systems/{id}/inventory
+      - POST /systems/{id}/connections
+      - POST /systems/{id}/artifacts
+      - POST /observations
+  sca:
+    label: "Security Control Assessor"
+    scope: system_scoped
+    nav_dashboard: /sca/workspace
+    write_actions:
+      - POST /systems/{id}/controls/{ctrl_id}
+      - POST /upload
+      - POST /observations
+  system_owner:
+    label: "System Owner"
+    scope: system_scoped
+    nav_dashboard: /system-owner/dashboard
+    write_actions:
+      - POST /systems/{id}/edit
+  pmo:
+    label: "Program Management Office"
+    scope: program_wide
+    nav_dashboard: /pmo/dashboard
+    write_actions: []
+  incident_responder:
+    label: "Incident Responder"
+    scope: system_scoped
+    nav_dashboard: /incident-responder/dashboard
+    write_actions: []
+  bcdr_coordinator:
+    label: "BCDR Coordinator"
+    scope: system_scoped
+    nav_dashboard: /bcdr/dashboard
+    write_actions:
+      - POST /bcdr/events
+      - POST /bcdr/events/{id}/signoff
+  data_owner:
+    label: "Data Owner"
+    scope: system_scoped
+    nav_dashboard: /data-owner/dashboard
+    write_actions: []
+  pen_tester:
+    label: "Penetration Tester"
+    scope: system_scoped_timebox
+    nav_dashboard: /pen-tester/dashboard
+    write_actions:
+      - POST /observations
+  auditor:
+    label: "Auditor"
+    scope: system_scoped_timebox
+    nav_dashboard: /auditor/dashboard
+    write_actions: []
+
+# Shell role → cookie value mapping (app uses bcdr not bcdr_coordinator in cookie)
+shell_cookie_aliases:
+  bcdr_coordinator: bcdr
+
+approval_chain:
+  isso:         [issm]
+  sca:          [ciso, issm]
+  system_owner: [issm, ciso]
+  issm:         [ciso]
+  pmo:          [ciso]
+  ao:           [admin]
+  ciso:         [admin]
+  aodr:         [ao]
+
+read_only_roles:
+  - pen_tester
+  - data_owner
+  - pmo
+  - incident_responder
+  - auditor
+
+# Roles that may NOT write to RMF/POAM/risks/systems/inventory/connections/artifacts
+write_denied_roles:
+  - pen_tester
+  - data_owner
+  - pmo
+  - incident_responder
+
+# Valid shell role values accepted by /switch-role-view
+valid_shell_roles:
+  - ao
+  - issm
+  - isso
+  - sca
+  - system_owner
+  - auditor
+  - bcdr
+  - employee
+  - ciso
+  - pen_tester
+  - data_owner
+  - pmo
+  - incident_responder

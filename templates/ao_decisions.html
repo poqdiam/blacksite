@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — AO Decision Queue{% endblock %}
+
+{% block head %}
+<style>
+  .page-header { margin-bottom: 28px; }
+  .page-header h1 { font-size: 1.3em; font-weight: 900; color: var(--text); }
+  .page-header p  { font-size: 0.82em; color: var(--muted); margin-top: 4px; }
+
+  .section-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; margin-bottom: 20px; overflow: hidden;
+  }
+  .section-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+  .section-head h2 {
+    font-size: 0.88em; font-weight: 700; color: var(--text);
+    letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .section-count { font-size: 0.75em; color: var(--muted); font-family: var(--mono); }
+
+  .decision-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    transition: background 0.1s;
+  }
+  .decision-row:last-child { border-bottom: none; }
+  .decision-row:hover { background: rgba(255,255,255,0.025); }
+
+  .sys-name { font-size: 0.88em; font-weight: 700; color: var(--text); }
+  .sys-meta { font-size: 0.73em; color: var(--muted); margin-top: 2px; display: flex; gap: 12px; }
+
+  .metric-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.75em; font-family: var(--mono);
+  }
+  .metric-chip .lbl { color: var(--muted); }
+  .metric-chip .val { font-weight: 700; }
+  .val-bad  { color: var(--red); }
+  .val-warn { color: var(--yellow); }
+  .val-ok   { color: var(--green); }
+
+  .btn-approve, .btn-deny {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 12px; border-radius: 4px; font-size: 0.78em; font-weight: 700;
+    cursor: pointer; border: none; transition: opacity 0.12s;
+  }
+  .btn-approve { background: rgba(0,200,83,0.15); color: var(--green); border: 1px solid rgba(0,200,83,0.3); }
+  .btn-approve:hover { background: rgba(0,200,83,0.25); }
+  .btn-deny { background: rgba(244,67,54,0.12); color: var(--red); border: 1px solid rgba(244,67,54,0.25); }
+  .btn-deny:hover { background: rgba(244,67,54,0.22); }
+
+  .decision-table { width: 100%; border-collapse: collapse; font-size: 0.82em; }
+  .decision-table th {
+    text-align: left; padding: 10px 20px;
+    font-size: 0.72em; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+  }
+  .decision-table td {
+    padding: 9px 20px; border-bottom: 1px solid rgba(255,255,255,0.03);
+    color: var(--text); vertical-align: middle;
+  }
+  .decision-table tr:last-child td { border-bottom: none; }
+
+  .badge-approved { background: rgba(0,200,83,0.12); color: var(--green); border: 1px solid rgba(0,200,83,0.25); }
+  .badge-denied   { background: rgba(244,67,54,0.12); color: var(--red); border: 1px solid rgba(244,67,54,0.25); }
+  .badge-status {
+    display: inline-block; padding: 2px 7px; border-radius: 3px;
+    font-size: 0.7em; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase;
+  }
+
+  .expiry-warn { color: var(--yellow); }
+  .expiry-crit { color: var(--red); }
+
+  .empty-note {
+    padding: 28px 20px; text-align: center; color: var(--muted); font-size: 0.82em;
+  }
+
+  /* AO Approval modal */
+  #ao-approve-modal {
+    display:none; position:fixed; inset:0; z-index:900;
+    background:rgba(0,0,0,0.65); align-items:center; justify-content:center;
+  }
+  #ao-approve-modal.open { display:flex; }
+  .ao-modal-box {
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:28px 32px; width:480px; max-width:95vw;
+  }
+  .ao-modal-box h3 {
+    font-size:0.95em; font-weight:700; margin-bottom:4px;
+  }
+  .ao-modal-sub { font-size:0.78em; color:var(--muted); margin-bottom:22px; }
+  .ao-form-row { margin-bottom:16px; }
+  .ao-form-label { font-size:0.78em; color:var(--muted); margin-bottom:6px; display:block; }
+  .ao-duration-pills { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .ao-pill {
+    padding:5px 14px; border-radius:20px; font-size:0.8em; font-weight:600;
+    cursor:pointer; border:1px solid var(--border); color:var(--muted);
+    background:var(--surface); transition:all 0.15s; user-select:none;
+  }
+  .ao-pill.active, .ao-pill:hover { border-color:var(--cyan); color:var(--cyan); background:rgba(0,255,204,0.07); }
+  .ao-pill[data-val="ongoing"].active { border-color:var(--green); color:var(--green); background:rgba(0,200,83,0.07); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>⊕ Authorizing Official — Decision Queue</h1>
+  <p>Review ATO packages and record authorization decisions.</p>
+</div>
+
+{# ── Section 1: Pending ATO Decisions ── #}
+<div class="section-card">
+  <div class="section-head">
+    <h2>Pending ATO Review</h2>
+    <span class="section-count">{{ pending_systems|length }} pending</span>
+  </div>
+  {% if pending_systems %}
+    {% for sys in pending_systems %}
+    <div class="decision-row">
+      <div>
+        <div class="sys-name">
+          <a href="/systems/{{ sys.id }}" style="color:var(--text);text-decoration:none">{{ sys.name }}</a>
+          {% if sys.abbreviation %}<span style="font-size:0.72em;color:var(--muted);margin-left:6px;font-family:var(--mono)">[{{ sys.abbreviation }}]</span>{% endif %}
+        </div>
+        <div class="sys-meta">
+          <span>{{ sys.system_type or 'Unknown type' }}</span>
+          <span>{{ sys.environment or '' }}</span>
+          {% if sys.owner_name %}<span>Owner: {{ sys.owner_name }}</span>{% endif %}
+        </div>
+      </div>
+      <div class="metric-chip">
+        <span class="lbl">POA&Ms:</span>
+        <span class="val {% if (poam_counts.get(sys.id, 0)) > 5 %}val-bad{% elif (poam_counts.get(sys.id, 0)) > 0 %}val-warn{% else %}val-ok{% endif %}">
+          {{ poam_counts.get(sys.id, 0) }}
+        </span>
+      </div>
+      <div class="metric-chip">
+        <span class="lbl">Risks:</span>
+        <span class="val {% if (risk_counts.get(sys.id, 0)) > 3 %}val-bad{% elif (risk_counts.get(sys.id, 0)) > 0 %}val-warn{% else %}val-ok{% endif %}">
+          {{ risk_counts.get(sys.id, 0) }}
+        </span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn-approve"
+                onclick="openAoApprove('{{ sys.id }}','{{ sys.name | replace("'","\\'")|e }}')">
+          ✓ Approve
+        </button>
+        <form method="post" action="/ao/decisions/{{ sys.id }}" style="display:inline">
+          <input type="hidden" name="decision" value="denied">
+          <button type="submit" class="btn-deny">✕ Deny</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-note">No systems pending ATO decision.</div>
+  {% endif %}
+</div>
+
+{# ── Section 2: Decision History ── #}
+<div class="section-card">
+  <div class="section-head">
+    <h2>Decision History</h2>
+    <span class="section-count">{{ decided_systems|length }} recorded</span>
+  </div>
+  {% if decided_systems %}
+  <table class="decision-table">
+    <thead>
+      <tr>
+        <th>System</th>
+        <th>Type</th>
+        <th>Decision</th>
+        <th>Auth Status</th>
+        <th>Expiry</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sys in decided_systems %}
+      <tr>
+        <td>
+          <a href="/systems/{{ sys.id }}" style="color:var(--text);font-weight:700;text-decoration:none">{{ sys.name }}</a>
+          {% if sys.abbreviation %}<span style="font-size:0.72em;color:var(--muted);margin-left:4px">[{{ sys.abbreviation }}]</span>{% endif %}
+        </td>
+        <td style="font-size:0.8em;color:var(--muted)">{{ sys.system_type or '—' }}</td>
+        <td>
+          <span class="badge-status {% if sys.ato_decision == 'approved' %}badge-approved{% else %}badge-denied{% endif %}">
+            {{ sys.ato_decision or '—' }}
+          </span>
+        </td>
+        <td style="font-size:0.82em;color:var(--muted)">{{ sys.auth_status or '—' }}</td>
+        <td style="font-size:0.82em;color:var(--muted)">{{ sys.auth_expiry or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="empty-note">No ATO decisions recorded yet.</div>
+  {% endif %}
+</div>
+
+{# ── Section 3: Expiring ATOs ── #}
+{% if expiring_systems %}
+<div class="section-card">
+  <div class="section-head">
+    <h2>Expiring ATOs (within 90 days)</h2>
+    <span class="section-count expiry-warn">{{ expiring_systems|length }} expiring</span>
+  </div>
+  <table class="decision-table">
+    <thead>
+      <tr>
+        <th>System</th>
+        <th>Expiry Date</th>
+        <th>Auth Status</th>
+        <th>Open POA&amp;Ms</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sys in expiring_systems %}
+      <tr>
+        <td>
+          <a href="/systems/{{ sys.id }}" style="color:var(--text);font-weight:700;text-decoration:none">{{ sys.name }}</a>
+        </td>
+        <td class="expiry-warn" style="font-size:0.82em;font-family:var(--mono)">{{ sys.auth_expiry }}</td>
+        <td style="font-size:0.82em;color:var(--muted)">{{ sys.auth_status }}</td>
+        <td style="font-size:0.82em">{{ poam_counts.get(sys.id, 0) }}</td>
+        <td><a href="/systems/{{ sys.id }}/controls" style="font-size:0.78em;color:var(--cyan)">Review →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# ── Pending Risk Acceptances ── #}
+{# ── AO Approval Modal ── #}
+<div id="ao-approve-modal" role="dialog" aria-modal="true">
+  <div class="ao-modal-box">
+    <h3>⊕ Record Authorization Decision</h3>
+    <div class="ao-modal-sub" id="ao-modal-sysname">Loading…</div>
+
+    <form id="ao-approve-form" method="post">
+      <input type="hidden" name="decision" value="approved">
+
+      <div class="ao-form-row">
+        <label class="ao-form-label">Authorization Duration</label>
+        <div class="ao-duration-pills" id="ao-pills">
+          <span class="ao-pill active" data-val="1_year">1 Year</span>
+          <span class="ao-pill" data-val="3_year">3 Years</span>
+          <span class="ao-pill" data-val="5_year">5 Years</span>
+          <span class="ao-pill" data-val="ongoing">Ongoing</span>
+          <span class="ao-pill" data-val="custom">Custom…</span>
+        </div>
+        <input type="hidden" name="duration" id="ao-duration-val" value="1_year">
+        <div id="ao-custom-days-row"
+             style="display:none;align-items:center;gap:8px;margin-top:8px">
+          <input type="number" name="custom_days" id="ao-custom-days"
+                 min="1" max="3650" placeholder="Days"
+                 style="width:90px;background:var(--surface);border:1px solid var(--border);
+                        color:var(--text);border-radius:5px;padding:5px 8px;font-size:0.85em">
+          <span style="font-size:0.82em;color:var(--muted)">calendar days from today</span>
+        </div>
+      </div>
+
+      <div class="ao-form-row">
+        <label class="ao-form-label" for="ao-notes">
+          AO Notes <span style="font-weight:400;opacity:0.6">(conditions, limitations, or rationale)</span>
+        </label>
+        <textarea name="notes" id="ao-notes" rows="3" placeholder="e.g. Authorization granted contingent on POA&M closure within 60 days…"
+                  style="width:100%;background:var(--surface);border:1px solid var(--border);
+                         color:var(--text);border-radius:5px;padding:8px 10px;font-size:0.83em;
+                         resize:vertical;font-family:var(--sans)"></textarea>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px">
+        <button type="button" onclick="closeAoApprove()" class="btn btn-ghost btn-sm">Cancel</button>
+        <button type="submit" class="btn btn-sm"
+                style="background:rgba(0,200,83,0.12);border:1px solid rgba(0,200,83,0.3);
+                       color:var(--green);font-weight:700">
+          ✓ Record Authorization
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openAoApprove(sysId, sysName) {
+  document.getElementById('ao-modal-sysname').textContent = sysName;
+  document.getElementById('ao-approve-form').action = '/ao/decisions/' + sysId;
+  // Reset form state
+  document.getElementById('ao-notes').value = '';
+  document.getElementById('ao-custom-days').value = '';
+  setAoPill('1_year');
+  document.getElementById('ao-approve-modal').classList.add('open');
+}
+function closeAoApprove() {
+  document.getElementById('ao-approve-modal').classList.remove('open');
+}
+function setAoPill(val) {
+  document.querySelectorAll('#ao-pills .ao-pill').forEach(function(p) {
+    p.classList.toggle('active', p.dataset.val === val);
+  });
+  document.getElementById('ao-duration-val').value = val;
+  const customRow = document.getElementById('ao-custom-days-row');
+  customRow.style.display = val === 'custom' ? 'flex' : 'none';
+  if (val === 'custom') {
+    document.getElementById('ao-custom-days').focus();
+  }
+}
+document.querySelectorAll('#ao-pills .ao-pill').forEach(function(p) {
+  p.addEventListener('click', function() { setAoPill(this.dataset.val); });
+});
+document.getElementById('ao-approve-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeAoApprove();
+});
+</script>
+
+{% if pending_risk_acceptances is defined and pending_risk_acceptances %}
+<div class="section-card">
+  <div class="section-head">
+    <h2 style="color:var(--yellow)">&#x23F3; Pending Risk Acceptances</h2>
+    <span class="section-count" style="color:var(--yellow)">{{ pending_risk_acceptances|length }} awaiting AO sign-off</span>
+  </div>
+  <table class="decision-table">
+    <thead>
+      <tr>
+        <th>POA&amp;M ID</th>
+        <th>Weakness</th>
+        <th>Severity</th>
+        <th>System</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in pending_risk_acceptances %}
+      <tr>
+        <td class="mono" style="font-size:0.82em;color:var(--cyan)">
+          <a href="/poam/{{ p.id }}" style="color:var(--cyan)">{{ p.poam_id or p.id[:6] }}</a>
+        </td>
+        <td style="font-size:0.85em;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.weakness_name }}</td>
+        <td style="font-size:0.82em">
+          {% set sev = p.severity or 'Low' %}
+          {% if sev == 'Critical' %}<span style="color:var(--red)">Critical</span>
+          {% elif sev == 'High' %}<span style="color:#ff6b35">High</span>
+          {% elif sev == 'Moderate' %}<span style="color:var(--yellow)">Moderate</span>
+          {% else %}<span style="color:var(--green)">Low</span>{% endif %}
+        </td>
+        <td style="font-size:0.82em;color:var(--muted)">{{ p.system_id[:8] if p.system_id else '—' }}</td>
+        <td><a href="/poam/{{ p.id }}" style="font-size:0.78em;color:var(--yellow)">Review &amp; Approve →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

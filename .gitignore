@@ -1,5 +1,6 @@
 # Runtime
 .venv/
+.venv-xylok/
 __pycache__/
 *.pyc
 *.pyo
@@ -10,6 +11,12 @@ __pycache__/
 *.db-shm
 uploads/
 results/
+
+# Runtime data (generated files, reports, avatars, review uploads)
+data/
+
+# Scraper dump artifacts
+scripts/xylok_dump/
 
 # NIST catalog cache (large, re-downloadable)
 controls/nist_800_53r5.json

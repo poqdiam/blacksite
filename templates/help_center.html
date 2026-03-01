@@ -1,0 +1,591 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Help Center{% endblock %}
+
+{% block head %}
+<style>
+  .help-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 800px) {
+    .help-layout { grid-template-columns: 1fr; }
+    .help-toc { position: static !important; }
+  }
+  .help-toc {
+    position: sticky;
+    top: calc(var(--topbar-h) + 16px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .help-toc-title {
+    font-size: 0.65em;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    margin-bottom: 10px;
+    font-weight: 700;
+  }
+  .help-toc a {
+    display: block;
+    padding: 5px 8px;
+    border-radius: 4px;
+    font-size: 0.82em;
+    color: var(--muted);
+    text-decoration: none;
+    margin-bottom: 2px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .help-toc a:hover, .help-toc a.active { background: rgba(0,255,204,0.08); color: var(--cyan); }
+  .help-toc .toc-sub { padding-left: 18px; font-size: 0.78em; }
+
+  .help-section {
+    scroll-margin-top: calc(var(--topbar-h) + 24px);
+    margin-bottom: 40px;
+  }
+  .help-section h2 {
+    font-size: 1.1em;
+    color: var(--cyan);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+  }
+  .help-section h3 {
+    font-size: 0.92em;
+    color: var(--text);
+    margin: 20px 0 8px;
+  }
+  .help-section p, .help-section li {
+    font-size: 0.86em;
+    line-height: 1.75;
+    color: var(--muted);
+  }
+  .help-section ul, .help-section ol {
+    margin: 8px 0 12px 20px;
+  }
+  .help-section li { margin-bottom: 4px; }
+
+  .help-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+  }
+  .help-card.warn {
+    border-color: rgba(255,179,0,0.3);
+    background: rgba(255,179,0,0.04);
+  }
+  .help-card.danger {
+    border-color: rgba(244,67,54,0.3);
+    background: rgba(244,67,54,0.04);
+  }
+  .help-card.info {
+    border-color: rgba(0,255,204,0.2);
+    background: rgba(0,255,204,0.03);
+  }
+
+  .role-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.82em; }
+  .role-table th { text-align: left; padding: 8px 12px; background: rgba(255,255,255,0.04);
+                   color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+  .role-table td { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: top; }
+  .role-table tr:last-child td { border-bottom: none; }
+
+  .status-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 0.75em;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .pill-active   { background: rgba(0,200,83,0.12); color: var(--green); }
+  .pill-frozen   { background: rgba(255,107,0,0.12); color: #ff8c42; }
+  .pill-removed  { background: rgba(244,67,54,0.12); color: var(--red); }
+  .pill-open     { background: rgba(0,255,204,0.1); color: var(--cyan); }
+  .pill-closed   { background: rgba(0,200,83,0.12); color: var(--green); }
+  .pill-waiver   { background: rgba(255,215,0,0.1); color: var(--gold); }
+  .pill-draft    { background: rgba(136,136,136,0.1); color: var(--muted); }
+
+  .step-row { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+  .step-num { flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
+              background: rgba(0,255,204,0.15); color: var(--cyan); font-size: 0.8em;
+              font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .step-body { font-size: 0.85em; color: var(--muted); line-height: 1.6; padding-top: 4px; }
+  .step-body strong { color: var(--text); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <span>Help Center</span>
+</div>
+
+<h1 style="margin:0 0 6px">Help Center</h1>
+<p style="color:var(--muted);font-size:0.88em;margin-bottom:28px">
+  Reference documentation for the {{ app_name }} platform. Use the table of contents to jump to a topic.
+</p>
+
+<div class="help-layout">
+
+  {# ── Table of Contents ── #}
+  <div class="help-toc">
+    <div class="help-toc-title">Contents</div>
+    <a href="#roles">Roles &amp; Permissions</a>
+    <a href="#account-status" class="toc-sub">Account Status</a>
+    <a href="#freeze" class="toc-sub">Freezing Accounts</a>
+    <a href="#remove" class="toc-sub">Removing Users</a>
+    <a href="#role-switch" class="toc-sub">Role Switching</a>
+    <a href="#poam">POA&amp;M Tracker</a>
+    <a href="#poam-statuses" class="toc-sub">Status Lifecycle</a>
+    <a href="#rmf">RMF Workflow</a>
+    <a href="#controls">Control Catalog</a>
+    <a href="#ato">ATO Package</a>
+    <a href="#observations">Observations</a>
+    <a href="#siem">SIEM &amp; Audit Log</a>
+    <a href="#glossary">Glossary</a>
+  </div>
+
+  {# ── Main content ── #}
+  <div>
+
+    {# ── Roles & Permissions ── #}
+    <div class="help-section" id="roles">
+      <h2>Roles &amp; Permissions</h2>
+      <p>
+        Every user on the platform is assigned a role that controls what they can see and do.
+        Roles are set by administrators in the User Management section. The table below summarizes
+        each role and its primary capabilities.
+      </p>
+      <table class="role-table">
+        <thead>
+          <tr>
+            <th>Role</th>
+            <th>Primary Responsibility</th>
+            <th>Key Permissions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong style="color:#b06eff">Admin</strong></td>
+            <td>Platform administrator</td>
+            <td>Full access to all features, user management, system configuration, SIEM, audit log</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--red)">AO</strong></td>
+            <td>Authorizing Official — final ATOs decision-maker</td>
+            <td>ATO submissions, decision queue, posture overview, risk review</td>
+          </tr>
+          <tr>
+            <td><strong style="color:#e040fb">CISO</strong></td>
+            <td>Chief Information Security Officer</td>
+            <td>Program-wide posture, risk, controls, submissions, reports</td>
+          </tr>
+          <tr>
+            <td><strong style="color:#ff8c42">ISSM</strong></td>
+            <td>IS Security Manager — org-level program</td>
+            <td>Full GRC operations, SIEM, audit log, observations; no user management</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--yellow)">ISSO</strong></td>
+            <td>IS Security Officer — system-level</td>
+            <td>System controls, POA&amp;M, risks, observations, ATO package, RMF</td>
+          </tr>
+          <tr>
+            <td><strong style="color:#64b4ff">SCA</strong></td>
+            <td>Security Control Assessor — independent assessment</td>
+            <td>Controls review, SSP upload, POA&amp;M review, observations, posture</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--green)">System Owner</strong></td>
+            <td>Owns and is accountable for a system</td>
+            <td>System catalog, RMF, POA&amp;M, risks, ATO package, BCDR</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--gold)">Auditor</strong></td>
+            <td>Read-only compliance auditor</td>
+            <td>View-only: posture, risks, POA&amp;M, observations, reports, exports</td>
+          </tr>
+          <tr>
+            <td><strong style="color:#ff6b35">BCDR</strong></td>
+            <td>Business Continuity &amp; Disaster Recovery</td>
+            <td>BCDR dashboard, system catalog, risks, POA&amp;M, ATO, RMF monitoring</td>
+          </tr>
+          <tr>
+            <td><strong style="color:#ff5252">Pen Tester</strong></td>
+            <td>3PAO / Red Team assessor</td>
+            <td>Observations, system catalog, risk register, control catalog</td>
+          </tr>
+          <tr>
+            <td><strong style="color:#40c4ff">Data Owner</strong></td>
+            <td>Responsible for data classification &amp; handling</td>
+            <td>System catalog, ATO package, control catalog</td>
+          </tr>
+          <tr>
+            <td><strong style="color:#69f0ae">PMO</strong></td>
+            <td>Portfolio Manager — program oversight</td>
+            <td>System catalog, submissions, posture, reports</td>
+          </tr>
+          <tr>
+            <td><strong style="color:#ffd740">Incident Responder</strong></td>
+            <td>Security incident response</td>
+            <td>Observations, risks, system catalog, audit log</td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--muted)">Employee</strong></td>
+            <td>General team member</td>
+            <td>Dashboard, control catalog, RMF workflow, system catalog, POA&amp;M, risks, ATO, submissions, reports (read access)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    {# ── Account Status ── #}
+    <div class="help-section" id="account-status">
+      <h2>Account Status</h2>
+      <p>Each user account has one of three states:</p>
+      <div class="help-card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span class="status-pill pill-active">Active</span>
+          <strong style="font-size:0.85em">Normal access</strong>
+        </div>
+        <p style="margin:0">The user can log in and access all features permitted by their role.</p>
+      </div>
+      <div class="help-card warn">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span class="status-pill pill-frozen">Frozen</span>
+          <strong style="font-size:0.85em">Temporarily suspended</strong>
+        </div>
+        <p style="margin:0">The account is suspended. The user receives a <strong>403 Access Denied</strong> on every page.
+        Their profile, role, and system assignments are preserved. An admin can unfreeze the account instantly,
+        restoring full access with no data loss.</p>
+      </div>
+      <div class="help-card danger">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span class="status-pill pill-removed">Removed</span>
+          <strong style="font-size:0.85em">Deactivated — archived for 365 days</strong>
+        </div>
+        <p style="margin:0">The account is deactivated and the user cannot log in. The profile is moved to the
+        <strong>Shadow Archive</strong> and automatically purged after 365 days. An admin can restore a removed
+        account within that window. Removal requires selecting a reason (e.g., Termination, Security Violation)
+        which is recorded in the audit log.</p>
+      </div>
+    </div>
+
+    {# ── Freezing ── #}
+    <div class="help-section" id="freeze">
+      <h2>Freezing an Account</h2>
+      <p>Use <strong>Freeze</strong> when you need to temporarily revoke a user's access without permanently
+      removing their account. Common scenarios:</p>
+      <ul>
+        <li>User is on extended leave and access should be suspended</li>
+        <li>Investigation is underway — access revoked pending outcome</li>
+        <li>User's role change is pending approval</li>
+        <li>Account compromise suspected — immediate lockout required</li>
+      </ul>
+      <div class="step-row"><div class="step-num">1</div><div class="step-body">
+        Go to <strong>Admin → User Management</strong>.
+      </div></div>
+      <div class="step-row"><div class="step-num">2</div><div class="step-body">
+        Find the user in the table. Click the <strong>Freeze</strong> button in their Actions column.
+      </div></div>
+      <div class="step-row"><div class="step-num">3</div><div class="step-body">
+        The account is immediately suspended. The user row shows the <span class="status-pill pill-frozen">frozen</span>
+        badge. The action is recorded in the audit log.
+      </div></div>
+      <div class="step-row"><div class="step-num">4</div><div class="step-body">
+        To restore access, click <strong>Unfreeze</strong>. Access is restored immediately — no data is lost.
+      </div></div>
+      <div class="help-card info" style="margin-top:16px">
+        <strong style="font-size:0.82em;color:var(--cyan)">Note:</strong>
+        <span style="font-size:0.82em;color:var(--muted)"> Frozen accounts retain their role and system assignments.
+        The freeze only affects login access — all GRC data associated with the user remains intact.</span>
+      </div>
+    </div>
+
+    {# ── Removing ── #}
+    <div class="help-section" id="remove">
+      <h2>Removing a User</h2>
+      <p>Use <strong>Remove</strong> for permanent account deactivation, typically at offboarding.
+      Removal is a two-step process designed to prevent accidental deletions.</p>
+      <div class="step-row"><div class="step-num">1</div><div class="step-body">
+        Go to <strong>Admin → User Management</strong>. Click <strong>Remove</strong> on the user's row.
+      </div></div>
+      <div class="step-row"><div class="step-num">2</div><div class="step-body">
+        A confirmation screen shows the user's username, role, and number of active system assignments.
+      </div></div>
+      <div class="step-row"><div class="step-num">3</div><div class="step-body">
+        Select a <strong>Removal Reason</strong> from the dropdown:
+        <ul style="margin-top:6px">
+          <li><strong>Termination</strong> — Employment ended</li>
+          <li><strong>Role Elimination</strong> — Position no longer exists</li>
+          <li><strong>Security Violation</strong> — Policy or security breach</li>
+          <li><strong>Contractor Offboarding</strong> — Contract concluded</li>
+          <li><strong>Account Compromise</strong> — Credentials believed compromised</li>
+        </ul>
+      </div></div>
+      <div class="step-row"><div class="step-num">4</div><div class="step-body">
+        Click <strong>Yes, Remove User</strong>. The account moves to the <strong>Shadow Archive</strong>
+        and the reason is recorded in the audit log.
+      </div></div>
+      <div class="step-row"><div class="step-num">5</div><div class="step-body">
+        Within 365 days, the account can be <strong>Restored</strong> from <strong>Admin → Shadow Archive</strong>.
+        After 365 days, the profile is automatically purged.
+      </div></div>
+      <div class="help-card warn" style="margin-top:12px">
+        <strong style="font-size:0.82em;color:var(--yellow)">System Assignments:</strong>
+        <span style="font-size:0.82em;color:var(--muted)"> When a user is removed, their system assignments are
+        <em>not</em> deleted — they remain for audit continuity. The user simply loses the ability to log in.
+        If the assignments should be reassigned, do so before or after removal via the System Catalog.</span>
+      </div>
+    </div>
+
+    {# ── Role Switching ── #}
+    <div class="help-section" id="role-switch">
+      <h2>Role Switching</h2>
+      <p>
+        Admins and senior roles (AO, CISO, ISSM) can temporarily switch to a lower-privilege role to verify
+        how the platform appears to users in that role. This is useful for access reviews and troubleshooting
+        permission issues.
+      </p>
+      <ul>
+        <li>Click your username in the top-right corner to open the user menu.</li>
+        <li>Use the <strong>Switch Role</strong> dropdown to select a role.</li>
+        <li>An orange banner appears at the top of every page: <em>VIEWING AS [ROLE]</em></li>
+        <li>While in a switched role, you only see what that role sees — admin menus and restricted
+            pages are inaccessible.</li>
+        <li>Click <strong>← Reset Role</strong> in the banner or user menu to return to your native role.</li>
+      </ul>
+      <div class="help-card info">
+        <strong style="font-size:0.82em;color:var(--cyan)">Note:</strong>
+        <span style="font-size:0.82em;color:var(--muted)"> Role switching is session-based (stored in a browser cookie).
+        Closing your browser or clicking Reset Role ends the switched view. No data is modified while viewing as another role.</span>
+      </div>
+    </div>
+
+    {# ── POA&M ── #}
+    <div class="help-section" id="poam">
+      <h2>POA&amp;M Tracker</h2>
+      <p>
+        The Plan of Action &amp; Milestones (POA&amp;M) tracker follows the NIST SP 800-53 CA-5 format.
+        Each item represents a security weakness that requires remediation tracking.
+      </p>
+      <h3 id="poam-statuses">Status Lifecycle</h3>
+      <p>POA&amp;M items flow through the following states:</p>
+      <div class="help-card">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+          <span class="status-pill pill-draft">Draft</span>
+          <span style="color:var(--muted);font-size:0.75em;padding-top:4px">→</span>
+          <span class="status-pill pill-open">Open</span>
+          <span style="color:var(--muted);font-size:0.75em;padding-top:4px">→</span>
+          <span class="status-pill" style="background:rgba(0,255,204,0.1);color:var(--cyan)">In Progress</span>
+          <span style="color:var(--muted);font-size:0.75em;padding-top:4px">→</span>
+          <span class="status-pill" style="background:rgba(244,67,54,0.1);color:var(--red)">Blocked</span>
+          <span style="color:var(--muted);font-size:0.75em;padding-top:4px">→</span>
+          <span class="status-pill" style="background:rgba(255,215,0,0.1);color:var(--gold)">Ready for Review</span>
+        </div>
+        <p style="margin:0 0 8px;font-size:0.82em;color:var(--muted)">After review, items close in one of four terminal states:</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <span class="status-pill pill-closed">Closed Verified</span>
+          <span class="status-pill pill-waiver">Deferred by Waiver</span>
+          <span class="status-pill" style="background:rgba(255,107,0,0.1);color:#ff8c42">Accepted Risk</span>
+          <span class="status-pill" style="background:rgba(136,136,136,0.1);color:var(--muted)">False Positive</span>
+        </div>
+      </div>
+      <table class="role-table" style="margin-top:12px">
+        <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><span class="status-pill pill-draft">Draft</span></td><td>Item created but not yet formally opened — may be incomplete</td></tr>
+          <tr><td><span class="status-pill pill-open">Open</span></td><td>Weakness confirmed and formally tracked; remediation not yet started</td></tr>
+          <tr><td><span class="status-pill" style="background:rgba(0,255,204,0.1);color:var(--cyan)">In Progress</span></td><td>Remediation actively underway</td></tr>
+          <tr><td><span class="status-pill" style="background:rgba(244,67,54,0.1);color:var(--red)">Blocked</span></td><td>Remediation halted — awaiting resources, approvals, or dependencies</td></tr>
+          <tr><td><span class="status-pill" style="background:rgba(255,215,0,0.1);color:var(--gold)">Ready for Review</span></td><td>Remediation complete; awaiting ISSM/AO verification</td></tr>
+          <tr><td><span class="status-pill pill-closed">Closed Verified</span></td><td>Control assessor confirmed the weakness is fully remediated</td></tr>
+          <tr><td><span class="status-pill pill-waiver">Deferred by Waiver</span></td><td>AO-approved waiver granted; item deferred with expiry date</td></tr>
+          <tr><td><span class="status-pill" style="background:rgba(255,107,0,0.1);color:#ff8c42">Accepted Risk</span></td><td>Risk formally accepted by AO; no further remediation planned</td></tr>
+          <tr><td><span class="status-pill" style="background:rgba(136,136,136,0.1);color:var(--muted)">False Positive</span></td><td>Finding determined to be invalid; item closed without remediation</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    {# ── RMF Workflow ── #}
+    <div class="help-section" id="rmf">
+      <h2>RMF Workflow</h2>
+      <p>
+        The Risk Management Framework (RMF) workflow follows <strong>NIST SP 800-37 Rev 2</strong>.
+        It structures how systems are authorized to operate, progressing through six steps:
+      </p>
+      <div class="step-row"><div class="step-num">1</div><div class="step-body">
+        <strong>Prepare</strong> — Establish organizational risk management roles, strategies, and risk tolerance.
+        Define the system boundary and mission/business processes.
+      </div></div>
+      <div class="step-row"><div class="step-num">2</div><div class="step-body">
+        <strong>Categorize</strong> — Classify the system and its information using FIPS 199 / NIST SP 800-60.
+        Assign a security categorization (Low, Moderate, High) for Confidentiality, Integrity, and Availability.
+      </div></div>
+      <div class="step-row"><div class="step-num">3</div><div class="step-body">
+        <strong>Select</strong> — Choose an appropriate control baseline (NIST SP 800-53) aligned to the
+        security categorization. Tailor controls as needed.
+      </div></div>
+      <div class="step-row"><div class="step-num">4</div><div class="step-body">
+        <strong>Implement</strong> — Deploy the selected controls. Document implementation details in the
+        System Security Plan (SSP).
+      </div></div>
+      <div class="step-row"><div class="step-num">5</div><div class="step-body">
+        <strong>Assess</strong> — SCA independently evaluates control effectiveness. Findings feed the
+        Security Assessment Report (SAR) and open POA&amp;M items.
+      </div></div>
+      <div class="step-row"><div class="step-num">6</div><div class="step-body">
+        <strong>Authorize</strong> — AO reviews the authorization package (SSP + SAR + POA&amp;M) and issues
+        an Authorization to Operate (ATO), Interim ATO (IATO), or Denial of ATO (DATO).
+      </div></div>
+      <div class="step-row"><div class="step-num">★</div><div class="step-body">
+        <strong>Monitor</strong> — Continuous monitoring of controls, security alerts, and POA&amp;M
+        progress throughout the ATO lifecycle.
+      </div></div>
+    </div>
+
+    {# ── Control Catalog ── #}
+    <div class="help-section" id="controls">
+      <h2>Control Catalog</h2>
+      <p>
+        The Control Catalog displays all security controls from <strong>NIST SP 800-53 Rev 5</strong>,
+        organized by control family (AC — Access Control, AU — Audit, etc.). Each control page shows:
+      </p>
+      <ul>
+        <li><strong>Statement</strong> — The normative control requirement text from NIST</li>
+        <li><strong>Supplemental Guidance</strong> — Additional context from NIST on intent and implementation</li>
+        <li><strong>Family</strong> — The control family (e.g., AC, AU, IA)</li>
+        <li><strong>Parameters</strong> — Configurable values within the control (shown where applicable)</li>
+      </ul>
+      <p>
+        Use the filter on the Controls list page to search by control ID, title, or family.
+        Controls cannot be edited from the catalog view — they are loaded from the OSCAL catalog source.
+      </p>
+    </div>
+
+    {# ── ATO Package ── #}
+    <div class="help-section" id="ato">
+      <h2>ATO Package</h2>
+      <p>
+        The ATO Package section manages all authorization artifacts for a system. Document types include
+        the System Security Plan (SSP), Security Assessment Report (SAR), Plan of Action &amp; Milestones
+        (POA&amp;M), and 52 additional document types aligned to federal authorization requirements.
+      </p>
+      <ul>
+        <li>Navigate to <strong>ATO Package → select a system</strong> to see all required documents</li>
+        <li>Upload or submit documents by clicking the document type card</li>
+        <li>Document status tracks through: <em>Not Started → In Progress → Under Review → Approved</em></li>
+        <li>The <strong>ATO Submissions</strong> page tracks submitted authorization packages for AO review</li>
+      </ul>
+      <p>
+        The ATO Package supports EIS (Enterprise Infrastructure Solutions) and standard authorization types,
+        including FedRAMP Moderate, FedRAMP High, and FISMA equivalents.
+      </p>
+    </div>
+
+    {# ── Observations ── #}
+    <div class="help-section" id="observations">
+      <h2>Observations</h2>
+      <p>
+        Observations are formal security findings recorded during assessments, audits, or continuous monitoring.
+        They are linked to systems and controls and can feed into POA&amp;M items.
+      </p>
+      <ul>
+        <li>The sidebar badge on <strong>Observations</strong> shows the count of open, unresolved observations</li>
+        <li>Each observation has a severity (Low, Moderate, High, Critical), a finding statement, and an optional control reference</li>
+        <li>ISSOs, ISSMs, SCAs, and Auditors can create and manage observations</li>
+        <li>The <strong>/api/observations/summary</strong> endpoint provides a JSON summary for dashboard widgets</li>
+      </ul>
+    </div>
+
+    {# ── SIEM & Audit Log ── #}
+    <div class="help-section" id="siem">
+      <h2>SIEM &amp; Audit Log</h2>
+      <h3>SIEM (Security Information &amp; Event Management)</h3>
+      <p>
+        The built-in SIEM at <strong>Admin → SIEM</strong> logs platform security events automatically.
+        Events are captured when:
+      </p>
+      <ul>
+        <li>Any request returns HTTP 400 or higher (errors, denied access)</li>
+        <li>Any <code>/admin/*</code> page is accessed</li>
+        <li>Login, auth, role-switching, or shell-related paths are accessed</li>
+      </ul>
+      <p>Severity levels:</p>
+      <ul>
+        <li><strong style="color:var(--red)">Critical / High</strong> — Server errors (5xx), critical events</li>
+        <li><strong style="color:var(--yellow)">Medium</strong> — Failed auth (401), access denied (403)</li>
+        <li><strong style="color:#ff8c42">Low</strong> — Admin page access</li>
+        <li><strong style="color:var(--muted)">Info</strong> — Other logged events</li>
+      </ul>
+      <h3>Audit Log</h3>
+      <p>
+        The Audit Log at <strong>Admin → Audit Log</strong> records all data mutations in the platform:
+        user role changes, system creation, POA&amp;M updates, ATO submissions, freezes, removals, etc.
+        Each entry captures the performing user, timestamp, action type, resource, and details.
+      </p>
+      <ul>
+        <li>Default view hides <em>VIEW</em> events (read-only accesses) to reduce noise</li>
+        <li>Toggle "Include View Events" to see all access records</li>
+        <li>Default date range is the last 30 days</li>
+      </ul>
+    </div>
+
+    {# ── Glossary ── #}
+    <div class="help-section" id="glossary">
+      <h2>Glossary</h2>
+      <table class="role-table">
+        <thead><tr><th style="width:140px">Term</th><th>Definition</th></tr></thead>
+        <tbody>
+          <tr><td><strong>AO</strong></td><td>Authorizing Official — senior official with authority to accept risk and grant system authorization</td></tr>
+          <tr><td><strong>ATO</strong></td><td>Authorization to Operate — formal decision that a system is authorized to process federal information</td></tr>
+          <tr><td><strong>BCDR</strong></td><td>Business Continuity &amp; Disaster Recovery — plans and personnel ensuring systems survive disruptions</td></tr>
+          <tr><td><strong>CISO</strong></td><td>Chief Information Security Officer — executive responsible for organization-wide security posture</td></tr>
+          <tr><td><strong>EIS</strong></td><td>Enterprise Infrastructure Solutions — GSA contract vehicle; ATO type for EIS-scoped systems</td></tr>
+          <tr><td><strong>FedRAMP</strong></td><td>Federal Risk and Authorization Management Program — standardized security authorization for cloud services</td></tr>
+          <tr><td><strong>ISSO</strong></td><td>Information System Security Officer — responsible for day-to-day security of a specific system</td></tr>
+          <tr><td><strong>ISSM</strong></td><td>Information System Security Manager — manages the organization's IS security program</td></tr>
+          <tr><td><strong>NIST</strong></td><td>National Institute of Standards and Technology — publishes SP 800-53 (controls), SP 800-37 (RMF)</td></tr>
+          <tr><td><strong>OSCAL</strong></td><td>Open Security Controls Assessment Language — machine-readable format for security control catalogs (used by this platform)</td></tr>
+          <tr><td><strong>POA&amp;M</strong></td><td>Plan of Action &amp; Milestones — document tracking security weaknesses and remediation timelines</td></tr>
+          <tr><td><strong>RMF</strong></td><td>Risk Management Framework — NIST SP 800-37 process for system authorization</td></tr>
+          <tr><td><strong>SAR</strong></td><td>Security Assessment Report — SCA's findings from assessing control implementation</td></tr>
+          <tr><td><strong>SCA</strong></td><td>Security Control Assessor — independent third party that assesses system controls</td></tr>
+          <tr><td><strong>SIEM</strong></td><td>Security Information &amp; Event Management — system for collecting and analyzing security event logs</td></tr>
+          <tr><td><strong>SSP</strong></td><td>System Security Plan — authoritative document describing a system's security controls and implementation</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>{# end main content #}
+</div>{# end help-layout #}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Highlight active TOC link based on scroll position
+(function() {
+  const sections = document.querySelectorAll('.help-section[id]');
+  const links    = document.querySelectorAll('.help-toc a');
+  function onScroll() {
+    let active = null;
+    sections.forEach(function(sec) {
+      const top = sec.getBoundingClientRect().top;
+      if (top <= 120) active = sec.id;
+    });
+    links.forEach(function(a) {
+      const href = a.getAttribute('href').replace('#', '');
+      a.classList.toggle('active', href === active);
+    });
+  }
+  window.addEventListener('scroll', onScroll, {passive: true});
+  onScroll();
+})();
+</script>
+{% endblock %}

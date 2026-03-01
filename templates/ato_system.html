@@ -1,5 +1,56 @@
 {% extends "base.html" %}
 {% block title %}ATO Package — {{ system.name }} — BLACKSITE{% endblock %}
+
+{% block head %}
+<style>
+  .doc-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .doc-section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    cursor: pointer;
+    user-select: none;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .doc-section-header:hover { background: rgba(255,255,255,.02); }
+  .doc-section-title {
+    font-size: .75em;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text);
+    flex: 1;
+  }
+  .doc-section-count {
+    font-size: .72em;
+    color: var(--muted);
+  }
+  .doc-section-chevron {
+    font-size: .7em;
+    color: var(--muted);
+    transition: transform .2s;
+  }
+  .doc-section.open .doc-section-chevron { transform: rotate(90deg); }
+  .doc-section-body { display: none; }
+  .doc-section.open .doc-section-body { display: block; }
+
+  .ref-row { background: rgba(255,255,255,.015); }
+  .ref-badge {
+    font-size: .65em; font-weight: 700; letter-spacing: .5px;
+    background: rgba(136,136,136,.15); color: var(--muted);
+    border-radius: 3px; padding: 2px 6px;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
   <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
@@ -7,61 +58,182 @@
     <span style="color:var(--border)">|</span>
     <h1 class="page-title" style="margin:0">{{ system.name }}</h1>
     <span class="badge badge-info">{{ system.classification or 'UNCLASSIFIED' }}</span>
+    {% if system.is_eis %}
+    <span class="badge" style="background:rgba(0,255,204,.1);color:var(--cyan);border:1px solid rgba(0,255,204,.2)">EIS</span>
+    {% endif %}
   </div>
-  <p class="page-sub">ATO Package — {{ finalized_ct }}/{{ ato_doc_keys|length }} documents finalized ({{ ato_pct }}%)</p>
+  {# Count only workflow docs (non guidance_only) for the pct #}
+  {% set workflow_total = ato_doc_keys | selectattr('__class__') | list | length %}
+  {% set ns = namespace(workflow_total=0, workflow_finalized=0) %}
+  {% for key in ato_doc_keys %}
+    {% set meta = ato_doc_types[key] %}
+    {% if not meta.get('guidance_only', false) %}
+      {% set ns.workflow_total = ns.workflow_total + 1 %}
+      {% set doc = docs.get(key) %}
+      {% if doc and doc.status == 'finalized' %}
+        {% set ns.workflow_finalized = ns.workflow_finalized + 1 %}
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+  <p class="page-sub">
+    ATO Package — {{ ns.workflow_finalized }}/{{ ns.workflow_total }} workflow documents finalized
+    ({{ ((ns.workflow_finalized / ns.workflow_total * 100) | int) if ns.workflow_total > 0 else 0 }}%)
+  </p>
   <div style="margin-top:.75rem;background:var(--bg-card);border-radius:6px;height:8px;max-width:400px;overflow:hidden">
-    <div style="height:8px;width:{{ ato_pct }}%;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width .4s"></div>
+    {% set pct = ((ns.workflow_finalized / ns.workflow_total * 100) | int) if ns.workflow_total > 0 else 0 %}
+    <div style="height:8px;width:{{ pct }}%;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width .4s"></div>
   </div>
 </div>
 
-<div class="card" style="overflow:hidden;padding:0">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>Document</th>
-        <th>Short</th>
-        <th>Status</th>
-        <th>Version</th>
-        <th>Assigned To</th>
-        <th>Due Date</th>
-        <th>Last Updated</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for key in ato_doc_keys %}
-      {% set doc = docs.get(key) %}
-      {% set meta = ato_doc_types[key] %}
-      {% set st = doc.status if doc else 'missing' %}
-      <tr>
-        <td style="font-weight:500">{{ meta.name }}</td>
-        <td><code style="font-size:.78rem">{{ key }}</code></td>
-        <td>
-          <span class="badge
-            {% if st == 'finalized' %}badge-success
-            {% elif st == 'approved' %}badge-info
-            {% elif st == 'in_review' %}badge-warn
-            {% elif st == 'draft' %}badge-muted
-            {% else %}badge-danger{% endif %}">
-            {{ st.replace('_',' ').title() }}
-          </span>
-        </td>
-        <td style="color:var(--muted);font-size:.85rem">{{ doc.version if doc else '—' }}</td>
-        <td style="color:var(--muted);font-size:.85rem">{{ doc.assigned_to or '—' }}</td>
-        <td style="font-size:.85rem;{% if doc and doc.due_date and doc.due_date < today_str %}color:var(--danger){% else %}color:var(--muted){% endif %}">
-          {{ doc.due_date or '—' }}
-        </td>
-        <td style="color:var(--muted);font-size:.8rem">
-          {% if doc %}{{ doc.updated_at.strftime('%Y-%m-%d') if doc.updated_at else '—' }}{% else %}—{% endif %}
-        </td>
-        <td>
-          <a href="/ato/{{ system.id }}/{{ key }}" class="btn btn-sm btn-outline">
-            {% if doc %}View / Edit{% else %}Start{% endif %}
-          </a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+{# Helper macro for doc table row #}
+{% macro doc_row(key) %}
+{% if key in ato_doc_types %}
+{% set doc = docs.get(key) %}
+{% set meta = ato_doc_types[key] %}
+{% set st = doc.status if doc else 'missing' %}
+{% if meta.get('guidance_only', false) %}
+<tr class="ref-row">
+  <td style="font-weight:500;color:var(--muted)">{{ meta.name }}</td>
+  <td><code style="font-size:.78rem">{{ key }}</code></td>
+  <td colspan="5"><span class="ref-badge">Reference Only</span></td>
+  <td>
+    <a href="/ato/{{ system.id }}/{{ key }}" class="btn btn-sm btn-outline" style="color:var(--muted);border-color:var(--border)">Notes</a>
+  </td>
+</tr>
+{% else %}
+<tr>
+  <td style="font-weight:500">{{ meta.name }}</td>
+  <td><code style="font-size:.78rem">{{ key }}</code></td>
+  <td>
+    <span class="badge
+      {% if st == 'finalized' %}badge-success
+      {% elif st == 'approved' %}badge-info
+      {% elif st == 'in_review' %}badge-warn
+      {% elif st == 'draft' %}badge-muted
+      {% else %}badge-danger{% endif %}">
+      {{ st.replace('_',' ').title() }}
+    </span>
+  </td>
+  <td style="color:var(--muted);font-size:.85rem">{{ doc.version if doc else '—' }}</td>
+  <td style="color:var(--muted);font-size:.85rem">{{ doc.assigned_to or '—' }}</td>
+  <td style="font-size:.85rem;{% if doc and doc.due_date and doc.due_date < today_str %}color:var(--danger){% else %}color:var(--muted){% endif %}">
+    {{ doc.due_date or '—' }}
+  </td>
+  <td style="color:var(--muted);font-size:.8rem">
+    {% if doc %}{{ doc.updated_at.strftime('%Y-%m-%d') if doc.updated_at else '—' }}{% else %}—{% endif %}
+  </td>
+  <td>
+    <a href="/ato/{{ system.id }}/{{ key }}" class="btn btn-sm btn-outline">
+      {% if doc %}View / Edit{% else %}Start{% endif %}
+    </a>
+  </td>
+</tr>
+{% endif %}
+{% endif %}
+{% endmacro %}
+
+{# ── Section 1: Core Authorization Package ── #}
+<div class="doc-section open" id="sec-core">
+  <div class="doc-section-header" onclick="toggleSection('sec-core')">
+    <span class="doc-section-chevron">▶</span>
+    <span class="doc-section-title">Core Authorization Package</span>
+    <span class="doc-section-count">19 documents</span>
+  </div>
+  <div class="doc-section-body">
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead>
+          <tr><th>Document</th><th>Key</th><th>Status</th><th>Version</th><th>Assigned To</th><th>Due Date</th><th>Last Updated</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for key in ['FIPS199','SSP','SAP','SAR','POAM','ABD','NET_DIAGRAM','HW_INV','SW_INV','IRP','CP','CPT','CMP','CONMON','PTA','PIA','ROB','ISA','ADD'] %}
+          {% if key in ato_doc_types %}{{ doc_row(key) }}{% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
+
+{# ── Section 2: FedRAMP Preparation ── #}
+{% set prep_keys = ['RAR_HIGH','RAR_MOD','CSP_PLAYBOOK','CRYPTO_POLICY','AUTH_BOUNDARY','TIMELINESS','PKG_ACCESS','REUSE_GUIDE','AGENCY_PB','3PAO_PERF','3PAO_RAR_GUIDE','BRANDING'] %}
+<div class="doc-section" id="sec-prep">
+  <div class="doc-section-header" onclick="toggleSection('sec-prep')">
+    <span class="doc-section-chevron">▶</span>
+    <span class="doc-section-title">FedRAMP Preparation</span>
+    <span class="doc-section-count">{{ prep_keys | length }} documents</span>
+  </div>
+  <div class="doc-section-body">
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead>
+          <tr><th>Document</th><th>Key</th><th>Status</th><th>Version</th><th>Assigned To</th><th>Due Date</th><th>Last Updated</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for key in prep_keys %}
+          {% if key in ato_doc_types %}{{ doc_row(key) }}{% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ── Section 3: FedRAMP Package Appendices ── #}
+{% set app_keys = ['PKG_CHECKLIST','SSP_APP_A_HIGH','SSP_APP_A_MOD','SSP_APP_A_LOW','SSP_APP_A_LI','SSP_APP_J','SSP_APP_M','SSP_APP_Q','SAR_APP_A','SAR_APP_B_HIGH','SAR_APP_B_MOD','SAR_APP_B_LOW','ATO_LETTER','FR_BASELINE'] %}
+<div class="doc-section" id="sec-appendices">
+  <div class="doc-section-header" onclick="toggleSection('sec-appendices')">
+    <span class="doc-section-chevron">▶</span>
+    <span class="doc-section-title">FedRAMP Package Appendices</span>
+    <span class="doc-section-count">{{ app_keys | length }} documents</span>
+  </div>
+  <div class="doc-section-body">
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead>
+          <tr><th>Document</th><th>Key</th><th>Status</th><th>Version</th><th>Assigned To</th><th>Due Date</th><th>Last Updated</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for key in app_keys %}
+          {% if key in ato_doc_types %}{{ doc_row(key) }}{% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ── Section 4: Continuous Monitoring ── #}
+{% set cm_keys = ['CONMON_MONTHLY','CONMON_DELIV','ANNUAL_CTRL_SEL','PENTEST_GUIDE','VULN_CONTAINERS','VULN_DEVIATION','CONMON_PLAYBOOK'] %}
+<div class="doc-section" id="sec-conmon">
+  <div class="doc-section-header" onclick="toggleSection('sec-conmon')">
+    <span class="doc-section-chevron">▶</span>
+    <span class="doc-section-title">Continuous Monitoring</span>
+    <span class="doc-section-count">{{ cm_keys | length }} documents</span>
+  </div>
+  <div class="doc-section-body">
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead>
+          <tr><th>Document</th><th>Key</th><th>Status</th><th>Version</th><th>Assigned To</th><th>Due Date</th><th>Last Updated</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for key in cm_keys %}
+          {% if key in ato_doc_types %}{{ doc_row(key) }}{% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleSection(id) {
+  const sec = document.getElementById(id);
+  sec.classList.toggle('open');
+}
+</script>
 {% endblock %}

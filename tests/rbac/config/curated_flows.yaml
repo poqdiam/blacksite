@@ -1,0 +1,614 @@
+---
+# BLACKSITE RBAC — Curated critical flows
+# Each flow has: id, name, allowed_lenses, denied_lenses, steps
+# Steps: action, selector, value, url, expected_status, expected_text, expect_deny
+#
+# Placeholder tokens in URLs/values:
+#   {SYSTEM_ID}   - replaced with fixture system ALPHA id at runtime
+#   {SYSTEM_B}    - fixture system BRAVO id
+#   {RISK_ID}     - a risk id created by the fixture
+#   {POAM_ID}     - a poam item id created by the fixture
+#   {BCDR_ID}     - a bcdr event id created by the fixture
+
+flows:
+
+  # ── Risk flows ───────────────────────────────────────────────────────────────
+
+  - id: risk_view
+    name: "Risk Register — view access"
+    allowed_lenses: [ao, ciso, issm, isso, sca, system_owner, pmo, bcdr_coordinator, auditor, pen_tester, data_owner, incident_responder]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /risks
+        expected_status: 200
+        expected_text: "Risk Register"
+
+  - id: risk_create
+    name: "Risk Register — create new risk"
+    allowed_lenses: [ao, ciso, issm, isso, sca, system_owner]
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder]
+    steps:
+      - action: navigate
+        url: /risks/new
+        expected_status: 200
+      - action: fill
+        selector: "input[name='risk_name']"
+        value: "RBAC Test Risk {RUN_ID}"
+      - action: fill
+        selector: "textarea[name='risk_description']"
+        value: "Automated RBAC test risk created by runner"
+      - action: select
+        selector: "select[name='likelihood']"
+        value: "3"
+      - action: select
+        selector: "select[name='impact']"
+        value: "3"
+      - action: submit
+        url: /risks
+        expected_status: 200
+        expect_deny: false
+
+  - id: risk_create_denied
+    name: "Risk Register — create blocked for read-only roles"
+    allowed_lenses: []
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder]
+    steps:
+      - action: navigate
+        url: /risks/new
+        expected_status: 200
+      - action: fill
+        selector: "input[name='risk_name']"
+        value: "RBAC Blocked Risk {RUN_ID}"
+      - action: fill
+        selector: "textarea[name='risk_description']"
+        value: "This risk creation should be blocked"
+      - action: submit
+        url: /risks
+        expected_status: 403
+        expect_deny: true
+
+  - id: risk_update
+    name: "Risk Register — update existing risk"
+    allowed_lenses: [ao, ciso, issm, isso, sca, system_owner]
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder]
+    steps:
+      - action: navigate
+        url: /risks/{RISK_ID}
+        expected_status: 200
+        expected_text: "Risk"
+      - action: fill
+        selector: "textarea[name='treatment_plan']"
+        value: "Updated by RBAC runner {RUN_ID}"
+      - action: submit
+        url: /risks/{RISK_ID}/update
+        expected_status: 200
+        expect_deny: false
+
+  # ── POAM flows ────────────────────────────────────────────────────────────────
+
+  - id: poam_view
+    name: "POA&M — view dashboard"
+    allowed_lenses: [ao, ciso, issm, isso, sca, system_owner, pmo, auditor, bcdr_coordinator, pen_tester, data_owner, incident_responder]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /poam
+        expected_status: 200
+        expected_text: "POA"
+
+  - id: poam_create
+    name: "POA&M — create new item"
+    allowed_lenses: [ao, ciso, issm, isso, sca]
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder]
+    steps:
+      - action: navigate
+        url: /poam/new
+        expected_status: 200
+      - action: fill
+        selector: "input[name='weakness_name']"
+        value: "RBAC Test POAM {RUN_ID}"
+      - action: fill
+        selector: "textarea[name='weakness_description']"
+        value: "Automated RBAC test POA&M item"
+      - action: select
+        selector: "select[name='severity']"
+        value: "Moderate"
+      - action: submit
+        url: /poam
+        expected_status: 200
+        expect_deny: false
+
+  - id: poam_create_denied
+    name: "POA&M — create blocked for read-only roles"
+    allowed_lenses: []
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder]
+    steps:
+      - action: navigate
+        url: /poam/new
+        expected_status: 200
+      - action: fill
+        selector: "input[name='weakness_name']"
+        value: "RBAC Blocked POAM {RUN_ID}"
+      - action: submit
+        url: /poam
+        expected_status: 403
+        expect_deny: true
+
+  - id: poam_update
+    name: "POA&M — update existing item"
+    allowed_lenses: [ao, ciso, issm, isso, sca]
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder]
+    steps:
+      - action: navigate
+        url: /poam/{POAM_ID}
+        expected_status: 200
+        expected_text: "POA"
+      - action: fill
+        selector: "textarea[name='comments']"
+        value: "RBAC runner update {RUN_ID}"
+      - action: submit
+        url: /poam/{POAM_ID}/update
+        expected_status: 200
+        expect_deny: false
+
+  - id: poam_close
+    name: "POA&M — transition to closed_verified (issm/admin only)"
+    # POST /poam/{id}/update raises 403 if role lacks push-power for the target status.
+    # closed_verified requires issm or admin. Navigate step omitted: GET is readable by all.
+    allowed_lenses: [issm]
+    denied_lenses: [sca, pen_tester, data_owner, pmo, incident_responder]
+    steps:
+      - action: submit
+        url: /poam/{POAM_ID}/update
+        value: "status=closed_verified&closure_evidence=RBAC+test+closure"
+        expected_status: 200
+        expect_deny: false
+
+  - id: poam_reopen
+    name: "POA&M — reopen to open status"
+    allowed_lenses: [isso, issm, ao, ciso]
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder]
+    steps:
+      - action: navigate
+        url: /poam/{POAM_ID}
+        expected_status: 200
+      - action: select
+        selector: "select[name='status']"
+        value: "open"
+      - action: submit
+        url: /poam/{POAM_ID}/update
+        expected_status: 200
+        expect_deny: false
+
+  # ── RMF flows ─────────────────────────────────────────────────────────────────
+
+  - id: rmf_view
+    name: "RMF Workflow — view"
+    allowed_lenses: [ao, ciso, issm, isso, sca, system_owner, bcdr_coordinator, auditor, pmo, pen_tester, data_owner, incident_responder]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /rmf
+        expected_status: 200
+        expected_text: "RMF"
+
+  - id: rmf_step_update
+    name: "RMF — update step completion"
+    allowed_lenses: [ao, ciso, issm, isso, sca, system_owner]
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder]
+    steps:
+      - action: navigate
+        url: /rmf/{SYSTEM_ID}
+        expected_status: 200
+      - action: submit
+        url: /rmf/{SYSTEM_ID}/step/prepare
+        expected_status: 200
+        expect_deny: false
+
+  - id: rmf_step_update_denied
+    name: "RMF — step update blocked for read-only"
+    allowed_lenses: []
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder]
+    steps:
+      - action: submit
+        url: /rmf/{SYSTEM_ID}/step/prepare
+        expected_status: 403
+        expect_deny: true
+
+  # ── ATO / Submission flows ────────────────────────────────────────────────────
+
+  - id: ato_view
+    name: "ATO Package — view"
+    allowed_lenses: [ao, ciso, issm, isso, sca, system_owner, bcdr_coordinator, auditor, pmo, pen_tester, data_owner, incident_responder]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /ato
+        expected_status: 200
+
+  - id: ato_submit
+    name: "ATO — create submission"
+    # POST guard: _require_role([admin, ao, ciso, issm, isso]). sca/pen_tester denied.
+    # Navigate step omitted: GET /submit has no role guard (read-only form access is OK).
+    allowed_lenses: [ao, ciso, issm, isso]
+    denied_lenses: [pen_tester, sca, data_owner, pmo, incident_responder]
+    steps:
+      - action: submit
+        url: /systems/{SYSTEM_ID}/submit
+        value: "authorization_type=ATO"
+        expected_status: 200
+        expect_deny: false
+
+  - id: submissions_view
+    name: "Submissions list — view"
+    allowed_lenses: [ao, ciso, issm, isso]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /submissions
+        expected_status: 200
+
+  # ── AO Decision flows ─────────────────────────────────────────────────────────
+
+  - id: ao_decision_view
+    name: "AO Decision Queue — view"
+    allowed_lenses: [ao]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /ao/decisions
+        expected_status: 200
+
+  - id: ao_decision_approve
+    name: "AO Decision — approve a system"
+    allowed_lenses: [ao]
+    denied_lenses: [ciso, issm, isso, sca, system_owner, pmo, pen_tester, data_owner, incident_responder, bcdr_coordinator, auditor]
+    steps:
+      - action: submit
+        url: /ao/decisions/{SYSTEM_ID}
+        value: "decision=approved&rationale=RBAC+runner+test"
+        expected_status: 200
+        expect_deny: false
+
+  - id: ao_decision_approve_denied
+    name: "AO Decision — non-AO cannot approve"
+    allowed_lenses: []
+    denied_lenses: [ciso, issm, isso, sca, system_owner, pmo, pen_tester, data_owner, incident_responder]
+    steps:
+      - action: submit
+        url: /ao/decisions/{SYSTEM_ID}
+        value: "decision=approved&rationale=RBAC+escalation+test"
+        expected_status: 403
+        expect_deny: true
+
+  - id: ao_decision_deny
+    name: "AO Decision — deny a system"
+    allowed_lenses: [ao]
+    denied_lenses: [ciso, issm, isso, sca, pmo, pen_tester, data_owner, incident_responder]
+    steps:
+      - action: submit
+        url: /ao/decisions/{SYSTEM_ID}
+        value: "decision=denied&rationale=RBAC+runner+test+deny"
+        expected_status: 200
+        expect_deny: false
+
+  # ── BCDR flows ────────────────────────────────────────────────────────────────
+
+  - id: bcdr_view
+    name: "BCDR Dashboard — view"
+    # Route guard: role not in ("bcdr", "system_owner") → 403. ao/ciso/issm/isso are denied.
+    allowed_lenses: [bcdr_coordinator, system_owner]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /bcdr/dashboard
+        expected_status: 200
+
+  - id: bcdr_event_create
+    name: "BCDR — create event"
+    # Dashboard nav + POST /bcdr/events both guard: role not in ("bcdr", "system_owner")
+    allowed_lenses: [bcdr_coordinator, system_owner]
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder]
+    steps:
+      - action: navigate
+        url: /bcdr/dashboard
+        expected_status: 200
+      - action: submit
+        url: /bcdr/events
+        value: "system_id={SYSTEM_ID}&event_type=test&description=RBAC+runner+bcdr+event"
+        expected_status: 200
+        expect_deny: false
+
+  - id: bcdr_signoff
+    name: "BCDR — sign off on event"
+    allowed_lenses: [ao, ciso, issm, isso, bcdr_coordinator]
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder]
+    steps:
+      - action: submit
+        url: /bcdr/events/{BCDR_ID}/signoff
+        value: "notes=RBAC+signoff+test"
+        expected_status: 200
+        expect_deny: false
+
+  # ── Control update flows ──────────────────────────────────────────────────────
+
+  - id: control_view
+    name: "System controls — view"
+    allowed_lenses: [ao, ciso, issm, isso, sca, system_owner, pmo, auditor, pen_tester, data_owner, incident_responder]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /systems/{SYSTEM_ID}/controls
+        expected_status: 200
+
+  - id: control_update
+    name: "System control — update implementation status"
+    allowed_lenses: [ao, ciso, issm, isso, sca, system_owner]
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder]
+    steps:
+      - action: submit
+        url: /systems/{SYSTEM_ID}/controls/ac-1
+        value: "status=implemented&narrative=RBAC+runner+control+update"
+        expected_status: 200
+        expect_deny: false
+
+  - id: control_update_denied
+    name: "Control update blocked for read-only roles"
+    allowed_lenses: []
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder]
+    steps:
+      - action: submit
+        url: /systems/{SYSTEM_ID}/controls/ac-1
+        value: "status=implemented&narrative=RBAC+escalation+attempt"
+        expected_status: 403
+        expect_deny: true
+
+  # ── Artifact flows ────────────────────────────────────────────────────────────
+
+  - id: artifact_view
+    name: "Artifacts — view list"
+    allowed_lenses: [ao, ciso, issm, isso, sca, system_owner, auditor, pmo, pen_tester, data_owner, incident_responder]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /systems/{SYSTEM_ID}/artifacts
+        expected_status: 200
+
+  - id: artifact_attach
+    name: "Artifacts — attach new artifact"
+    # POST guard: _require_role([admin, ao, ciso, issm, isso]). sca denied.
+    # Use submit (POST) not upload (GET navigate) so the role guard is actually tested.
+    allowed_lenses: [ao, ciso, issm, isso]
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder, sca]
+    steps:
+      - action: submit
+        url: /systems/{SYSTEM_ID}/artifacts
+        value: "title=RBAC+Test+Artifact&artifact_type=other"
+        expected_status: 200
+        expect_deny: false
+
+  # ── OSCAL export ──────────────────────────────────────────────────────────────
+
+  - id: oscal_export
+    name: "OSCAL JSON export — accessible to all authenticated"
+    allowed_lenses: [ao, ciso, issm, isso, sca, system_owner, auditor, pmo, pen_tester, data_owner, incident_responder, bcdr_coordinator]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /systems/{SYSTEM_ID}/controls
+        expected_status: 200
+
+  # ── Observation flows ─────────────────────────────────────────────────────────
+
+  - id: observation_view
+    name: "Observations — view list"
+    allowed_lenses: [ao, ciso, issm, isso, sca, system_owner, auditor, pmo, pen_tester, bcdr_coordinator]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /observations
+        expected_status: 200
+
+  - id: observation_create
+    name: "Observations — create new"
+    allowed_lenses: [ao, ciso, issm, isso, sca, pen_tester]
+    denied_lenses: [data_owner, pmo, incident_responder]
+    steps:
+      - action: navigate
+        url: /observations/new
+        expected_status: 200
+      - action: fill
+        selector: "input[name='title']"
+        value: "RBAC Test Observation {RUN_ID}"
+      - action: fill
+        selector: "textarea[name='description']"
+        value: "Automated observation from RBAC runner"
+      - action: select
+        selector: "select[name='severity']"
+        value: "Low"
+      - action: submit
+        url: /observations
+        expected_status: 200
+        expect_deny: false
+
+  - id: observation_create_denied
+    name: "Observations — create blocked for data_owner/pmo"
+    allowed_lenses: []
+    denied_lenses: [data_owner, pmo]
+    steps:
+      - action: navigate
+        url: /observations/new
+        expected_status: 200
+      - action: fill
+        selector: "input[name='title']"
+        value: "RBAC Blocked Observation"
+      - action: submit
+        url: /observations
+        expected_status: 403
+        expect_deny: true
+
+  # ── Privilege escalation tests ────────────────────────────────────────────────
+
+  - id: privilege_escalation_rmf
+    name: "Privilege Escalation — pen_tester attempts RMF step update"
+    allowed_lenses: []
+    denied_lenses: [pen_tester]
+    steps:
+      - action: submit
+        url: /rmf/{SYSTEM_ID}/step/prepare
+        value: "status=complete"
+        expected_status: 403
+        expect_deny: true
+
+  - id: privilege_escalation_poam_close
+    name: "Privilege Escalation — pmo attempts to close POAM"
+    allowed_lenses: []
+    denied_lenses: [pmo]
+    steps:
+      - action: submit
+        url: /poam/{POAM_ID}/update
+        value: "status=closed_verified&closure_evidence=escalation+test"
+        expected_status: 403
+        expect_deny: true
+
+  - id: privilege_escalation_ao_decision
+    name: "Privilege Escalation — pen_tester attempts AO decision"
+    allowed_lenses: []
+    denied_lenses: [pen_tester, isso, issm, sca, pmo, data_owner, incident_responder]
+    steps:
+      - action: submit
+        url: /ao/decisions/{SYSTEM_ID}
+        value: "decision=approved&rationale=escalation+attempt"
+        expected_status: 403
+        expect_deny: true
+
+  - id: readonly_write_attempt_risk
+    name: "Read-Only Write Attempt — pmo attempts to create risk"
+    allowed_lenses: []
+    denied_lenses: [pmo]
+    steps:
+      - action: submit
+        url: /risks
+        value: "risk_name=PMO+escalation&likelihood=3&impact=3"
+        expected_status: 403
+        expect_deny: true
+
+  - id: admin_only_user_management
+    name: "Admin-only — user management blocked for all non-admin roles"
+    allowed_lenses: []
+    denied_lenses: [ao, ciso, issm, isso, sca, system_owner, pmo, pen_tester, data_owner, incident_responder, auditor]
+    steps:
+      - action: navigate
+        url: /admin/users
+        expected_status: 403
+        expect_deny: true
+
+  - id: admin_only_siem
+    name: "Admin-only — SIEM accessible to admin/issm/isso; blocked for all others"
+    allowed_lenses: [issm, isso]
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder, auditor, sca]
+    steps:
+      - action: navigate
+        url: /admin/siem
+        expected_status: 200
+
+  # ── System catalog flows ──────────────────────────────────────────────────────
+
+  - id: system_catalog_view
+    name: "System Catalog — view"
+    allowed_lenses: [ao, ciso, issm, isso, sca, system_owner, pmo, auditor, pen_tester, data_owner, incident_responder, bcdr_coordinator]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /systems
+        expected_status: 200
+        expected_text: "System"
+
+  - id: system_create_denied
+    name: "System Create — blocked for non-privileged roles"
+    # POST /systems allows: admin, ao, ciso, issm, isso — so ISSO is NOT in denied.
+    # Only truly read-only roles are denied. isso excluded from both lists (it can create).
+    allowed_lenses: []
+    denied_lenses: [pen_tester, data_owner, pmo, incident_responder, auditor, sca]
+    steps:
+      - action: submit
+        url: /systems
+        value: "name=RBAC+Test+System&abbreviation=TEST"
+        expected_status: 403
+        expect_deny: true
+
+  # ── Dashboard / role-specific page flows ─────────────────────────────────────
+
+  - id: issm_dashboard
+    name: "ISSM Dashboard — view"
+    allowed_lenses: [issm]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /issm/dashboard
+        expected_status: 200
+
+  - id: ciso_dashboard
+    name: "CISO Dashboard — view"
+    allowed_lenses: [ciso]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /ciso/dashboard
+        expected_status: 200
+
+  - id: ao_decisions_dashboard
+    name: "AO Decisions — view"
+    allowed_lenses: [ao]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /ao/decisions
+        expected_status: 200
+
+  - id: sca_workspace
+    name: "SCA Workspace — view"
+    allowed_lenses: [sca]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /sca/workspace
+        expected_status: 200
+
+  - id: pen_tester_dashboard
+    name: "Pen Tester Dashboard — view"
+    allowed_lenses: [pen_tester]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /pen-tester/dashboard
+        expected_status: 200
+
+  - id: auditor_dashboard
+    name: "Auditor Dashboard — view"
+    allowed_lenses: [auditor]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /auditor/dashboard
+        expected_status: 200
+
+  - id: pmo_dashboard
+    name: "PMO Dashboard — view"
+    allowed_lenses: [pmo]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /pmo/dashboard
+        expected_status: 200
+
+  - id: health_check
+    name: "Health endpoint — always accessible"
+    allowed_lenses: [ao, ciso, issm, isso, sca, system_owner, pmo, pen_tester, data_owner, incident_responder, auditor, bcdr_coordinator]
+    denied_lenses: []
+    steps:
+      - action: navigate
+        url: /health
+        expected_status: 200
+        expected_text: "ok"

@@ -1,0 +1,495 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Provision New User{% endblock %}
+
+{% block head %}
+<style>
+  .provision-layout {
+    max-width: 680px;
+    margin: 0 auto;
+  }
+  .provision-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px 32px;
+    margin-bottom: 20px;
+  }
+  .provision-card.highlight {
+    border-color: rgba(0,255,204,0.3);
+    background: rgba(0,255,204,0.03);
+  }
+  .section-label {
+    font-size: 0.7em;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(0,255,204,0.15);
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .form-row.single { grid-template-columns: 1fr; }
+  @media (max-width: 580px) {
+    .form-row { grid-template-columns: 1fr; }
+    .provision-card { padding: 20px; }
+  }
+  .field-hint {
+    font-size: 0.72em;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .role-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .role-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .role-option:hover {
+    border-color: rgba(0,255,204,0.3);
+    background: rgba(0,255,204,0.04);
+  }
+  .role-option input[type=radio] { margin-top: 2px; flex-shrink: 0; accent-color: var(--cyan); }
+  .role-option input[type=radio]:checked + .role-info { color: var(--text); }
+  .role-option:has(input:checked) {
+    border-color: rgba(0,255,204,0.45);
+    background: rgba(0,255,204,0.06);
+  }
+  .role-name { font-size: 0.8em; font-weight: 600; color: var(--text); display: block; }
+  .role-desc { font-size: 0.7em; color: var(--muted); }
+  .submit-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 24px;
+  }
+  .btn-provision {
+    background: rgba(0,255,204,0.12);
+    border: 1px solid rgba(0,255,204,0.4);
+    color: var(--cyan);
+    padding: 10px 28px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: background 0.15s;
+  }
+  .btn-provision:hover { background: rgba(0,255,204,0.2); }
+  .btn-provision:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Credential result */
+  .cred-result {
+    display: none;
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(0,255,204,0.4);
+    border-radius: 10px;
+    padding: 24px 28px;
+    margin-bottom: 20px;
+  }
+  .cred-result.visible { display: block; }
+  .cred-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .cred-title {
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+  .cred-field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 5px;
+    padding: 10px 14px;
+    margin: 8px 0;
+    font-family: monospace;
+    font-size: 1.05em;
+  }
+  .cred-label { font-size: 0.72em; color: var(--muted); min-width: 80px; font-family: var(--sans); }
+  .cred-value { color: var(--text); flex: 1; }
+  .cred-value.pw { color: var(--cyan); }
+  .cred-copy {
+    margin-left: auto;
+    background: rgba(0,255,204,0.1);
+    border: 1px solid rgba(0,255,204,0.3);
+    color: var(--cyan);
+    border-radius: 4px;
+    padding: 3px 10px;
+    cursor: pointer;
+    font-size: 0.72em;
+    flex-shrink: 0;
+    font-family: var(--sans);
+  }
+  .cred-note {
+    font-size: 0.75em;
+    color: var(--muted);
+    margin-top: 12px;
+    line-height: 1.5;
+  }
+  .provision-again {
+    margin-top: 16px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/admin">Admin</a>
+  <span class="sep">›</span>
+  <a href="/admin/users">User Management</a>
+  <span class="sep">›</span>
+  <span>Provision New User</span>
+</div>
+
+<h1>Provision New User</h1>
+<p class="text-muted" style="margin-bottom:28px;font-size:0.88em;max-width:580px">
+  Creates a full user account: Authelia login credentials, platform profile, and role assignment —
+  in one step. A temporary password is generated and shown once after submission.
+</p>
+
+<div class="provision-layout">
+
+  {# ── Credential result banner (shown after AJAX submit OR server-side redirect fallback) ── #}
+  {% if provisioned_token %}
+  <div class="cred-result visible" id="cred-result">
+    <div class="cred-header">
+      <span class="cred-title">New User Credentials — Shown Once</span>
+      <button onclick="resetForm()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1em">✕ Dismiss</button>
+    </div>
+    <p style="font-size:0.8em;color:var(--muted);margin-bottom:12px">
+      Copy and deliver these credentials securely. They will not be shown again.
+    </p>
+    <div id="cred-loading" style="color:var(--muted);font-size:0.85em">Loading credentials…</div>
+    <div id="cred-inline" style="display:none">
+      <div class="cred-field">
+        <span class="cred-label">Username</span>
+        <span class="cred-value" id="res-username"></span>
+        <button class="cred-copy" onclick="copyVal('res-username', this)">Copy</button>
+      </div>
+      <div class="cred-field">
+        <span class="cred-label">Password</span>
+        <span class="cred-value pw" id="res-password"></span>
+        <button class="cred-copy" onclick="copyVal('res-password', this)">Copy</button>
+      </div>
+    </div>
+    <p class="cred-note" id="email-note"></p>
+    <div class="provision-again">
+      <button class="btn-provision" onclick="resetForm()">Provision Another User</button>
+      <a href="/admin/users" class="btn btn-sm" style="background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--muted)">Back to User List</a>
+    </div>
+  </div>
+  <script>
+  fetch('/admin/users/provision/credential?token={{ provisioned_token }}')
+    .then(r => r.json())
+    .then(function(data) {
+      document.getElementById('cred-loading').style.display = 'none';
+      if (data.ok) {
+        document.getElementById('res-username').textContent = data.username;
+        document.getElementById('res-password').textContent = data.password;
+        document.getElementById('cred-inline').style.display = 'block';
+        document.getElementById('email-note').textContent = 'Deliver these credentials securely. A welcome email was sent if an email address was provided.';
+      } else {
+        document.getElementById('cred-loading').textContent = 'Credentials unavailable — token expired. Check the welcome email.';
+        document.getElementById('cred-loading').style.color = 'var(--red)';
+        document.getElementById('cred-loading').style.display = 'block';
+      }
+    })
+    .catch(function() {
+      document.getElementById('cred-loading').textContent = 'Could not load credentials.';
+      document.getElementById('cred-loading').style.display = 'block';
+    });
+  </script>
+  {% else %}
+  <div class="cred-result" id="cred-result">
+    <div class="cred-header">
+      <span class="cred-title">New User Credentials — Shown Once</span>
+      <button onclick="resetForm()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1em">✕ Dismiss</button>
+    </div>
+    <p style="font-size:0.8em;color:var(--muted);margin-bottom:12px">
+      Copy and deliver these credentials securely. They will not be shown again.
+    </p>
+    <div class="cred-field">
+      <span class="cred-label">Username</span>
+      <span class="cred-value" id="res-username"></span>
+      <button class="cred-copy" onclick="copyVal('res-username', this)">Copy</button>
+    </div>
+    <div class="cred-field">
+      <span class="cred-label">Password</span>
+      <span class="cred-value pw" id="res-password"></span>
+      <button class="cred-copy" onclick="copyVal('res-password', this)">Copy</button>
+    </div>
+    <p class="cred-note" id="email-note"></p>
+    <div class="provision-again">
+      <button class="btn-provision" onclick="resetForm()">Provision Another User</button>
+      <a href="/admin/users" class="btn btn-sm" style="background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--muted)">
+        Back to User List
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Provision form ── #}
+  <form id="provision-form" onsubmit="submitProvision(event)">
+    <div class="provision-card highlight">
+      <div class="section-label">Identity</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Username <span style="color:var(--red)">*</span></label>
+          <input class="form-control" type="text" name="username" id="f-username"
+                 required placeholder="jane.smith"
+                 pattern="[a-z0-9._-]+"
+                 title="Lowercase letters, numbers, dots, hyphens, underscores only">
+          <div class="field-hint">Authelia login ID — lowercase, no spaces</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Display Name</label>
+          <input class="form-control" type="text" name="display_name" id="f-display_name" placeholder="Jane Smith">
+          <div class="field-hint">Shown in the platform UI</div>
+        </div>
+      </div>
+      <div class="form-row single">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input class="form-control" type="email" name="email" id="f-email" placeholder="jane@example.com">
+          <div class="field-hint">Welcome email with temp password sent here if provided</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="provision-card">
+      <div class="section-label">Initial Role</div>
+      <div class="role-grid">
+        <label class="role-option">
+          <input type="radio" name="role" value="employee" checked>
+          <span class="role-info">
+            <span class="role-name">Employee</span>
+            <span class="role-desc">Dashboard, daily quiz, assigned systems only</span>
+          </span>
+        </label>
+        <label class="role-option">
+          <input type="radio" name="role" value="system_owner">
+          <span class="role-info">
+            <span class="role-name">System Owner</span>
+            <span class="role-desc">Portfolio view, POA&Ms, risks, BCDR</span>
+          </span>
+        </label>
+        <label class="role-option">
+          <input type="radio" name="role" value="isso">
+          <span class="role-info">
+            <span class="role-name">ISSO</span>
+            <span class="role-desc">System security, controls, RMF</span>
+          </span>
+        </label>
+        <label class="role-option">
+          <input type="radio" name="role" value="issm">
+          <span class="role-info">
+            <span class="role-name">ISSM</span>
+            <span class="role-desc">Security program management, org view</span>
+          </span>
+        </label>
+        <label class="role-option">
+          <input type="radio" name="role" value="sca">
+          <span class="role-info">
+            <span class="role-name">SCA</span>
+            <span class="role-desc">Control assessor, SAR/SAP workspace</span>
+          </span>
+        </label>
+        <label class="role-option">
+          <input type="radio" name="role" value="ao">
+          <span class="role-info">
+            <span class="role-name">AO</span>
+            <span class="role-desc">Authorizing official, ATO decisions</span>
+          </span>
+        </label>
+        <label class="role-option">
+          <input type="radio" name="role" value="auditor">
+          <span class="role-info">
+            <span class="role-name">Auditor</span>
+            <span class="role-desc">Read-only access across all modules</span>
+          </span>
+        </label>
+        <label class="role-option">
+          <input type="radio" name="role" value="bcdr">
+          <span class="role-info">
+            <span class="role-name">BCDR</span>
+            <span class="role-desc">Business continuity, DR events</span>
+          </span>
+        </label>
+        <label class="role-option">
+          <input type="radio" name="role" value="ciso">
+          <span class="role-info">
+            <span class="role-name">CISO</span>
+            <span class="role-desc">Chief Information Security Officer</span>
+          </span>
+        </label>
+        <label class="role-option">
+          <input type="radio" name="role" value="pen_tester">
+          <span class="role-info">
+            <span class="role-name">Pen Tester</span>
+            <span class="role-desc">3PAO / Red Team assessor</span>
+          </span>
+        </label>
+        <label class="role-option">
+          <input type="radio" name="role" value="data_owner">
+          <span class="role-info">
+            <span class="role-name">Data Owner</span>
+            <span class="role-desc">Data steward, information owner</span>
+          </span>
+        </label>
+        <label class="role-option">
+          <input type="radio" name="role" value="pmo">
+          <span class="role-info">
+            <span class="role-name">PMO</span>
+            <span class="role-desc">Portfolio Manager / Program Officer</span>
+          </span>
+        </label>
+        <label class="role-option">
+          <input type="radio" name="role" value="incident_responder">
+          <span class="role-info">
+            <span class="role-name">Incident Responder</span>
+            <span class="role-desc">Security incident response team</span>
+          </span>
+        </label>
+      </div>
+      <div class="field-hint" style="margin-top:10px">Role can be changed any time from <a href="/admin/users" style="color:var(--cyan)">User Management</a>.</div>
+    </div>
+
+    <div class="submit-row">
+      <button type="submit" class="btn-provision" id="submit-btn">Provision User</button>
+      <a href="/admin/users" style="font-size:0.82em;color:var(--muted)">Cancel</a>
+      <span id="submit-status" style="font-size:0.82em;color:var(--muted);display:none">Creating account…</span>
+    </div>
+    <div id="error-msg" style="margin-top:14px;font-size:0.82em;color:var(--red);display:none"></div>
+  </form>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function submitProvision(e) {
+  e.preventDefault();
+  const form = document.getElementById('provision-form');
+  const btn  = document.getElementById('submit-btn');
+  const status = document.getElementById('submit-status');
+  const errEl  = document.getElementById('error-msg');
+
+  btn.disabled = true;
+  status.style.display = 'inline';
+  errEl.style.display = 'none';
+
+  const fd = new FormData(form);
+
+  try {
+    // POST to provision — server redirects to /admin/users?provisioned=<token>
+    // We intercept the redirect to grab the token without leaving the page
+    const r = await fetch('/admin/users/provision', {
+      method: 'POST',
+      body: fd,
+      redirect: 'manual',   // catch the 303 redirect ourselves
+    });
+
+    // Server sends 303 → /admin/users?provisioned=<token>
+    let token = null;
+    if (r.type === 'opaqueredirect' || r.status === 0) {
+      // Can't read redirect URL from opaque — fall back to form re-submit with full page load
+      form.submit();
+      return;
+    }
+    if (r.status === 303 || r.redirected) {
+      const dest = r.headers.get('location') || r.url;
+      const m = dest && dest.match(/provisioned=([^&]+)/);
+      if (m) token = decodeURIComponent(m[1]);
+    }
+
+    if (!token) {
+      // Couldn't extract token — do a normal form submit so the redirect page shows the banner
+      form.submit();
+      return;
+    }
+
+    // Fetch credentials with the token
+    const cr = await fetch('/admin/users/provision/credential?token=' + encodeURIComponent(token));
+    const data = await cr.json();
+
+    status.style.display = 'none';
+
+    if (data.ok) {
+      document.getElementById('res-username').textContent = data.username;
+      document.getElementById('res-password').textContent = data.password;
+      const email = document.getElementById('f-email').value.trim();
+      document.getElementById('email-note').textContent = email
+        ? 'A welcome email with these credentials was sent to ' + email + '. '
+          + 'The user should change their password after first login.'
+        : 'No email address was provided — deliver these credentials directly to the user.';
+      document.getElementById('cred-result').classList.add('visible');
+      form.style.display = 'none';
+    } else {
+      showError(data.error || 'Failed to retrieve credentials. Check the server log.');
+      btn.disabled = false;
+    }
+
+  } catch (err) {
+    showError('Network error: ' + err.message);
+    status.style.display = 'none';
+    btn.disabled = false;
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-msg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function resetForm() {
+  document.getElementById('cred-result').classList.remove('visible');
+  const form = document.getElementById('provision-form');
+  form.reset();
+  form.style.display = '';
+  document.getElementById('submit-btn').disabled = false;
+  document.getElementById('submit-status').style.display = 'none';
+  document.getElementById('error-msg').style.display = 'none';
+  document.getElementById('f-username').focus();
+}
+
+function copyVal(id, btn) {
+  const text = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    btn.textContent = '✓ Copied';
+    btn.style.color = 'var(--green)';
+    setTimeout(function() { btn.textContent = 'Copy'; btn.style.color = ''; }, 2000);
+  });
+}
+</script>
+{% endblock %}

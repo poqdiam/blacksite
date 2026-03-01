@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Rotation History: {{ system.name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:20px">
+  <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">
+    <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a> /
+    <a href="/systems/{{ system.id }}/rotation" style="color:var(--muted)">Rotation</a> / History
+  </div>
+  <h1 style="font-size:1.3em;margin:0">Rotation Completion History</h1>
+</div>
+
+{% if completions %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Day</th>
+        <th>Activity</th>
+        <th>Evidence</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in completions %}
+      <tr>
+        <td class="mono" style="font-size:0.85em;white-space:nowrap">{{ c.completed_date }}</td>
+        <td style="text-align:center">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(0,188,212,0.15);color:var(--cyan);font-weight:700;font-size:0.8em">
+            {{ c.rotation_day }}
+          </span>
+        </td>
+        <td style="font-size:0.88em">{{ rot_content.get(c.rotation_day, {}).get('title', '—') }}</td>
+        <td style="font-size:0.8em;color:var(--muted)">{{ c.evidence_name or '—' }}</td>
+        <td style="font-size:0.8em;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.notes or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="padding:48px;text-align:center">
+  <div style="color:var(--muted);font-size:0.9em">No rotation completions yet.</div>
+  <a href="/systems/{{ system.id }}/rotation" class="btn btn-primary" style="margin-top:16px">Go to Rotation →</a>
+</div>
+{% endif %}
+{% endblock %}

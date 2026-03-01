@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Connections — {{ system.name }}{% endblock %}
+
+{% block head %}
+<style>
+  .conn-section { margin-bottom:24px; }
+  .add-form {
+    background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    padding:18px;margin-top:16px;
+  }
+  .af-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px; }
+  .dir-inbound    { color:var(--cyan);   font-weight:700; }
+  .dir-outbound   { color:var(--yellow); font-weight:700; }
+  .dir-bidirectional { color:var(--green); font-weight:700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/systems">Systems</a>
+  <span class="sep">/</span>
+  <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+  <span class="sep">/</span>
+  <span>Connections</span>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:22px">
+  <div>
+    <h1 style="margin:0">System Connections</h1>
+    <p class="text-muted" style="font-size:.84em;margin-top:4px">
+      {{ system.name }} — {{ total_conns }} connection{{ 's' if total_conns != 1 else '' }}
+    </p>
+  </div>
+  <a href="/systems/{{ system.id }}" class="btn btn-ghost btn-sm">← System</a>
+</div>
+
+{% for section_label, conns in [('Internal Connections', internal_conns), ('External Connections', external_conns)] %}
+{% set conn_type = 'internal' if 'Internal' in section_label else 'external' %}
+<div class="conn-section">
+  <div class="section-header">{{ section_label }}</div>
+  {% if conns %}
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Remote System</th>
+            <th>Protocol</th>
+            <th>Port</th>
+            <th>Direction</th>
+            <th>Data Types</th>
+            <th>ISA</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for conn in conns %}
+          {% set dir = conn.direction or 'bidirectional' %}
+          <tr>
+            <td style="font-weight:600;font-size:.88em">{{ conn.name }}</td>
+            <td style="font-size:.82em;color:var(--muted)">{{ conn.remote_system or '—' }}</td>
+            <td class="mono" style="font-size:.8em;color:var(--muted)">{{ conn.protocol or '—' }}</td>
+            <td class="mono" style="font-size:.8em;color:var(--muted)">{{ conn.port or '—' }}</td>
+            <td class="dir-{{ dir }}" style="font-size:.78em">{{ dir | title }}</td>
+            <td style="font-size:.8em;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              {{ conn.data_types or '—' }}
+            </td>
+            <td style="text-align:center">
+              {% if conn.has_isa %}
+              <span style="color:var(--green);font-size:.8em;font-weight:700">✓ ISA</span>
+              {% else %}
+              <span style="color:var(--muted);font-size:.8em">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <form method="post"
+                    action="/systems/{{ system.id }}/connections/{{ conn.id }}/delete"
+                    onsubmit="return confirm('Delete this connection?')">
+                <button type="submit" class="btn btn-danger btn-sm">×</button>
+              </form>
+            </td>
+          </tr>
+          {% if conn.description %}
+          <tr>
+            <td colspan="8" style="padding:4px 14px 10px;font-size:.78em;color:var(--muted)">
+              {{ conn.description }}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div style="color:var(--muted);font-size:.85em;padding:12px 0">No {{ conn_type }} connections recorded.</div>
+  {% endif %}
+
+  {# Add connection form #}
+  <div class="add-form">
+    <div style="font-size:.7em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">
+      Add {{ section_label | replace(' Connections','') }} Connection
+    </div>
+    <form method="post" action="/systems/{{ system.id }}/connections">
+      <input type="hidden" name="conn_type" value="{{ conn_type }}">
+      <div class="af-grid" style="margin-bottom:10px">
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Name *</label>
+          <input type="text" name="name" class="form-control" required placeholder="Connection name">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Remote System</label>
+          <input type="text" name="remote_system" class="form-control" placeholder="System or service name">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Protocol</label>
+          <input type="text" name="protocol" class="form-control" placeholder="HTTPS, SFTP…">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Port</label>
+          <input type="text" name="port" class="form-control" placeholder="443">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Direction</label>
+          <select name="direction" class="form-control">
+            <option value="bidirectional">Bidirectional</option>
+            <option value="inbound">Inbound</option>
+            <option value="outbound">Outbound</option>
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Data Types</label>
+          <input type="text" name="data_types" class="form-control" placeholder="PII, config data…">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Has ISA?</label>
+          <select name="has_isa" class="form-control">
+            <option value="0">No</option>
+            <option value="1">Yes</option>
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">ISA Doc ID</label>
+          <input type="text" name="isa_doc_id" class="form-control" placeholder="Doc ref (optional)">
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:12px">
+        <label style="font-size:.6em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Description</label>
+        <input type="text" name="description" class="form-control" placeholder="Brief description of data flow">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Add Connection</button>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+{% endblock %}

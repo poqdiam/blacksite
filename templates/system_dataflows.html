@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Data Flows: {{ system.name }}{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+  <div>
+    <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">
+      <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a> / Data Flows
+    </div>
+    <h1 style="font-size:1.3em;margin:0">Data Flow Records</h1>
+  </div>
+  <button class="btn btn-primary btn-sm" onclick="document.getElementById('add-form').style.display='block';this.style.display='none'">
+    + Add Data Flow
+  </button>
+</div>
+
+<div id="add-form" style="display:none" class="card" style="padding:20px;margin-bottom:16px">
+  <form method="post" action="/systems/{{ system.id }}/dataflows">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div>
+        <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Integration Name *</label>
+        <input type="text" name="integration_name" required style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Auth Method</label>
+        <input type="text" name="auth_method" placeholder="OAuth2, API Key, mTLS..." style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Data Types</label>
+        <input type="text" name="data_types" placeholder="ePHI, audit logs, reports..." style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;padding-top:22px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85em">
+          <input type="checkbox" name="encrypted_in_transit" style="accent-color:var(--cyan)"> Encrypted in transit
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85em">
+          <input type="checkbox" name="encrypted_at_rest" style="accent-color:var(--cyan)"> Encrypted at rest
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85em">
+          <input type="checkbox" name="logging_confirmed" style="accent-color:var(--green)"> Logging confirmed
+        </label>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Termination Steps</label>
+      <textarea name="termination_steps" rows="2" placeholder="How to disable/revoke this integration..." style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em;resize:vertical"></textarea>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Notes</label>
+      <textarea name="notes" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em;resize:vertical"></textarea>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button type="submit" class="btn btn-primary">Add</button>
+      <button type="button" class="btn btn-ghost" onclick="document.getElementById('add-form').style.display='none'">Cancel</button>
+    </div>
+  </form>
+</div>
+
+{% if records %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table>
+    <thead>
+      <tr><th>Integration</th><th>Auth</th><th>Data Types</th><th>Transit</th><th>Rest</th><th>Logging</th><th>Last Reviewed</th></tr>
+    </thead>
+    <tbody>
+      {% for r in records %}
+      <tr>
+        <td style="font-weight:600;font-size:0.88em">{{ r.integration_name }}</td>
+        <td style="font-size:0.8em;color:var(--muted)">{{ r.auth_method or '—' }}</td>
+        <td style="font-size:0.8em;color:var(--muted)">{{ r.data_types or '—' }}</td>
+        <td style="text-align:center">{{ '✅' if r.encrypted_in_transit else '❌' }}</td>
+        <td style="text-align:center">{{ '✅' if r.encrypted_at_rest else '❌' }}</td>
+        <td style="text-align:center">{{ '✅' if r.logging_confirmed else '❌' }}</td>
+        <td class="mono" style="font-size:0.8em;color:var(--muted)">{{ r.last_reviewed or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="padding:48px;text-align:center">
+  <div style="color:var(--muted);font-size:0.9em">No data flows recorded.</div>
+</div>
+{% endif %}
+{% endblock %}

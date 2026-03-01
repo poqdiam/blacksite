@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'macros.html' import paginate %}
 {% block title %}{{ app_name }} — Audit Log{% endblock %}
 
 {% block head %}
@@ -72,7 +73,17 @@
         <option value="365" {% if days==365 %}selected{% endif %}>1 year</option>
         <option value="0"   {% if days==0 %}selected{% endif %}>All time</option>
       </select>
+      <input type="hidden" name="hide_view" value="{{ hide_view }}">
+      <input type="hidden" name="per_page" value="{{ per_page }}">
     </form>
+    {# VIEW toggle #}
+    {% if hide_view == '1' %}
+    <a href="/admin/audit?days={{ days }}&hide_view=0&per_page={{ per_page }}"
+       class="btn btn-sm btn-ghost" style="font-size:0.75em">Show VIEW events</a>
+    {% else %}
+    <a href="/admin/audit?days={{ days }}&hide_view=1&per_page={{ per_page }}"
+       class="btn btn-sm" style="background:rgba(0,255,204,0.08);color:var(--cyan);font-size:0.75em">Hide VIEW events</a>
+    {% endif %}
     {# Export buttons #}
     <a href="/admin/audit/export?format=csv&days={{ days }}" class="btn btn-ghost btn-sm">↓ CSV</a>
     <a href="/admin/audit/export?format=json&days={{ days }}" class="btn btn-ghost btn-sm">↓ JSON</a>
@@ -82,8 +93,9 @@
 {# ── Section header with count ────────────────────────────────────────────── #}
 <div class="section-header" style="margin-bottom:16px">
   {% if entries %}
-    Showing {{ entries | length }} event{% if entries | length != 1 %}s{% endif %}
+    Showing {{ entries | length }} of {{ total }} event{% if total != 1 %}s{% endif %}
     {% if days and days > 0 %}(last {{ days }} days){% endif %}
+    {% if hide_view == '1' %} · VIEW events hidden{% endif %}
   {% else %}
     Audit Events
   {% endif %}
@@ -190,6 +202,7 @@
 </div>
 
 {% if entries %}
+{{ paginate(page, total_pages, per_page, "/admin/audit", "days=" ~ days ~ "&hide_view=" ~ hide_view) }}
 <p class="text-muted" style="font-size:0.75em;margin-top:10px;text-align:right">
   Audit events are retained per NIST AU-11. Contact your administrator to adjust the retention period.
 </p>

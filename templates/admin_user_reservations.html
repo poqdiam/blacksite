@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}User Reservations{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:16px;flex-wrap:wrap">
+  <div>
+    <div style="color:var(--muted);font-size:0.75em;letter-spacing:1px;margin-bottom:4px">
+      <a href="/admin/users" style="color:var(--muted);text-decoration:none">USER MANAGEMENT</a>
+      <span style="margin:0 6px">›</span> RESERVATIONS
+    </div>
+    <h1 style="margin:0;font-size:1.3em;letter-spacing:1px">Removed User Reservations</h1>
+    <div style="color:var(--muted);font-size:0.82em;margin-top:4px">
+      Active 1-year holds on removed usernames and emails. Prevents accidental re-use after termination.
+    </div>
+  </div>
+  <a href="/admin/users" class="btn btn-ghost btn-sm">← Back to Users</a>
+</div>
+
+{% if not reservations %}
+<div class="card" style="padding:40px;text-align:center;color:var(--muted)">
+  <div style="font-size:2em;margin-bottom:12px">✓</div>
+  <div>No active reservations — all removed usernames and emails are available for re-use.</div>
+</div>
+{% else %}
+
+<div class="card" style="padding:16px;margin-bottom:20px;border-left:3px solid var(--yellow);background:rgba(255,179,0,0.04)">
+  <span style="color:var(--yellow);font-size:0.85em">
+    <strong>{{ reservations|length }}</strong> active reservation{{ 's' if reservations|length != 1 else '' }}.
+    Overrides require <strong>principal</strong> platform tier.
+    Reservations expire automatically after 365 days.
+  </span>
+</div>
+
+<div class="card" style="overflow:hidden">
+  <table style="width:100%;border-collapse:collapse;font-size:0.84em">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);color:var(--muted);font-size:0.75em;letter-spacing:1px">
+        <th style="padding:10px 16px;text-align:left;font-weight:600">USERNAME</th>
+        <th style="padding:10px 16px;text-align:left;font-weight:600">EMAIL</th>
+        <th style="padding:10px 16px;text-align:left;font-weight:600">REMOVED BY</th>
+        <th style="padding:10px 16px;text-align:left;font-weight:600">REMOVED AT</th>
+        <th style="padding:10px 16px;text-align:left;font-weight:600">HOLD UNTIL</th>
+        <th style="padding:10px 16px;text-align:left;font-weight:600">OVERRIDE</th>
+        <th style="padding:10px 16px;text-align:left;font-weight:600">ACTION</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in reservations %}
+      <tr style="border-bottom:1px solid var(--border){% if r.override_granted %};opacity:0.6{% endif %}">
+        <td style="padding:10px 16px">
+          <span class="mono" style="font-size:0.9em">{{ r.username }}</span>
+        </td>
+        <td style="padding:10px 16px;color:var(--muted)">{{ r.email or '—' }}</td>
+        <td style="padding:10px 16px;color:var(--muted)">{{ r.removed_by }}</td>
+        <td style="padding:10px 16px;color:var(--muted)">{{ r.removed_at.strftime('%Y-%m-%d') if r.removed_at else '—' }}</td>
+        <td style="padding:10px 16px">
+          <span style="color:{% if (r.hold_until - now).days < 30 %}var(--yellow){% else %}var(--text){% endif %}">
+            {{ r.hold_until.strftime('%Y-%m-%d') if r.hold_until else '—' }}
+            <span style="color:var(--muted);font-size:0.85em">({{ (r.hold_until - now).days }} days)</span>
+          </span>
+        </td>
+        <td style="padding:10px 16px">
+          {% if r.override_granted %}
+            <span style="color:var(--green);font-size:0.8em">✓ Granted by {{ r.override_by }}</span>
+            {% if r.override_reason %}
+            <div style="color:var(--muted);font-size:0.75em;margin-top:2px">{{ r.override_reason }}</div>
+            {% endif %}
+          {% else %}
+            <span style="color:var(--muted);font-size:0.8em">None</span>
+          {% endif %}
+        </td>
+        <td style="padding:10px 16px">
+          {% if not r.override_granted and user_role in ('admin',) %}
+          <button onclick="showOverride({{ r.id }}, '{{ r.username }}')"
+                  class="btn btn-ghost btn-sm"
+                  style="font-size:0.75em;color:var(--yellow);border-color:rgba(255,179,0,0.3)">
+            Grant Override
+          </button>
+          {% elif r.override_granted %}
+          <span style="color:var(--muted);font-size:0.78em">—</span>
+          {% else %}
+          <span style="color:var(--muted);font-size:0.78em">Principal tier required</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{# Override modal #}
+<div id="override-modal" style="display:none;position:fixed;inset:0;z-index:500;
+     background:rgba(0,0,0,0.7);align-items:center;justify-content:center">
+  <div class="card" style="width:440px;padding:28px;max-width:90vw">
+    <h3 style="margin:0 0 16px;font-size:1.1em;color:var(--yellow)">Grant Reservation Override</h3>
+    <p id="override-desc" style="color:var(--muted);font-size:0.85em;margin-bottom:16px"></p>
+    <form id="override-form" method="post" action="">
+      <label style="display:block;font-size:0.82em;color:var(--muted);margin-bottom:6px">
+        Reason for override <span style="color:var(--red)">*</span>
+      </label>
+      <textarea name="reason" rows="3" required
+                style="width:100%;background:var(--surface);border:1px solid var(--border);
+                       border-radius:6px;color:var(--text);padding:8px 12px;font-size:0.84em;
+                       resize:vertical;box-sizing:border-box"
+                placeholder="Business justification for bypassing the hold period…"></textarea>
+      <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+        <button type="button" onclick="closeOverride()" class="btn btn-ghost btn-sm">Cancel</button>
+        <button type="submit" class="btn btn-sm"
+                style="background:rgba(255,179,0,0.15);color:var(--yellow);border:1px solid rgba(255,179,0,0.3)">
+          Grant Override
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function showOverride(id, username) {
+  document.getElementById('override-desc').textContent =
+    'You are granting an override for username "' + username + '". This allows this username/email to be re-used before the hold expires. This action is logged.';
+  document.getElementById('override-form').action = '/admin/users/reservations/' + id + '/override';
+  const m = document.getElementById('override-modal');
+  m.style.display = 'flex';
+}
+function closeOverride() {
+  document.getElementById('override-modal').style.display = 'none';
+}
+document.getElementById('override-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeOverride();
+});
+</script>
+{% endblock %}

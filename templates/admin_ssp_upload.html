@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}SSP Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:center;gap:16px;margin-bottom:28px">
+  <div>
+    <h1 style="margin:0;font-size:1.4em;letter-spacing:1px">SSP QUALITY ANALYZER</h1>
+    <p style="margin:4px 0 0;color:var(--muted);font-size:0.85em">
+      Upload a System Security Plan for automated gap analysis and PDF remediation report.
+      Admin access only.
+    </p>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:420px 1fr;gap:28px;align-items:start">
+
+  <!-- Upload card -->
+  <div class="card" style="padding:28px">
+    <h3 style="margin:0 0 18px;color:var(--cyan);font-size:0.95em;letter-spacing:1px">
+      UPLOAD SSP DOCUMENT
+    </h3>
+    <form method="post" action="/admin/ssp/upload" enctype="multipart/form-data" id="ssp-upload-form">
+      <div class="form-group" style="margin-bottom:20px">
+        <label style="display:block;font-size:0.8em;color:var(--muted);margin-bottom:8px;letter-spacing:1px">
+          SSP FILE <span style="color:var(--red)">*</span>
+        </label>
+        <div id="drop-zone" style="
+          border:2px dashed rgba(0,255,204,0.3);
+          border-radius:8px;
+          padding:32px 20px;
+          text-align:center;
+          cursor:pointer;
+          transition:all 0.2s;
+          background:rgba(0,255,204,0.03)
+        " onclick="document.getElementById('ssp-file').click()">
+          <div style="font-size:2em;margin-bottom:8px">📄</div>
+          <div style="color:var(--cyan);font-size:0.85em;margin-bottom:4px">
+            Drop file here or click to browse
+          </div>
+          <div style="color:var(--muted);font-size:0.75em" id="file-hint">
+            Accepted: .docx · .pdf · .txt · .xlsx · .csv
+          </div>
+        </div>
+        <input type="file" id="ssp-file" name="file" accept=".docx,.pdf,.txt,.xlsx,.csv"
+               style="display:none" required>
+      </div>
+
+      <button type="submit" id="upload-btn" class="btn btn-primary" style="width:100%;padding:12px;font-size:0.9em">
+        Analyze SSP
+      </button>
+      <p style="color:var(--muted);font-size:0.75em;text-align:center;margin:10px 0 0">
+        Analysis runs in the background — you'll be taken to the review page immediately.
+      </p>
+    </form>
+  </div>
+
+  <!-- Past reviews -->
+  <div>
+    <h3 style="margin:0 0 16px;font-size:0.9em;color:var(--muted);letter-spacing:1px">RECENT REVIEWS</h3>
+    {% if reviews %}
+    <div style="display:flex;flex-direction:column;gap:10px">
+      {% for r in reviews %}
+      <div class="card" style="padding:16px 20px;display:flex;align-items:center;gap:16px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            {{ r.filename }}
+          </div>
+          <div style="color:var(--muted);font-size:0.75em;margin-top:2px">
+            {{ r.system_name or 'Unknown system' }} ·
+            {{ r.uploaded_at.strftime('%Y-%m-%d %H:%M') }} UTC ·
+            by {{ r.uploaded_by }}
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          {% if r.status == 'complete' %}
+            <div style="font-size:1.2em;font-weight:700;color:
+              {%- if r.overall_score >= 65 %}var(--green)
+              {%- elif r.overall_score >= 40 %}var(--yellow)
+              {%- else %}var(--red){% endif %}">
+              {{ r.overall_score|round(1) }}
+            </div>
+            <div style="font-size:0.7em;color:var(--muted)">/100</div>
+          {% elif r.status == 'processing' %}
+            <span style="color:var(--yellow);font-size:0.8em">⟳ processing</span>
+          {% else %}
+            <span style="color:var(--red);font-size:0.8em">⚠ error</span>
+          {% endif %}
+        </div>
+        <div style="flex-shrink:0">
+          {% if r.status == 'complete' %}
+          <a href="/admin/ssp/review/{{ r.id }}" class="btn btn-ghost btn-sm"
+             style="font-size:0.75em;color:var(--cyan)">View →</a>
+          {% elif r.status == 'processing' %}
+          <a href="/admin/ssp/review/{{ r.id }}" class="btn btn-ghost btn-sm"
+             style="font-size:0.75em;color:var(--muted)">Refresh</a>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="card" style="padding:40px;text-align:center;color:var(--muted)">
+      No SSP reviews yet. Upload your first document to get started.
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+(function() {
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('ssp-file');
+  const fileHint  = document.getElementById('file-hint');
+  const btn       = document.getElementById('upload-btn');
+
+  fileInput.addEventListener('change', function() {
+    if (this.files[0]) {
+      fileHint.textContent = '✓ ' + this.files[0].name;
+      fileHint.style.color = 'var(--green)';
+      dropZone.style.borderColor = 'rgba(0,200,83,0.5)';
+    }
+  });
+
+  ['dragover', 'dragenter'].forEach(evt => {
+    dropZone.addEventListener(evt, function(e) {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--cyan)';
+      dropZone.style.background  = 'rgba(0,255,204,0.07)';
+    });
+  });
+  ['dragleave', 'drop'].forEach(evt => {
+    dropZone.addEventListener(evt, function(e) {
+      e.preventDefault();
+      dropZone.style.borderColor = 'rgba(0,255,204,0.3)';
+      dropZone.style.background  = 'rgba(0,255,204,0.03)';
+    });
+  });
+  dropZone.addEventListener('drop', function(e) {
+    const dt = e.dataTransfer;
+    if (dt.files[0]) {
+      // Use DataTransfer to set file on input (works in modern browsers)
+      try {
+        const dtn = new DataTransfer();
+        dtn.items.add(dt.files[0]);
+        fileInput.files = dtn.files;
+        fileHint.textContent = '✓ ' + dt.files[0].name;
+        fileHint.style.color = 'var(--green)';
+        dropZone.style.borderColor = 'rgba(0,200,83,0.5)';
+      } catch(ex) {}
+    }
+  });
+
+  document.getElementById('ssp-upload-form').addEventListener('submit', function() {
+    btn.disabled = true;
+    btn.textContent = '⟳ Uploading…';
+  });
+})();
+</script>
+{% endblock %}

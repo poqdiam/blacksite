@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Daily History: {{ system.name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:20px">
+  <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">
+    <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a> /
+    <a href="/systems/{{ system.id }}/daily" style="color:var(--muted)">Daily Ops</a> / History
+  </div>
+  <h1 style="font-size:1.3em;margin:0">Logbook History</h1>
+</div>
+
+{% if logbooks %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Tasks Done</th>
+        <th>Open POA&Ms</th>
+        <th>Overdue</th>
+        <th>Open Risks</th>
+        <th>Notes</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for lb in logbooks %}
+      {% set flags = lb.task_flags | from_json if lb.task_flags else {} %}
+      {% set done = namespace(count=0) %}
+      {% for t in task_nums %}{% if flags.get(t|string) %}{% set done.count = done.count + 1 %}{% endif %}{% endfor %}
+      <tr>
+        <td class="mono" style="font-size:0.88em">{{ lb.log_date }}</td>
+        <td>
+          <span style="color:{% if done.count == task_nums|length %}var(--green){% elif done.count > 0 %}var(--yellow){% else %}var(--muted){% endif %};font-weight:700">
+            {{ done.count }}/{{ task_nums|length }}
+          </span>
+        </td>
+        <td>{{ lb.snap_open_poams }}</td>
+        <td style="color:{% if lb.snap_overdue_poams > 0 %}var(--red){% else %}var(--text){% endif %}">
+          {{ lb.snap_overdue_poams }}
+        </td>
+        <td>{{ lb.snap_open_risks }}</td>
+        <td style="font-size:0.8em;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          {{ lb.notes or '—' }}
+        </td>
+        <td>
+          <a href="/systems/{{ system.id }}/daily/logbook/{{ lb.log_date }}" class="btn btn-ghost btn-sm">View</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="padding:48px;text-align:center">
+  <div style="color:var(--muted);font-size:0.9em">No logbook entries yet.</div>
+  <a href="/systems/{{ system.id }}/daily" class="btn btn-primary" style="margin-top:16px">Start Today's Log</a>
+</div>
+{% endif %}
+{% endblock %}

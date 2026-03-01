@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+"""
+BLACKSITE RBAC Regression Runner — CLI entry point.
+
+Usage:
+  bsv_rbac_run [options]
+
+Options:
+  --base-url URL        App base URL (default: http://127.0.0.1:8100 or BSV_BASE_URL env)
+  --output-dir DIR      Output directory for run artifacts (default: data/rbac-runs)
+  --run-id ID           Override run ID (default: RUN-YYYYMMDD-HHMMSS)
+  --headed              Run browser in headed (visible) mode
+  --silent              Skip Telegram notification
+  --local-mode          Skip Authelia; inject Remote-User header directly
+  --role ROLE           Only test this platform role (principal|executive|manager|analyst)
+  --lens LENS           Only test this system role lens
+  --no-negative         Skip negative (access-denied) test generation
+  --detach              Double-fork into background before starting
+  --bootstrap           Run fixture bootstrap before the test run
+  --clean-bootstrap     Bootstrap with --clean (removes then recreates fixtures)
+  --db-path PATH        Database path for bootstrap (default: blacksite.db)
+  --help                Show this help
+
+Environment variables:
+  BSV_TEST_USER         Authelia username (default: dan)
+  BSV_TEST_PASS         Authelia password
+  BSV_BASE_URL          App base URL
+  BSV_AUTHELIA_URL      Authelia base URL
+  BSV_LOCAL_MODE        Set to "1" to skip Authelia
+  BSV_TELEGRAM_TOKEN    Telegram bot token for notifications
+  BSV_TELEGRAM_CHAT_ID  Telegram chat ID (default: 2054649730)
+"""
+from __future__ import annotations
+
+import argparse
+import asyncio
+import logging
+import os
+import sys
+from pathlib import Path
+
+# ── Project root setup ──────────────────────────────────────────────────────────
+# This script lives at scripts/bsv_rbac_run; project root is one level up.
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+# Change working directory to project root (needed for relative DB paths etc.)
+os.chdir(PROJECT_ROOT)
+
+
+def _setup_logging(silent: bool) -> None:
+    level = logging.WARNING if silent else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(name)s] %(levelname)s — %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+    # Always show violations/failures at WARNING level
+    logging.getLogger("bsv.rbac").setLevel(logging.DEBUG if not silent else logging.WARNING)
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="bsv_rbac_run",
+        description="BLACKSITE RBAC Regression Runner",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    parser.add_argument("--base-url",
+                        default=os.environ.get("BSV_BASE_URL", "http://127.0.0.1:8100"),
+                        help="App base URL")
+    parser.add_argument("--output-dir",
+                        default=str(PROJECT_ROOT / "data" / "rbac-runs"),
+                        help="Output directory for run artifacts")
+    parser.add_argument("--run-id", default=None,
+                        help="Override run ID")
+    parser.add_argument("--headed", action="store_true",
+                        help="Run browser in headed (visible) mode")
+    parser.add_argument("--silent", action="store_true",
+                        help="Skip Telegram notification and suppress info logs")
+    parser.add_argument("--local-mode", action="store_true",
+                        help="Skip Authelia; inject Remote-User header directly")
+    parser.add_argument("--role", default=None,
+                        choices=["principal", "executive", "manager", "analyst"],
+                        help="Only test this platform role")
+    parser.add_argument("--lens", default=None,
+                        help="Only test this system role lens")
+    parser.add_argument("--no-negative", action="store_true",
+                        help="Skip negative (access-denied) test generation")
+    parser.add_argument("--detach", action="store_true",
+                        help="Double-fork into background before starting")
+    parser.add_argument("--bootstrap", action="store_true",
+                        help="Run fixture bootstrap before the test run")
+    parser.add_argument("--clean-bootstrap", action="store_true",
+                        help="Bootstrap with --clean (removes and recreates fixtures)")
+    parser.add_argument("--db-path", default="blacksite.db",
+                        help="Database path for bootstrap")
+    return parser.parse_args()
+
+
+def _double_fork() -> None:
+    """Double-fork to detach from the parent process and become a daemon."""
+    try:
+        pid = os.fork()
+        if pid > 0:
+            sys.exit(0)  # parent exits
+    except OSError as exc:
+        print(f"Fork #1 failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    os.setsid()
+
+    try:
+        pid = os.fork()
+        if pid > 0:
+            sys.exit(0)  # second parent exits
+    except OSError as exc:
+        print(f"Fork #2 failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    # Redirect standard file descriptors to /dev/null
+    sys.stdout.flush()
+    sys.stderr.flush()
+    with open(os.devnull, "r") as f:
+        os.dup2(f.fileno(), sys.stdin.fileno())
+    log_path = str(PROJECT_ROOT / "data" / "rbac-runs" / "bsv_rbac_run.log")
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "a") as f:
+        os.dup2(f.fileno(), sys.stdout.fileno())
+        os.dup2(f.fileno(), sys.stderr.fileno())
+
+
+def _run_bootstrap(db_path: str, clean: bool) -> None:
+    """Run the fixture bootstrap synchronously."""
+    from tests.rbac.fixtures import bootstrap, write_fixtures_yaml
+    print(f"Bootstrapping fixtures (db={db_path}, clean={clean})...")
+    fixture_ids = bootstrap(db_path=db_path, clean=clean)
+    write_fixtures_yaml(fixture_ids)
+    print("Bootstrap complete.")
+
+
+def _check_playwright() -> bool:
+    """Check if playwright is installed."""
+    try:
+        import playwright  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def main() -> int:
+    args = _parse_args()
+
+    # Detach before any output if requested
+    if args.detach:
+        _double_fork()
+
+    _setup_logging(args.silent)
+    log = logging.getLogger("bsv_rbac_run")
+
+    # Check playwright
+    if not _check_playwright():
+        print("ERROR: playwright not installed.", file=sys.stderr)
+        print("Install with: pip install playwright && playwright install chromium",
+              file=sys.stderr)
+        return 1
+
+    # Bootstrap if requested
+    if args.bootstrap or args.clean_bootstrap:
+        try:
+            _run_bootstrap(args.db_path, clean=args.clean_bootstrap)
+        except Exception as exc:
+            log.error("Bootstrap failed: %s", exc)
+            return 1
+
+    # Run the RBAC runner
+    from tests.rbac.runner import RunnerEngine
+
+    engine = RunnerEngine(args)
+
+    try:
+        summary = asyncio.run(engine.run())
+    except KeyboardInterrupt:
+        print("\nAborted by user.", file=sys.stderr)
+        return 130
+    except Exception as exc:
+        log.exception("Runner failed: %s", exc)
+        return 1
+
+    totals = summary.get("totals", {})
+    violations = totals.get("violations", 0)
+    failures = totals.get("failures", 0)
+
+    if violations > 0:
+        log.error("RBAC VIOLATIONS DETECTED: %d — review summary.json", violations)
+        return 2  # distinct exit code for violations
+    elif failures > 0:
+        log.warning("Test failures: %d — review summary.json", failures)
+        return 1
+    else:
+        log.info("All RBAC checks passed.")
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

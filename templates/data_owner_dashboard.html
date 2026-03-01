@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Data Owner Dashboard{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:28px">
+  <h1 style="margin:0;margin-bottom:4px">Data Owner Dashboard</h1>
+  <p class="text-muted" style="font-size:0.88em">Owned systems, FIPS 199 data sensitivity flags, and active POA&Ms</p>
+</div>
+
+{# ── Stats ── #}
+<div class="stats" style="margin-bottom:28px">
+  <div class="stat">
+    <div class="stat-value">{{ owned_systems | length }}</div>
+    <div class="stat-label">Owned Systems</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:var(--yellow)">{{ poam_counts.values() | sum }}</div>
+    <div class="stat-label">Open POA&amp;Ms</div>
+  </div>
+</div>
+
+{# ── Owned Systems with Sensitivity Flags ── #}
+<div class="card">
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">System Data Sensitivity</div>
+  </div>
+  {% if owned_systems %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.83em">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)">
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">System</th>
+        <th style="text-align:center;padding:10px 14px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">PII</th>
+        <th style="text-align:center;padding:10px 14px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">PHI</th>
+        <th style="text-align:center;padding:10px 14px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">CUI</th>
+        <th style="text-align:center;padding:10px 14px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Public</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Cat. Status</th>
+        <th style="text-align:right;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">POA&amp;Ms</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sys in owned_systems %}
+      {% set open_p = poam_counts.get(sys.id, 0) %}
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:10px 20px">
+          <a href="/systems/{{ sys.id }}" style="color:var(--cyan);font-weight:600">{{ sys.name }}</a>
+          {% if sys.abbreviation %}<span class="mono" style="color:var(--muted);font-size:0.85em"> ({{ sys.abbreviation }})</span>{% endif %}
+        </td>
+        <td style="padding:10px 14px;text-align:center">
+          {% if sys.has_pii %}<span style="color:var(--yellow)" title="Contains PII">●</span>{% else %}<span style="color:#333">○</span>{% endif %}
+        </td>
+        <td style="padding:10px 14px;text-align:center">
+          {% if sys.has_phi %}<span style="color:var(--red)" title="Contains PHI">●</span>{% else %}<span style="color:#333">○</span>{% endif %}
+        </td>
+        <td style="padding:10px 14px;text-align:center">
+          {% if sys.has_cui %}<span style="color:var(--yellow)" title="Contains CUI">●</span>{% else %}<span style="color:#333">○</span>{% endif %}
+        </td>
+        <td style="padding:10px 14px;text-align:center">
+          {% if sys.is_public_facing %}<span style="color:var(--cyan)" title="Public-facing">●</span>{% else %}<span style="color:#333">○</span>{% endif %}
+        </td>
+        <td style="padding:10px 20px">
+          {% set cs = sys.categorization_status or 'draft' %}
+          {% if cs == 'approved' %}<span style="color:var(--green)">Approved</span>
+          {% elif cs == 'pending_review' %}<span style="color:var(--yellow)">Pending</span>
+          {% else %}<span style="color:var(--muted)">Draft</span>{% endif %}
+        </td>
+        <td style="padding:10px 20px;text-align:right">
+          {% if open_p > 0 %}
+          <a href="/poam?system_id={{ sys.id }}" style="color:var(--yellow);font-family:var(--mono);font-weight:600">{{ open_p }}</a>
+          {% else %}
+          <span style="color:var(--muted);font-family:var(--mono)">0</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {# Legend #}
+  <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:16px;flex-wrap:wrap;font-size:0.75em;color:var(--muted)">
+    <span><span style="color:var(--yellow)">●</span> PII: Personally Identifiable Information</span>
+    <span><span style="color:var(--red)">●</span> PHI: Protected Health Information</span>
+    <span><span style="color:var(--yellow)">●</span> CUI: Controlled Unclassified Information</span>
+    <span><span style="color:var(--cyan)">●</span> Public-facing</span>
+  </div>
+  {% else %}
+  <div style="padding:24px 20px;color:var(--muted);font-size:0.85em">No systems assigned to you yet.</div>
+  {% endif %}
+</div>
+{% endblock %}

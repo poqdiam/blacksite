@@ -2,7 +2,145 @@
 {% block title %}{{ app_name }} — Admin Dashboard{% endblock %}
 
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/static/vendor/chart.umd.min.js"></script>
+<style>
+/* ── Info drawer ─────────────────────────────────────────────────────────── */
+.info-drawer {
+  position: fixed;
+  top: var(--topbar-h);
+  right: 0;
+  width: 480px;
+  max-width: 92vw;
+  height: calc(100vh - var(--topbar-h));
+  background: var(--card);
+  border-left: 1px solid var(--border);
+  box-shadow: -10px 0 40px rgba(0,0,0,0.55);
+  z-index: 450;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.22s cubic-bezier(0.4,0,0.2,1);
+}
+body.has-role-banner .info-drawer {
+  top: calc(var(--topbar-h) + var(--role-banner-h));
+  height: calc(100vh - var(--topbar-h) - var(--role-banner-h));
+}
+.info-drawer.open { transform: translateX(0); }
+.drawer-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 449;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.22s;
+}
+.drawer-overlay.open { opacity: 1; pointer-events: auto; }
+.drawer-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.drawer-ttl {
+  font-size: 0.68em; font-weight: 700; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--cyan);
+}
+.drawer-close {
+  background: transparent; border: none; color: var(--muted);
+  cursor: pointer; font-size: 1.4em; padding: 2px 6px; line-height: 1;
+  border-radius: 4px; transition: color 0.12s, background 0.12s;
+}
+.drawer-close:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+.drawer-body { flex: 1; overflow-y: auto; padding: 18px 20px; }
+.drawer-section { display: none; }
+.drawer-section.active { display: block; }
+
+/* ── Stat card interactive ───────────────────────────────────────────────── */
+.stat-click {
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.08s ease;
+  user-select: none;
+}
+.stat-click:hover {
+  border-color: rgba(0,255,204,0.25);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+  transform: translateY(-1px);
+}
+.stat-click:active { transform: translateY(1px); }
+.stat-click.active {
+  border-color: rgba(0,255,204,0.45) !important;
+  box-shadow: 0 0 0 1px rgba(0,255,204,0.12), 0 2px 8px rgba(0,0,0,0.4) !important;
+}
+
+/* ── GRC card interactive ────────────────────────────────────────────────── */
+.grc-click {
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.08s ease;
+}
+.grc-click:hover {
+  border-color: rgba(0,255,204,0.2);
+  box-shadow: 0 3px 14px rgba(0,0,0,0.45);
+  transform: translateY(-1px);
+}
+.grc-click:active { transform: translateY(1px); }
+
+/* ── Drawer content atoms ────────────────────────────────────────────────── */
+.d-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(30,30,48,0.6);
+}
+.d-row:last-child { border-bottom: none; }
+.d-row-name { font-size: 0.86em; font-weight: 700; flex: 1; min-width: 0; }
+.d-row-meta { font-size: 0.72em; color: var(--muted); margin-top: 2px; }
+.d-score {
+  font-size: 0.88em; font-weight: 700;
+  font-family: var(--mono); color: var(--cyan);
+  min-width: 38px; text-align: right; flex-shrink: 0;
+}
+
+/* Mini profile card */
+.mini-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; margin-bottom: 8px;
+}
+.mini-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: rgba(0,255,204,0.08); border: 1px solid rgba(0,255,204,0.2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.9em; font-weight: 700; color: var(--cyan); flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+.mini-name { font-size: 0.86em; font-weight: 700; color: var(--text); }
+.mini-sub  { font-size: 0.72em; color: var(--muted); margin-top: 1px; }
+
+/* Score bin bars in drawer */
+.sbin-row {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 6px; font-size: 0.8em;
+}
+.sbin-lbl { min-width: 58px; color: var(--muted); font-family: var(--mono); font-size: 0.9em; }
+.sbin-bar-bg { flex: 1; height: 8px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
+.sbin-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+.sbin-count { min-width: 28px; text-align: right; color: var(--text); font-weight: 700; }
+
+/* Drawer section heading */
+.d-section-hd {
+  font-size: 0.62em; font-weight: 700; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--muted);
+  margin: 16px 0 8px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.d-section-hd:first-child { margin-top: 0; }
+
+/* DL menu */
+.dl-item {
+  display: block; padding: 8px 14px; font-size: 0.8em;
+  color: var(--text); text-decoration: none; transition: background 0.1s;
+}
+.dl-item:hover { background: rgba(255,255,255,0.05); color: var(--cyan); text-decoration: none; }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -26,65 +164,77 @@
   {% endif %}
 </div>
 
-{# ── Stat row ─────────────────────────────────────────────────────────────── #}
+{# ── Stat row — each card opens a detail drawer ──────────────────────────── #}
 <div class="stats" style="margin-bottom:28px">
-  <div class="stat">
+
+  <div class="stat stat-click" onclick="openDrawer('pending')" title="Click to see pending assessments">
     <div class="stat-value" style="color:var(--yellow)">{{ pending|length }}</div>
     <div class="stat-label">Pending Review</div>
   </div>
-  <div class="stat">
+
+  <div class="stat stat-click" onclick="openDrawer('complete')" title="Click to see all complete assessments">
     <div class="stat-value">{{ complete_ct }}</div>
     <div class="stat-label">Complete</div>
   </div>
-  <div class="stat">
+
+  <div class="stat stat-click" onclick="openDrawer('score')" title="Click to see score analytics">
     <div class="stat-value">{{ avg_ssp }}</div>
     <div class="stat-label">Avg SSP Score</div>
   </div>
-  <div class="stat">
+
+  <div class="stat stat-click" onclick="openDrawer('allstar')" title="Click to see all-star profiles">
     <div class="stat-value" style="color:var(--gold)">{{ allstar_ct }}</div>
     <div class="stat-label">All Star</div>
   </div>
-  <div class="stat">
+
+  <div class="stat stat-click" onclick="openDrawer('thisweek')" title="Click to see this week's submissions">
     <div class="stat-value" style="color:var(--cyan)">{{ this_week_ct }}</div>
     <div class="stat-label">This Week</div>
   </div>
-  <div class="stat">
+
+  <div class="stat stat-click" onclick="openDrawer('team')" title="Click to see team roster">
     <div class="stat-value" style="color:var(--muted)">{{ employees|length }}</div>
     <div class="stat-label">Employees</div>
   </div>
-  <div class="stat">
+
+  <div class="stat stat-click" onclick="window.location.href='/systems'" title="Go to System Catalog" style="cursor:pointer">
     <div class="stat-value" style="color:var(--cyan)">{{ systems_count }}</div>
-    <div class="stat-label">Systems</div>
+    <div class="stat-label">Systems ↗</div>
   </div>
-  <div class="stat">
+
+  <div class="stat stat-click" onclick="window.location.href='/poam'" title="Go to POA&amp;M Tracker" style="cursor:pointer">
     <div class="stat-value" style="color:{% if poam_open_count > 0 %}var(--yellow){% else %}var(--green){% endif %}">{{ poam_open_count }}</div>
-    <div class="stat-label">Open POA&Ms</div>
+    <div class="stat-label">Open POA&Ms ↗</div>
   </div>
-  <div class="stat">
+
+  <div class="stat stat-click" onclick="window.location.href='/risks'" title="Go to Risk Register" style="cursor:pointer">
     <div class="stat-value" style="color:{% if risk_open_count > 0 %}var(--red){% else %}var(--green){% endif %}">{{ risk_open_count }}</div>
-    <div class="stat-label">Open Risks</div>
+    <div class="stat-label">Open Risks ↗</div>
   </div>
+
 </div>
 
-{# ── GRC Workflow Command Center ───────────────────────────────────────────── #}
+{# ── GRC Workflow Command Center — full card click ─────────────────────────── #}
 <div style="margin-bottom:28px">
   <div class="section-header">GRC Workflow</div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
 
-    {# Catalog & Controls #}
-    <div class="card" style="padding:16px;margin-bottom:0">
+    {# System Catalog #}
+    <div class="card grc-click" style="padding:16px;margin-bottom:0" onclick="window.location.href='/systems'">
       <div style="font-size:0.65em;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--cyan);margin-bottom:10px">System Catalog</div>
       <div style="font-size:1.8em;font-weight:900;color:var(--text);margin-bottom:6px">{{ systems_count }}</div>
       <div style="font-size:0.78em;color:var(--muted);margin-bottom:12px">
         {% if systems_auth_count > 0 %}<span style="color:var(--green)">{{ systems_auth_count }} authorized</span> ·{% endif %}
         {{ systems_in_progress_count }} in progress
       </div>
-      <a href="/systems" class="btn btn-ghost btn-sm" style="margin-right:6px">Systems</a>
-      <a href="/systems/new" class="btn btn-ghost btn-sm" style="color:var(--muted)">+ New</a>
+      <span class="btn btn-ghost btn-sm" style="margin-right:6px;pointer-events:none">Systems</span>
+      <a href="/systems/new" class="btn btn-ghost btn-sm" style="color:var(--muted)"
+         onclick="event.stopPropagation()">+ New</a>
     </div>
 
     {# POA&M #}
-    <div class="card" style="padding:16px;margin-bottom:0;{% if poam_open_count > 0 %}border-color:rgba(255,179,0,0.2){% endif %}">
+    <div class="card grc-click" style="padding:16px;margin-bottom:0;{% if poam_open_count > 0 %}border-color:rgba(255,179,0,0.2){% endif %}"
+         onclick="window.location.href='/poam'">
       <div style="font-size:0.65em;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--yellow);margin-bottom:10px">POA&amp;M Tracker</div>
       <div style="font-size:1.8em;font-weight:900;color:{% if poam_open_count > 0 %}var(--yellow){% else %}var(--green){% endif %};margin-bottom:6px">
         {{ poam_open_count }}
@@ -93,12 +243,14 @@
         open items
         {% if poam_overdue > 0 %} · <span style="color:var(--red)">{{ poam_overdue }} overdue</span>{% endif %}
       </div>
-      <a href="/poam" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--yellow);border-color:var(--yellow)">POA&Ms</a>
-      <a href="/poam/new" class="btn btn-ghost btn-sm" style="color:var(--muted)">+ New</a>
+      <span class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--yellow);border-color:var(--yellow);pointer-events:none">POA&Ms</span>
+      <a href="/poam/new" class="btn btn-ghost btn-sm" style="color:var(--muted)"
+         onclick="event.stopPropagation()">+ New</a>
     </div>
 
     {# Risk Register #}
-    <div class="card" style="padding:16px;margin-bottom:0;{% if risk_open_count > 0 %}border-color:rgba(244,67,54,0.2){% endif %}">
+    <div class="card grc-click" style="padding:16px;margin-bottom:0;{% if risk_open_count > 0 %}border-color:rgba(244,67,54,0.2){% endif %}"
+         onclick="window.location.href='/risks'">
       <div style="font-size:0.65em;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--red);margin-bottom:10px">Risk Register</div>
       <div style="font-size:1.8em;font-weight:900;color:{% if risk_open_count > 0 %}var(--red){% else %}var(--green){% endif %};margin-bottom:6px">
         {{ risk_open_count }}
@@ -107,24 +259,25 @@
         open risks
         {% if risk_by_level.get('Critical',0) > 0 %} · <span style="color:var(--red)">{{ risk_by_level.get('Critical',0) }} critical</span>{% endif %}
       </div>
-      <a href="/risks" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--red);border-color:var(--red)">Risks</a>
-      <a href="/risks/new" class="btn btn-ghost btn-sm" style="color:var(--muted)">+ New</a>
+      <span class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--red);border-color:var(--red);pointer-events:none">Risks</span>
+      <a href="/risks/new" class="btn btn-ghost btn-sm" style="color:var(--muted)"
+         onclick="event.stopPropagation()">+ New</a>
     </div>
 
     {# Submissions #}
-    <div class="card" style="padding:16px;margin-bottom:0">
+    <div class="card grc-click" style="padding:16px;margin-bottom:0" onclick="window.location.href='/submissions'">
       <div style="font-size:0.65em;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:10px">Submissions / ATO</div>
       <div style="font-size:1.8em;font-weight:900;color:var(--gold);margin-bottom:6px">{{ submissions_review_count }}</div>
       <div style="font-size:0.78em;color:var(--muted);margin-bottom:12px">awaiting review</div>
-      <a href="/submissions" class="btn btn-ghost btn-sm" style="color:var(--gold);border-color:var(--gold)">View All</a>
+      <span class="btn btn-ghost btn-sm" style="color:var(--gold);border-color:var(--gold);pointer-events:none">View All</span>
     </div>
 
     {# Control Catalog #}
-    <div class="card" style="padding:16px;margin-bottom:0">
+    <div class="card grc-click" style="padding:16px;margin-bottom:0" onclick="window.location.href='/controls'">
       <div style="font-size:0.65em;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--cyan);margin-bottom:10px">Control Catalog</div>
       <div style="font-size:1.8em;font-weight:900;color:var(--cyan);margin-bottom:6px">1196</div>
       <div style="font-size:0.78em;color:var(--muted);margin-bottom:12px">NIST 800-53r5 controls</div>
-      <a href="/controls" class="btn btn-ghost btn-sm">Browse</a>
+      <span class="btn btn-ghost btn-sm" style="pointer-events:none">Browse</span>
     </div>
 
   </div>
@@ -132,37 +285,26 @@
 
 {# ── Analytics tiles ─────────────────────────────────────────────────────── #}
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:28px">
-
-  {# Score Distribution #}
   <div class="card" style="padding:20px;margin-bottom:0">
     <div class="card-title">Score Distribution</div>
     <canvas id="chartScoreDist" style="max-height:180px"></canvas>
   </div>
-
-  {# Weekly Submissions #}
   <div class="card" style="padding:20px;margin-bottom:0">
     <div class="card-title">Weekly Intake (8 Weeks)</div>
     <canvas id="chartWeekly" style="max-height:180px"></canvas>
   </div>
-
-  {# Weakest Families #}
   <div class="card" style="padding:20px;margin-bottom:0">
     <div class="card-title">Weakest Control Families</div>
     {% if weak_families %}
     <canvas id="chartWeakFamilies" style="max-height:180px"></canvas>
     {% else %}
-    <div class="text-muted" style="font-size:0.82em;padding:20px 0;text-align:center">
-      No control results yet
-    </div>
+    <div class="text-muted" style="font-size:0.82em;padding:20px 0;text-align:center">No control results yet</div>
     {% endif %}
   </div>
-
 </div>
 
-{# ── Phase 3: POA&M aging + Risk breakdown ────────────────────────────────── #}
+{# ── POA&M aging + Risk breakdown ─────────────────────────────────────────── #}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:28px">
-
-  {# POA&M Aging #}
   <div class="card" style="padding:20px;margin-bottom:0">
     <div class="card-title" style="margin-bottom:12px">POA&M Aging</div>
     <div style="display:flex;align-items:flex-end;gap:6px;height:80px;margin-bottom:8px">
@@ -185,7 +327,6 @@
     </div>
   </div>
 
-  {# Risk Level Breakdown #}
   <div class="card" style="padding:20px;margin-bottom:0">
     <div class="card-title" style="margin-bottom:12px">Risk Breakdown</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
@@ -195,14 +336,9 @@
           ('Moderate', '#ffb300', 'rgba(255,179,0,0.1)'),
           ('Low',      '#00c853', 'rgba(0,200,83,0.1)'),
       ] %}
-      <div style="background:{{ bg }};border:1px solid {{ color }}44;border-radius:6px;
-                  padding:10px;text-align:center">
-        <div style="font-size:1.4em;font-weight:900;color:{{ color }}">
-          {{ risk_by_level[level] }}
-        </div>
-        <div style="font-size:0.6em;color:var(--muted);letter-spacing:1px;text-transform:uppercase">
-          {{ level }}
-        </div>
+      <div style="background:{{ bg }};border:1px solid {{ color }}44;border-radius:6px;padding:10px;text-align:center">
+        <div style="font-size:1.4em;font-weight:900;color:{{ color }}">{{ risk_by_level[level] }}</div>
+        <div style="font-size:0.6em;color:var(--muted);letter-spacing:1px;text-transform:uppercase">{{ level }}</div>
       </div>
       {% endfor %}
     </div>
@@ -210,23 +346,16 @@
       <a href="/risks" class="btn btn-ghost btn-sm">View Risk Register →</a>
     </div>
   </div>
-
 </div>
 
-{# ── Phase 3: Recent Audit Activity ───────────────────────────────────────── #}
+{# ── Recent Audit Activity ─────────────────────────────────────────────────── #}
 {% if recent_audit %}
 <div style="margin-bottom:28px">
   <div class="section-header">Recent Activity</div>
   <div class="card" style="padding:0;overflow:hidden">
     <table>
       <thead>
-        <tr>
-          <th>Time</th>
-          <th>User</th>
-          <th>Action</th>
-          <th>Resource</th>
-          <th>Details</th>
-        </tr>
+        <tr><th>Time</th><th>User</th><th>Action</th><th>Resource</th><th>Details</th></tr>
       </thead>
       <tbody>
         {% for entry in recent_audit %}
@@ -265,7 +394,7 @@
 </div>
 {% endif %}
 
-{# ── Pending review ───────────────────────────────────────────────────────── #}
+{# ── Pending review (cards below fold) ─────────────────────────────────────── #}
 {% if pending %}
 <div style="margin-bottom:32px">
   <div class="section-header">Pending Review</div>
@@ -279,9 +408,7 @@
           <div style="font-weight:700;font-size:0.95em">{{ c.name }}</div>
           <div class="mono text-muted" style="font-size:0.75em;margin-top:2px">{{ a.filename }}</div>
         </div>
-        {% if a.is_allstar %}
-        <span class="badge badge-allstar">★ All Star</span>
-        {% endif %}
+        {% if a.is_allstar %}<span class="badge badge-allstar">★ All Star</span>{% endif %}
       </div>
       <div style="display:flex;gap:16px;margin-bottom:14px">
         <div style="text-align:center">
@@ -310,9 +437,7 @@
         {% endif %}
         <div style="position:relative;display:inline-block" class="dl-menu-wrap">
           <button class="btn btn-sm" style="background:transparent;color:var(--muted);border:1px solid var(--border);cursor:pointer"
-                  onclick="toggleDL(this)">
-            Download ▾
-          </button>
+                  onclick="toggleDL(this)">Download ▾</button>
           <div class="dl-menu" style="display:none;position:absolute;right:0;top:100%;margin-top:4px;
                background:var(--card);border:1px solid var(--border);border-radius:6px;
                min-width:160px;z-index:50;overflow:hidden">
@@ -328,94 +453,283 @@
 </div>
 {% endif %}
 
-{# ── All assessments table ────────────────────────────────────────────────── #}
-<div class="section-header">All Assessments</div>
+{# ── All assessments table ─────────────────────────────────────────────────── #}
+{% set _APAGE = 20 %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+  <div class="section-header" style="margin-bottom:0">All Assessments</div>
+  {% if entries|length > _APAGE %}
+  <span id="assess-count-badge" style="font-size:0.78em;color:var(--muted)">Showing 20 of {{ entries|length }}</span>
+  {% endif %}
+</div>
 <div class="card" style="padding:0;overflow:hidden">
   <table>
     <thead>
       <tr>
-        <th>Candidate</th>
-        <th>File</th>
-        <th>Date</th>
-        <th>Status</th>
-        <th>SSP</th>
-        <th>Quiz</th>
-        <th>Combined</th>
-        <th></th>
-        <th></th>
+        <th>Candidate</th><th>File</th><th>Date</th><th>Status</th>
+        <th>SSP</th><th>Quiz</th><th>Combined</th><th></th><th></th>
       </tr>
     </thead>
     <tbody>
       {% for entry in entries %}
       {% set a = entry.assessment %}
       {% set c = entry.candidate %}
-      <tr>
+      <tr{% if loop.index > _APAGE %} class="assess-extra" style="display:none"{% endif %}>
         <td style="font-weight:600">
           {{ c.name }}
-          {% if a.submitted_by %}
-          <div style="font-size:0.7em;color:var(--muted)">by {{ a.submitted_by }}</div>
-          {% endif %}
+          {% if a.submitted_by %}<div style="font-size:0.7em;color:var(--muted)">by {{ a.submitted_by }}</div>{% endif %}
         </td>
-        <td class="mono text-muted" style="font-size:0.75em;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-          {{ a.filename }}
-        </td>
-        <td class="text-muted" style="font-size:0.78em;white-space:nowrap">
-          {{ a.uploaded_at.strftime('%Y-%m-%d %H:%M') if a.uploaded_at else '—' }}
-        </td>
+        <td class="mono text-muted" style="font-size:0.75em;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.filename }}</td>
+        <td class="text-muted" style="font-size:0.78em;white-space:nowrap">{{ a.uploaded_at.strftime('%Y-%m-%d %H:%M') if a.uploaded_at else '—' }}</td>
         <td>
-          {% if a.status == 'complete' %}
-            <span class="badge badge-complete">Complete</span>
-          {% elif a.status == 'processing' %}
-            <span class="badge badge-processing">Processing</span>
-          {% else %}
-            <span class="badge badge-not_found">{{ a.status }}</span>
-          {% endif %}
+          {% if a.status == 'complete' %}<span class="badge badge-complete">Complete</span>
+          {% elif a.status == 'processing' %}<span class="badge badge-processing">Processing</span>
+          {% else %}<span class="badge badge-not_found">{{ a.status }}</span>{% endif %}
         </td>
-        <td>
-          {% if a.ssp_score > 0 %}<strong style="color:var(--cyan)">{{ a.ssp_score|round(1) }}</strong>{% else %}—{% endif %}
-        </td>
-        <td>
-          {% if a.quiz_score > 0 %}<strong style="color:var(--cyan)">{{ a.quiz_score|round(1) }}</strong>{% else %}—{% endif %}
-        </td>
+        <td>{% if a.ssp_score > 0 %}<strong style="color:var(--cyan)">{{ a.ssp_score|round(1) }}</strong>{% else %}—{% endif %}</td>
+        <td>{% if a.quiz_score > 0 %}<strong style="color:var(--cyan)">{{ a.quiz_score|round(1) }}</strong>{% else %}—{% endif %}</td>
         <td>
           {% if a.combined_score > 0 %}<strong style="color:var(--gold)">{{ a.combined_score|round(1) }}</strong>{% else %}—{% endif %}
           {% if a.is_allstar %}<span style="color:var(--gold);margin-left:4px">★</span>{% endif %}
         </td>
-        <td>
-          <a href="/results/{{ a.id }}" class="btn btn-ghost btn-sm">View</a>
-        </td>
+        <td><a href="/results/{{ a.id }}" class="btn btn-ghost btn-sm">View</a></td>
         <td>
           <div style="display:flex;gap:4px">
-            <a href="/admin/download/{{ a.id }}/json" class="btn btn-sm"
-               style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:4px 8px"
-               title="Download JSON">JSON</a>
-            <a href="/admin/download/{{ a.id }}/original" class="btn btn-sm"
-               style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:4px 8px"
-               title="Download original file">File</a>
-            <a href="/admin/download/{{ a.id }}/print" target="_blank" class="btn btn-sm"
-               style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:4px 8px"
-               title="Print report">Print</a>
+            <a href="/admin/download/{{ a.id }}/json" class="btn btn-sm" style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:4px 8px" title="Download JSON">JSON</a>
+            <a href="/admin/download/{{ a.id }}/original" class="btn btn-sm" style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:4px 8px" title="Download original">File</a>
+            <a href="/admin/download/{{ a.id }}/print" target="_blank" class="btn btn-sm" style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:4px 8px" title="Print report">Print</a>
           </div>
         </td>
       </tr>
       {% else %}
-      <tr>
-        <td colspan="9" class="text-muted" style="text-align:center;padding:40px">
-          No assessments yet. <a href="/upload">Upload an SSP →</a>
-        </td>
-      </tr>
+      <tr><td colspan="9" class="text-muted" style="text-align:center;padding:40px">No assessments yet. <a href="/upload">Upload an SSP →</a></td></tr>
       {% endfor %}
     </tbody>
   </table>
+  {% if entries|length > _APAGE %}
+  <div style="text-align:center;padding:12px;border-top:1px solid var(--border)">
+    <button id="assess-show-more" class="btn btn-ghost btn-sm" onclick="showAllAssessments()" style="font-size:0.78em">
+      Show {{ entries|length - _APAGE }} more ↓
+    </button>
+  </div>
+  {% endif %}
 </div>
+<script>
+function showAllAssessments() {
+  document.querySelectorAll('.assess-extra').forEach(function(r) { r.style.display = ''; });
+  var btn = document.getElementById('assess-show-more');
+  if (btn) btn.parentElement.remove();
+  var badge = document.getElementById('assess-count-badge');
+  if (badge) badge.textContent = 'Showing all {{ entries|length }}';
+}
+</script>
 
 {# ── NIST update ─────────────────────────────────────────────────────────── #}
 <div style="margin-top:20px;display:flex;align-items:center;gap:12px">
-  <button class="btn btn-ghost btn-sm" onclick="triggerUpdate()" id="update-btn">
-    ↻ Update NIST Controls
-  </button>
+  <button class="btn btn-ghost btn-sm" onclick="triggerUpdate()" id="update-btn">↻ Update NIST Controls</button>
   <span id="update-status" style="font-size:0.82em;color:var(--muted)"></span>
 </div>
+
+{# ════════════════════════════════════════════════════════════════════════════
+   INFO DRAWER — slide-in panel showing detail for each stat card
+════════════════════════════════════════════════════════════════════════════ #}
+
+{# Overlay #}
+<div id="drawer-overlay" class="drawer-overlay" onclick="closeDrawer()"></div>
+
+{# Drawer panel #}
+<div id="info-drawer" class="info-drawer">
+  <div class="drawer-hdr">
+    <span id="drawer-title" class="drawer-ttl">—</span>
+    <button class="drawer-close" onclick="closeDrawer()">×</button>
+  </div>
+
+  <div class="drawer-body">
+
+    {# ── PENDING REVIEW ─── #}
+    <div id="dp-pending" class="drawer-section">
+      {% if pending %}
+      {% for entry in pending %}
+      {% set a = entry.assessment %}
+      {% set c = entry.candidate %}
+      <div class="d-row">
+        <div style="flex:1;min-width:0">
+          <div class="d-row-name">{{ c.name }}</div>
+          <div class="d-row-meta">{{ a.filename }} · {{ a.uploaded_at.strftime('%b %d, %Y') if a.uploaded_at else '' }}</div>
+        </div>
+        <span class="d-score">{{ a.ssp_score|round(1) }}</span>
+        {% if a.is_allstar %}<span style="color:var(--gold);font-size:0.9em">★</span>{% endif %}
+        <a href="/results/{{ a.id }}" class="btn btn-ghost btn-sm" style="flex-shrink:0">Review →</a>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div style="text-align:center;padding:40px 0;color:var(--green)">
+        <div style="font-size:2em;margin-bottom:12px">✓</div>
+        <div style="font-size:0.88em">All caught up — no pending reviews.</div>
+      </div>
+      {% endif %}
+    </div>
+
+    {# ── COMPLETE ─── #}
+    <div id="dp-complete" class="drawer-section">
+      {% set complete_entries = entries | selectattr('assessment.status', 'equalto', 'complete') | list %}
+      <div class="d-section-hd">{{ complete_entries | length }} completed assessments</div>
+      {% for entry in complete_entries %}
+      {% set a = entry.assessment %}
+      {% set c = entry.candidate %}
+      <div class="d-row">
+        <div style="flex:1;min-width:0">
+          <div class="d-row-name">
+            {{ c.name }}
+            {% if a.is_allstar %}<span style="color:var(--gold);font-size:0.85em;margin-left:5px">★</span>{% endif %}
+          </div>
+          <div class="d-row-meta">{{ a.uploaded_at.strftime('%Y-%m-%d') if a.uploaded_at else '—' }}</div>
+        </div>
+        <span class="d-score">{{ a.combined_score|round(1) if a.combined_score else a.ssp_score|round(1) }}</span>
+        <a href="/results/{{ a.id }}" class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:0.7em">View</a>
+      </div>
+      {% else %}
+      <div class="text-muted" style="font-size:0.85em;text-align:center;padding:30px 0">No completed assessments yet.</div>
+      {% endfor %}
+    </div>
+
+    {# ── AVG SSP SCORE / Analytics ─── #}
+    <div id="dp-score" class="drawer-section">
+      <div class="d-section-hd">Score Analytics</div>
+      <div style="display:flex;gap:24px;margin-bottom:20px">
+        <div style="text-align:center">
+          <div style="font-size:2.4em;font-weight:900;color:var(--cyan)">{{ avg_ssp }}</div>
+          <div style="font-size:0.65em;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Avg SSP Score</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:2.4em;font-weight:900;color:var(--text)">{{ complete_ct }}</div>
+          <div style="font-size:0.65em;color:var(--muted);letter-spacing:1px;text-transform:uppercase">Assessments</div>
+        </div>
+      </div>
+
+      <div class="d-section-hd">Score Distribution</div>
+      {% set bin_labels = ['0–10','10–20','20–30','30–40','40–50','50–60','60–70','70–80','80–90','90–100'] %}
+      {% set bin_max = [score_bins | max, 1] | max %}
+      {% for i in range(10) %}
+      {% set pct = (score_bins[i] / bin_max * 100) | int %}
+      {% set bar_color = '#f44336' if i < 3 else ('#ffb300' if i < 7 else '#00c853') %}
+      <div class="sbin-row">
+        <span class="sbin-lbl">{{ bin_labels[i] }}</span>
+        <div class="sbin-bar-bg">
+          <div class="sbin-bar-fill" style="width:{{ pct }}%;background:{{ bar_color }}"></div>
+        </div>
+        <span class="sbin-count">{{ score_bins[i] }}</span>
+      </div>
+      {% endfor %}
+
+      {% if weak_families %}
+      <div class="d-section-hd" style="margin-top:20px">Weakest Control Families</div>
+      {% for fam in weak_families %}
+      {% set fpct = (fam.avg / 5 * 100) | int %}
+      {% set fcol = '#f44336' if fam.avg < 2 else ('#ffb300' if fam.avg < 3.5 else '#00c853') %}
+      <div class="sbin-row">
+        <span class="sbin-lbl" style="min-width:44px;font-family:var(--mono)">{{ fam.family }}</span>
+        <div class="sbin-bar-bg">
+          <div class="sbin-bar-fill" style="width:{{ fpct }}%;background:{{ fcol }}"></div>
+        </div>
+        <span class="sbin-count" style="color:{{ fcol }}">{{ fam.avg }}</span>
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      <div class="d-section-hd" style="margin-top:20px">Weekly Intake (last 8 weeks)</div>
+      {% set week_max = [weekly_counts | max, 1] | max %}
+      {% for i in range(weekly_labels | length) %}
+      {% set wpct = (weekly_counts[i] / week_max * 100) | int %}
+      <div class="sbin-row">
+        <span class="sbin-lbl" style="min-width:70px">{{ weekly_labels[i] }}</span>
+        <div class="sbin-bar-bg">
+          <div class="sbin-bar-fill" style="width:{{ wpct }}%;background:var(--cyan)"></div>
+        </div>
+        <span class="sbin-count">{{ weekly_counts[i] }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    {# ── ALL STAR ─── #}
+    <div id="dp-allstar" class="drawer-section">
+      {% set allstar_entries = entries | selectattr('assessment.is_allstar') | list %}
+      <div class="d-section-hd">{{ allstar_entries | length }} all-star assessments</div>
+      {% for entry in allstar_entries %}
+      {% set a = entry.assessment %}
+      {% set c = entry.candidate %}
+      <div class="mini-card">
+        <div class="mini-avatar">{{ c.name[:2] | upper }}</div>
+        <div style="flex:1;min-width:0">
+          <div class="mini-name">
+            {{ c.name }}
+            <span style="color:var(--gold);margin-left:6px">★</span>
+          </div>
+          <div class="mini-sub">
+            SSP {{ a.ssp_score|round(1) }}
+            {% if a.combined_score %} · Combined {{ a.combined_score|round(1) }}{% endif %}
+            · {{ a.uploaded_at.strftime('%b %d, %Y') if a.uploaded_at else '' }}
+          </div>
+        </div>
+        <a href="/results/{{ a.id }}" class="btn btn-ghost btn-sm" style="font-size:0.7em;flex-shrink:0">View</a>
+      </div>
+      {% else %}
+      <div class="text-muted" style="font-size:0.85em;text-align:center;padding:30px 0">No all-star assessments yet.</div>
+      {% endfor %}
+    </div>
+
+    {# ── THIS WEEK ─── #}
+    <div id="dp-thisweek" class="drawer-section">
+      {% set week_ago_str = (this_week | map(attribute='assessment') | map(attribute='uploaded_at') | list) %}
+      <div class="d-section-hd">{{ this_week_ct }} submissions this week</div>
+      {% set tw_entries = entries | list %}
+      {# Filter client-side via all entries — use this_week_ct as indicator, show recent #}
+      {% for entry in entries[:this_week_ct + 5] %}
+      {% set a = entry.assessment %}
+      {% set c = entry.candidate %}
+      {% if loop.index <= this_week_ct %}
+      <div class="d-row">
+        <div style="flex:1;min-width:0">
+          <div class="d-row-name">{{ c.name }}</div>
+          <div class="d-row-meta">{{ a.uploaded_at.strftime('%a %b %d, %H:%M') if a.uploaded_at else '—' }} · {{ a.status }}</div>
+        </div>
+        <span class="d-score" style="color:{% if a.status == 'complete' %}var(--cyan){% else %}var(--muted){% endif %}">
+          {% if a.ssp_score > 0 %}{{ a.ssp_score|round(1) }}{% else %}…{% endif %}
+        </span>
+        <a href="/results/{{ a.id }}" class="btn btn-ghost btn-sm" style="flex-shrink:0;font-size:0.7em">View</a>
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="text-muted" style="font-size:0.85em;text-align:center;padding:30px 0">No submissions this week yet.</div>
+      {% endfor %}
+    </div>
+
+    {# ── TEAM / EMPLOYEES ─── #}
+    <div id="dp-team" class="drawer-section">
+      <div class="d-section-hd">{{ employees | length }} team members</div>
+      {% for emp in employees %}
+      {% if emp.username %}
+      <div class="mini-card">
+        <div class="mini-avatar">{{ (emp.name or emp.username)[:2] | upper }}</div>
+        <div style="flex:1;min-width:0">
+          <div class="mini-name">{{ emp.name or emp.username }}</div>
+          <div class="mini-sub">
+            @{{ emp.username }}
+            {% if emp.email %} · <a href="mailto:{{ emp.email }}" style="color:var(--cyan)">{{ emp.email }}</a>{% endif %}
+          </div>
+        </div>
+        <a href="/admin/view-as/{{ emp.username }}" class="btn btn-ghost btn-sm"
+           style="font-size:0.7em;flex-shrink:0" title="View as this employee">View As</a>
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="text-muted" style="font-size:0.85em;text-align:center;padding:30px 0">
+        No employees configured in config.yaml.
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>{# end .drawer-body #}
+</div>{# end .info-drawer #}
 
 {# ── Forward modal ────────────────────────────────────────────────────────── #}
 <div id="forward-modal"
@@ -425,7 +739,6 @@
               padding:24px;max-width:480px;width:90%;margin:16px">
     <h2 style="margin-bottom:4px">Forward Assessment</h2>
     <p id="forward-candidate" class="text-muted" style="font-size:0.85em;margin-bottom:20px"></p>
-
     <div class="form-group">
       <label>Send To</label>
       <select id="forward-employee" style="background:var(--surface)">
@@ -441,8 +754,7 @@
     </div>
     <div class="form-group">
       <label>Admin Note (optional)</label>
-      <textarea id="forward-note" rows="3" placeholder="Add a review note to include in the email…"
-                style="resize:vertical"></textarea>
+      <textarea id="forward-note" rows="3" placeholder="Add a review note…" style="resize:vertical"></textarea>
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px">
       <button class="btn btn-ghost btn-sm" onclick="closeForward()">Cancel</button>
@@ -469,20 +781,14 @@ const chartDefaults = {
   },
 };
 
-// Score Distribution — bar, 10 bins 0-10 … 90-100
 (function() {
   const ctx = document.getElementById('chartScoreDist');
   if (!ctx) return;
   const labels = ['0-10','10-20','20-30','30-40','40-50','50-60','60-70','70-80','80-90','90-100'];
-  const colors = scoreBins.map((_, i) =>
-    i < 3 ? '#f44336' : i < 7 ? '#ffb300' : '#00c853'
-  );
+  const colors = scoreBins.map((_, i) => i < 3 ? '#f44336' : i < 7 ? '#ffb300' : '#00c853');
   new Chart(ctx, {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [{ data: scoreBins, backgroundColor: colors, borderWidth: 0, borderRadius: 3 }]
-    },
+    data: { labels, datasets: [{ data: scoreBins, backgroundColor: colors, borderWidth: 0, borderRadius: 3 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
@@ -494,7 +800,6 @@ const chartDefaults = {
   });
 })();
 
-// Weekly Intake — line
 (function() {
   const ctx = document.getElementById('chartWeekly');
   if (!ctx) return;
@@ -503,14 +808,9 @@ const chartDefaults = {
     data: {
       labels: weekLabels,
       datasets: [{
-        data: weekCounts,
-        borderColor: '#00ffcc',
-        backgroundColor: 'rgba(0,255,204,0.06)',
-        borderWidth: 2,
-        pointBackgroundColor: '#00ffcc',
-        pointRadius: 4,
-        tension: 0.3,
-        fill: true,
+        data: weekCounts, borderColor: '#00ffcc',
+        backgroundColor: 'rgba(0,255,204,0.06)', borderWidth: 2,
+        pointBackgroundColor: '#00ffcc', pointRadius: 4, tension: 0.3, fill: true,
       }]
     },
     options: {
@@ -524,7 +824,6 @@ const chartDefaults = {
   });
 })();
 
-// Weakest Families — horizontal bar
 (function() {
   const ctx = document.getElementById('chartWeakFamilies');
   if (!ctx || !weakFams.length) return;
@@ -533,13 +832,9 @@ const chartDefaults = {
   const famColors = famAvgs.map(v => v < 2 ? '#f44336' : v < 3.5 ? '#ffb300' : '#00c853');
   new Chart(ctx, {
     type: 'bar',
-    data: {
-      labels: famLabels,
-      datasets: [{ data: famAvgs, backgroundColor: famColors, borderWidth: 0, borderRadius: 3 }]
-    },
+    data: { labels: famLabels, datasets: [{ data: famAvgs, backgroundColor: famColors, borderWidth: 0, borderRadius: 3 }] },
     options: {
-      indexAxis: 'y',
-      responsive: true, maintainAspectRatio: false,
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
         x: { min: 0, max: 5, ticks: { color: '#555', font: { size: 9 } }, grid: { color: '#1a1a28' } },
@@ -548,22 +843,52 @@ const chartDefaults = {
     },
   });
 })();
-</script>
 
-<style>
-.dl-item {
-  display: block;
-  padding: 8px 14px;
-  font-size: 0.8em;
-  color: var(--text);
-  text-decoration: none;
-  transition: background 0.1s;
+// ── Info Drawer ──────────────────────────────────────────────────────────────
+const _drawerTitles = {
+  pending:  'Pending Review',
+  complete: 'All Complete Assessments',
+  score:    'SSP Score Analytics',
+  allstar:  'All Star ★',
+  thisweek: 'This Week',
+  team:     'Team Roster',
+};
+let _activeDrawer = null;
+
+function openDrawer(id) {
+  if (_activeDrawer === id) { closeDrawer(); return; }
+
+  // Hide all sections, show target
+  document.querySelectorAll('.drawer-section').forEach(s => s.classList.remove('active'));
+  const section = document.getElementById('dp-' + id);
+  if (section) section.classList.add('active');
+
+  // Update title
+  document.getElementById('drawer-title').textContent = _drawerTitles[id] || id;
+
+  // Update active stat card
+  document.querySelectorAll('.stat-click').forEach(el => el.classList.remove('active'));
+  const statEl = document.querySelector(`.stat-click[onclick*="'${id}'"]`);
+  if (statEl) statEl.classList.add('active');
+
+  // Open drawer + overlay
+  document.getElementById('info-drawer').classList.add('open');
+  document.getElementById('drawer-overlay').classList.add('open');
+  _activeDrawer = id;
 }
-.dl-item:hover { background: rgba(255,255,255,0.05); color: var(--cyan); text-decoration: none; }
-</style>
-<script>
-let _forwardId = '';
 
+function closeDrawer() {
+  document.getElementById('info-drawer').classList.remove('open');
+  document.getElementById('drawer-overlay').classList.remove('open');
+  document.querySelectorAll('.stat-click').forEach(el => el.classList.remove('active'));
+  _activeDrawer = null;
+}
+
+// Close on Escape key
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+// ── Forward modal ────────────────────────────────────────────────────────────
+let _forwardId = '';
 function openForward(id, name) {
   _forwardId = id;
   document.getElementById('forward-candidate').textContent = name;
@@ -571,82 +896,63 @@ function openForward(id, name) {
   document.getElementById('forward-result').textContent = '';
   document.getElementById('forward-btn').disabled = false;
   document.getElementById('forward-btn').textContent = 'Send →';
-  const modal = document.getElementById('forward-modal');
-  modal.style.display = 'flex';
+  document.getElementById('forward-modal').style.display = 'flex';
 }
-function closeForward() {
-  document.getElementById('forward-modal').style.display = 'none';
-}
+function closeForward() { document.getElementById('forward-modal').style.display = 'none'; }
 async function submitForward() {
-  const btn  = document.getElementById('forward-btn');
-  const res  = document.getElementById('forward-result');
-  const emp  = document.getElementById('forward-employee').value;
+  const btn = document.getElementById('forward-btn');
+  const res = document.getElementById('forward-result');
+  const emp = document.getElementById('forward-employee').value;
   const note = document.getElementById('forward-note').value;
   if (!emp) { res.textContent = 'Select an employee.'; res.style.color = 'var(--red)'; return; }
-  btn.disabled = true;
-  btn.textContent = 'Sending…';
-  res.textContent = '';
-  const fd = new FormData();
-  fd.append('employee_username', emp);
-  fd.append('review_note', note);
+  btn.disabled = true; btn.textContent = 'Sending…'; res.textContent = '';
+  const fd = new FormData(); fd.append('employee_username', emp); fd.append('review_note', note);
   try {
     const r = await fetch('/admin/forward/' + _forwardId, { method: 'POST', body: fd });
     const d = await r.json();
     if (d.ok) {
-      res.textContent = '✓ Forwarded successfully.';
-      res.style.color = 'var(--green)';
+      res.textContent = '✓ Forwarded successfully.'; res.style.color = 'var(--green)';
       btn.textContent = '✓ Sent';
     } else {
-      res.textContent = '✗ ' + (d.error || 'Send failed.');
-      res.style.color = 'var(--red)';
-      btn.disabled = false;
-      btn.textContent = 'Send →';
+      res.textContent = '✗ ' + (d.error || 'Send failed.'); res.style.color = 'var(--red)';
+      btn.disabled = false; btn.textContent = 'Send →';
     }
   } catch(e) {
-    res.textContent = '✗ Request failed.';
-    res.style.color = 'var(--red)';
-    btn.disabled = false;
-    btn.textContent = 'Send →';
+    res.textContent = '✗ Request failed.'; res.style.color = 'var(--red)';
+    btn.disabled = false; btn.textContent = 'Send →';
   }
 }
-
-// Close modal on backdrop click
 document.getElementById('forward-modal').addEventListener('click', function(e) {
   if (e.target === this) closeForward();
 });
 
+// ── Download menu ─────────────────────────────────────────────────────────────
 function toggleDL(btn) {
-  const wrap  = btn.closest('.dl-menu-wrap');
-  const menu  = wrap.querySelector('.dl-menu');
-  const open  = menu.style.display === 'block';
+  const wrap = btn.closest('.dl-menu-wrap');
+  const menu = wrap.querySelector('.dl-menu');
+  const open = menu.style.display === 'block';
   document.querySelectorAll('.dl-menu').forEach(m => m.style.display = 'none');
   menu.style.display = open ? 'none' : 'block';
 }
 document.addEventListener('click', function(e) {
-  if (!e.target.closest('.dl-menu-wrap')) {
+  if (!e.target.closest('.dl-menu-wrap'))
     document.querySelectorAll('.dl-menu').forEach(m => m.style.display = 'none');
-  }
 });
 
+// ── NIST update ───────────────────────────────────────────────────────────────
 async function triggerUpdate() {
   const btn = document.getElementById('update-btn');
   const msg = document.getElementById('update-status');
-  btn.disabled = true;
-  btn.textContent = 'Checking…';
-  msg.textContent = '';
+  btn.disabled = true; btn.textContent = 'Checking…'; msg.textContent = '';
   try {
     const r = await fetch('/api/update-controls', { method: 'POST' });
     const d = await r.json();
-    msg.textContent = d.ok
-      ? `✓ Controls updated — ${d.controls_loaded} loaded`
-      : '✗ Update failed (check connectivity)';
+    msg.textContent = d.ok ? `✓ Controls updated — ${d.controls_loaded} loaded` : '✗ Update failed (check connectivity)';
     msg.style.color = d.ok ? 'var(--green)' : 'var(--red)';
   } catch(e) {
-    msg.textContent = '✗ Request failed';
-    msg.style.color = 'var(--red)';
+    msg.textContent = '✗ Request failed'; msg.style.color = 'var(--red)';
   }
-  btn.disabled = false;
-  btn.textContent = '↻ Update NIST Controls';
+  btn.disabled = false; btn.textContent = '↻ Update NIST Controls';
 }
 </script>
 {% endblock %}

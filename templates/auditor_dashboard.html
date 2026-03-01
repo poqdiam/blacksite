@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Auditor Dashboard{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:28px">
+  <h1 style="margin:0;margin-bottom:4px">Auditor Dashboard</h1>
+  <p class="text-muted" style="font-size:0.88em">Assessment schedule, control gaps, and ATO document review queue</p>
+</div>
+
+{# ── Stats ── #}
+<div class="stats" style="margin-bottom:28px">
+  <div class="stat">
+    <div class="stat-value">{{ recent_assessments | length }}</div>
+    <div class="stat-label">Recent Assessments</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{{ docs_in_review | length }}</div>
+    <div class="stat-label">Docs In Review</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{{ accessible_systems | length }}</div>
+    <div class="stat-label">Accessible Systems</div>
+  </div>
+</div>
+
+{# ── Recent Assessment Scores ── #}
+<div class="card" style="margin-bottom:20px">
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Assessment Schedule</div>
+  </div>
+  {% if recent_assessments %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.83em">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)">
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">ID</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Submitted By</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Date</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Score</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for asmt in recent_assessments %}
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:10px 20px">
+          <a href="/assessments/{{ asmt.id }}" style="color:var(--cyan);font-family:var(--mono)">{{ asmt.id[:8] }}…</a>
+        </td>
+        <td style="padding:10px 20px;color:var(--muted)">{{ asmt.submitted_by or '—' }}</td>
+        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono);font-size:0.85em">
+          {{ asmt.uploaded_at.strftime('%Y-%m-%d') if asmt.uploaded_at and asmt.uploaded_at.strftime is defined else '—' }}
+        </td>
+        <td style="padding:10px 20px">
+          {% set sc = asmt.combined_score if asmt.combined_score is defined and asmt.combined_score else None %}
+          {% if sc %}
+            <span style="color:{% if sc >= 80 %}var(--green){% elif sc >= 60 %}var(--yellow){% else %}var(--red){% endif %};font-family:var(--mono)">{{ sc | round(1) }}%</span>
+          {% else %}
+            <span style="color:var(--muted)">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:24px 20px;color:var(--muted);font-size:0.85em">No assessments in scope.</div>
+  {% endif %}
+</div>
+
+{# ── Control Gap Summary ── #}
+<div class="card" style="margin-bottom:20px">
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Control Gap Summary</div>
+  </div>
+  {% if accessible_systems %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.83em">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)">
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">System</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Total Controls</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Implemented</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Gap %</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sys in accessible_systems %}
+      {% set gs = gap_stats.get(sys.id, {}) %}
+      {% set gp = gs.get('gap_pct', 0) %}
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:10px 20px">
+          <a href="/systems/{{ sys.id }}/controls" style="color:var(--cyan);font-weight:600">{{ sys.name }}</a>
+        </td>
+        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono)">{{ gs.get('total', 0) }}</td>
+        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono)">{{ gs.get('implemented', 0) }}</td>
+        <td style="padding:10px 20px">
+          <span style="color:{% if gp <= 20 %}var(--green){% elif gp <= 50 %}var(--yellow){% else %}var(--red){% endif %};font-family:var(--mono)">{{ gp }}%</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:24px 20px;color:var(--muted);font-size:0.85em">No systems in scope.</div>
+  {% endif %}
+</div>
+
+{# ── ATO Documents in Review ── #}
+<div class="card">
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">ATO Documents in Review</div>
+  </div>
+  {% if docs_in_review %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.83em">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)">
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Document</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Type</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Updated</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for doc in docs_in_review %}
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:10px 20px">
+          <a href="/ato/{{ doc.system_id }}/{{ doc.doc_type }}" style="color:var(--cyan)">{{ doc.title or doc.doc_type }}</a>
+        </td>
+        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono);font-size:0.85em">{{ doc.doc_type }}</td>
+        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono);font-size:0.85em">
+          {{ doc.updated_at.strftime('%Y-%m-%d') if doc.updated_at and doc.updated_at.strftime is defined else '—' }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:24px 20px;color:var(--muted);font-size:0.85em">No documents currently in review.</div>
+  {% endif %}
+</div>
+{% endblock %}

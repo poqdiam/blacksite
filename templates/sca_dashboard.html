@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — SCA Dashboard{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:28px">
+  <h1 style="margin:0;margin-bottom:4px">SCA Dashboard</h1>
+  <p class="text-muted" style="font-size:0.88em">Controls assessment status, schedule, and POA&Ms requiring concurrence</p>
+</div>
+
+{# ── Stats ── #}
+<div class="stats" style="margin-bottom:28px">
+  <div class="stat">
+    <div class="stat-value">{{ assigned_systems | length }}</div>
+    <div class="stat-label">Assigned Systems</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{{ recent_assessments | length }}</div>
+    <div class="stat-label">Recent Assessments</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{{ open_poams | length }}</div>
+    <div class="stat-label">POA&amp;Ms Awaiting</div>
+  </div>
+</div>
+
+{# ── Control Assessment Progress ── #}
+<div class="card" style="margin-bottom:20px">
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Control Assessment Progress</div>
+  </div>
+  {% if assigned_systems %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.83em">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)">
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">System</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Controls</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Tested</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Progress</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sys in assigned_systems %}
+      {% set stats = ctrl_stats.get(sys.id, {}) %}
+      {% set total = stats.get('total', 0) %}
+      {% set tested = stats.get('tested', 0) %}
+      {% set pct = ((tested / total * 100) | round | int) if total > 0 else 0 %}
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:10px 20px">
+          <a href="/systems/{{ sys.id }}/controls" style="color:var(--cyan);font-weight:600">{{ sys.name }}</a>
+        </td>
+        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono)">{{ total }}</td>
+        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono)">{{ tested }}</td>
+        <td style="padding:10px 20px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="flex:1;background:var(--border);border-radius:4px;height:6px;overflow:hidden">
+              <div style="width:{{ pct }}%;height:100%;background:{% if pct >= 80 %}var(--green){% elif pct >= 50 %}var(--yellow){% else %}var(--red){% endif %};border-radius:4px"></div>
+            </div>
+            <span class="mono" style="font-size:0.82em;color:var(--muted);width:36px">{{ pct }}%</span>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:24px 20px;color:var(--muted);font-size:0.85em">No systems assigned yet.</div>
+  {% endif %}
+</div>
+
+{# ── Recent Assessments ── #}
+<div class="card" style="margin-bottom:20px">
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Assessment Schedule</div>
+  </div>
+  {% if recent_assessments %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.83em">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)">
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">ID</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Submitted By</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for asmt in recent_assessments %}
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:10px 20px">
+          <a href="/assessments/{{ asmt.id }}" style="color:var(--cyan);font-family:var(--mono)">{{ asmt.id[:8] }}…</a>
+        </td>
+        <td style="padding:10px 20px;color:var(--muted)">{{ asmt.submitted_by or '—' }}</td>
+        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono);font-size:0.85em">
+          {{ asmt.uploaded_at.strftime('%Y-%m-%d') if asmt.uploaded_at and asmt.uploaded_at.strftime is defined else '—' }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:24px 20px;color:var(--muted);font-size:0.85em">No assessments found.</div>
+  {% endif %}
+</div>
+
+{# ── POA&Ms Awaiting SCA ── #}
+<div class="card">
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">POA&amp;Ms Awaiting Review</div>
+  </div>
+  {% if open_poams %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.83em">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)">
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">ID</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Weakness</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Severity</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Status</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Due</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in open_poams %}
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:10px 20px">
+          <a href="/poam/{{ p.id }}" style="color:var(--cyan);font-family:var(--mono);font-size:0.85em">
+            {{ p.poam_id or p.id[:6] }}
+          </a>
+        </td>
+        <td style="padding:10px 20px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.weakness_name }}</td>
+        <td style="padding:10px 20px">
+          {% set sev = p.severity or 'Low' %}
+          {% if sev == 'Critical' %}<span style="color:var(--red)">Critical</span>
+          {% elif sev == 'High' %}<span style="color:#ff6b35">High</span>
+          {% elif sev == 'Moderate' %}<span style="color:var(--yellow)">Moderate</span>
+          {% else %}<span style="color:var(--green)">Low</span>{% endif %}
+        </td>
+        <td style="padding:10px 20px;color:var(--muted)">{{ p.status | replace('_',' ') | title }}</td>
+        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono);font-size:0.85em">{{ p.scheduled_completion or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:24px 20px;color:var(--muted);font-size:0.85em">No open POA&Ms on your systems.</div>
+  {% endif %}
+</div>
+{% endblock %}

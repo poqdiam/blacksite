@@ -115,14 +115,33 @@ def update_if_needed(config: dict) -> bool:
 
 # ── Catalog parsing ────────────────────────────────────────────────────────────
 
-def _extract_prose(part: dict) -> str:
-    """Recursively extract prose text from an OSCAL part."""
-    texts = []
-    if prose := part.get("prose"):
-        texts.append(prose)
+def _get_label(part: dict) -> str:
+    """Extract the 'label' prop value from a part (e.g. 'a.', '1.')."""
+    for prop in part.get("props", []):
+        if prop.get("name") == "label":
+            return prop.get("value", "")
+    return ""
+
+
+def _extract_prose(part: dict, _depth: int = 0) -> str:
+    """Recursively extract prose from an OSCAL part, preserving label hierarchy."""
+    lines = []
+    label  = _get_label(part)
+    prose  = (part.get("prose") or "").strip()
+    indent = "   " * _depth
+
+    if prose:
+        if label:
+            lines.append(f"{indent}{label} {prose}")
+        else:
+            lines.append(f"{indent}{prose}")
+
     for sub in part.get("parts", []):
-        texts.append(_extract_prose(sub))
-    return " ".join(t for t in texts if t)
+        sub_text = _extract_prose(sub, _depth + 1)
+        if sub_text:
+            lines.append(sub_text)
+
+    return "\n".join(l for l in lines if l)
 
 
 def _extract_controls(group: dict, family_id: str, family_title: str, out: dict):
@@ -138,13 +157,36 @@ def _extract_controls(group: dict, family_id: str, family_title: str, out: dict)
             (_extract_prose(p) for p in parts if p.get("name") == "guidance"), ""
         )
 
+        # Parameters: id + human label
+        # For params with no label, fall back to select choices (e.g. "remove | disable")
+        # then to the raw param ID as last resort.
+        params = []
+        for p in ctrl.get("params", []):
+            pid = p.get("id", "")
+            if not pid:
+                continue
+            label = p.get("label", "")
+            if not label:
+                choices = p.get("select", {}).get("choice", [])
+                label = " | ".join(choices) if choices else pid
+            params.append({"id": pid, "label": label})
+
+        # Related controls from links (href like "#ac-3")
+        related = [
+            lnk["href"].lstrip("#")
+            for lnk in ctrl.get("links", [])
+            if lnk.get("rel") == "related" and lnk.get("href", "").startswith("#")
+        ]
+
         out[ctrl_id] = {
-            "id":          ctrl_id,
-            "title":       ctrl.get("title", ""),
-            "family_id":   family_id.upper(),
-            "family_title": family_title,
-            "statement":   statement,
-            "guidance":    guidance,
+            "id":              ctrl_id,
+            "title":           ctrl.get("title", ""),
+            "family_id":       family_id.upper(),
+            "family_title":    family_title,
+            "statement":       statement,
+            "guidance":        guidance,
+            "parameters":      params,
+            "related_controls": related,
         }
 
         # Control enhancements live under controls[].controls[]

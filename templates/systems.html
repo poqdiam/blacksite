@@ -3,134 +3,468 @@
 
 {% block head %}
 <style>
+  /* ── Sort / bulk toolbar ─────────────────────────────────────────────── */
+  .sort-bulk-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+    padding: 8px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .sort-label {
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .sort-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--muted);
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    cursor: pointer;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+    white-space: nowrap;
+  }
+  .sort-btn:hover     { color: var(--text); border-color: rgba(255,255,255,0.15); }
+  .sort-btn.active    { color: var(--cyan); border-color: rgba(0,255,204,0.4); background: rgba(0,255,204,0.06); }
+  .sort-dir           { font-size: 0.8em; margin-left: 2px; }
+
+  .sort-divider { width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+
+  .bulk-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    flex-wrap: wrap;
+  }
+  .bulk-count { font-size: 0.75em; font-weight: 700; color: var(--cyan); white-space: nowrap; }
+
+  /* ── Responsive grid — 2-col minimum to 5-col ultrawide ─────────────── */
+  /* Cards stay ~480px wide; auto-fill chooses column count naturally.     */
+  /* 2 cols: viewport ~1180px+  3 cols: ~1660px+  4 cols: ~2150px+        */
+  /* 5 cols: ~2640px+  (sidebar 220px deducted from each breakpoint)       */
   .system-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+    gap: 10px;
+    max-width: 2500px;
+    margin: 0 auto;
+  }
+  /* Explicit column caps at common monitor widths (prevents over-stretch) */
+  @media (max-width: 1179px) {          /* narrow — single column */
+    .system-grid { grid-template-columns: 1fr; }
+  }
+  @media (min-width: 2640px) {          /* ultrawide — hard cap at 5 */
+    .system-grid { grid-template-columns: repeat(5, 1fr); }
   }
 
+  /* ── Card — header block (name / owner) + footer row ─────────────────── */
   .sys-card {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    transition: border-color 0.15s, box-shadow 0.15s;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03);
+    border-radius: 7px;
+    display: grid;
+    grid-template-columns: 1fr;   /* single column; has-check overrides */
+    grid-template-rows: auto auto;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.08s ease;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    min-height: 160px;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  /* Checkbox variant — prepend a narrow checkbox column */
+  .sys-card.has-check {
+    grid-template-columns: 28px 1fr;
   }
   .sys-card:hover {
-    border-color: #2a2a40;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
+    border-color: rgba(0,255,204,0.25);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+  }
+  /* Push-down effect on click — suppressed when interacting with checkboxes/buttons */
+  .sys-card.card-push:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  }
+  .sys-card.bulk-selected {
+    border-color: rgba(0,255,204,0.35);
+    background: rgba(0,255,204,0.03);
   }
 
-  .sys-card-header {
-    margin-bottom: 14px;
-  }
-  .sys-card-name {
-    font-size: 1.05em;
-    font-weight: 700;
-    color: var(--text);
-    line-height: 1.3;
-    margin-bottom: 3px;
-  }
-  .sys-card-abbrev {
-    font-family: var(--mono);
+  /* SO / IN meta line */
+  .sys-card-meta {
     font-size: 0.72em;
     color: var(--muted);
-    letter-spacing: 1px;
-  }
-
-  .sys-card-badges {
+    margin-top: 3px;
     display: flex;
-    gap: 6px;
     flex-wrap: wrap;
-    margin-bottom: 14px;
+    gap: 0 12px;
+    line-height: 1.4;
+  }
+  .sys-meta-lbl {
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    opacity: 0.65;
   }
 
-  .sys-card-meta {
-    font-size: 0.8em;
-    color: var(--muted);
-    margin-bottom: 14px;
+  /* Checkbox column */
+  .sys-card-check {
+    grid-row: 1 / span 2;
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    align-items: flex-start;
+    padding: 14px 0 0 10px;
   }
-  .sys-card-meta-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .sys-card-meta-label {
-    font-size: 0.7em;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: #444;
-    min-width: 44px;
+  .bulk-check {
+    accent-color: var(--cyan);
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
     flex-shrink: 0;
   }
 
+  /* ── Card inner layout ────────────────────────────────────────────────── */
+
+  /* Card body wraps header + footer; fills the non-checkbox column */
+  .sys-card-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 13px 16px 11px;
+    min-width: 0;
+    gap: 10px;
+  }
+
+  /* Header: name on line 1, owner on line 2; FIPS floated right */
+  .sys-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+  }
+  .sys-card-name-block {
+    flex: 1;
+    min-width: 0;
+  }
+  .sys-card-name {
+    font-size: 1.0em;
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+  }
+  .sys-card-owner {
+    font-size: 0.76em;
+    color: var(--muted);
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* FIPS CIA — right side of header */
   .fips-cia {
     display: flex;
-    gap: 10px;
-    align-items: center;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
     font-family: var(--mono);
-    font-size: 0.8em;
+    font-size: 0.72em;
   }
-  .fips-item {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-  }
-  .fips-item .fips-key {
-    color: var(--muted);
-    font-size: 0.85em;
-  }
+  .fips-item { display: flex; align-items: center; gap: 4px; }
+  .fips-item .fips-key          { color: #555; min-width: 10px; }
   .fips-item .fips-val-low      { color: var(--green);  font-weight: 700; }
   .fips-item .fips-val-moderate { color: var(--yellow); font-weight: 700; }
   .fips-item .fips-val-high     { color: var(--red);    font-weight: 700; }
 
-  .sys-card-footer {
-    margin-top: auto;
-    padding-top: 14px;
-    border-top: 1px solid rgba(30,30,48,0.8);
+  /* Footer: metadata badges left, action buttons right */
+  .sys-card-foot {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+  .sys-card-foot-left {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+  .sys-card-foot-right {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
   }
 
-  .badge-auth-authorized  { background: rgba(0,200,83,0.15);  color: var(--green);  border: 1px solid rgba(0,200,83,0.25); }
-  .badge-auth-in_progress { background: rgba(255,179,0,0.15); color: var(--yellow); border: 1px solid rgba(255,179,0,0.25); }
-  .badge-auth-expired     { background: rgba(244,67,54,0.15); color: var(--red);    border: 1px solid rgba(244,67,54,0.25); }
-  .badge-auth-not_auth    { background: rgba(158,158,158,0.1);color: var(--grey);   border: 1px solid rgba(158,158,158,0.2); }
+  /* ── Unified badge token ──────────────────────────────────────────────── */
+  /* All card badges share these base rules */
+  .sc-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 3px;
+    font-size: 0.66em;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    line-height: 1;
+    border: 1px solid transparent;
+    flex-shrink: 0;
+  }
+  /* Type (Maj App / GSS / Minor) */
+  .sc-badge-type {
+    background: rgba(0,255,204,0.06);
+    color: var(--cyan);
+    border-color: rgba(0,255,204,0.2);
+  }
+  /* Environment (Cloud / On-Prem / …) */
+  .sc-badge-env {
+    background: rgba(158,158,158,0.07);
+    color: #777;
+    border-color: rgba(158,158,158,0.18);
+  }
+  /* Abbreviation token */
+  .sys-card-abbrev {
+    font-family: var(--mono);
+    font-size: 0.70em;
+    color: #555;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+  /* Auth status — shares sc-badge base */
+  .sc-badge-ato        { background: rgba(0,200,83,0.13);  color: var(--green);  border-color: rgba(0,200,83,0.28); }
+  .sc-badge-in-prog    { background: rgba(255,179,0,0.12); color: var(--yellow); border-color: rgba(255,179,0,0.28); }
+  .sc-badge-expired    { background: rgba(244,67,54,0.12); color: var(--red);    border-color: rgba(244,67,54,0.28); }
+  .sc-badge-not-auth   { background: rgba(158,158,158,0.08); color: var(--grey); border-color: rgba(158,158,158,0.2); }
 
-  .empty-state {
-    text-align: center;
-    padding: 60px 24px;
+  /* ── Unified card buttons ─────────────────────────────────────────────── */
+  .sc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 4px;
+    font-size: 0.70em;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    cursor: pointer;
+    text-decoration: none;
+    border: 1px solid transparent;
+    line-height: 1;
+    transition: background 0.12s, border-color 0.12s, color 0.1s, opacity 0.1s;
+    flex-shrink: 0;
+    user-select: none;
+  }
+  /* Primary — cyan tint (Assign) */
+  .sc-btn-primary {
+    background: rgba(0,255,204,0.07);
+    border-color: rgba(0,255,204,0.28);
+    color: var(--cyan);
+  }
+  .sc-btn-primary:hover {
+    background: rgba(0,255,204,0.15);
+    border-color: rgba(0,255,204,0.45);
+  }
+  /* Assigned — muted green, non-interactive */
+  .sc-btn-assigned {
+    background: rgba(0,200,83,0.05);
+    border-color: rgba(0,200,83,0.2);
+    color: var(--green);
+    cursor: default;
+    opacity: 0.7;
+  }
+  /* Ghost — neutral (Edit) */
+  .sc-btn-ghost {
+    background: transparent;
+    border-color: var(--border);
     color: var(--muted);
   }
-  .empty-state-icon {
-    font-size: 2.5em;
-    margin-bottom: 16px;
-    opacity: 0.4;
-    font-family: var(--mono);
-    color: var(--cyan);
-    letter-spacing: 2px;
+  .sc-btn-ghost:hover {
+    background: rgba(255,255,255,0.05);
+    border-color: rgba(255,255,255,0.18);
+    color: var(--text);
   }
-  .empty-state h2 {
-    font-size: 1em;
+  /* View arrow — minimal */
+  .sc-btn-view {
+    background: transparent;
+    border-color: transparent;
+    color: var(--cyan);
+    padding: 0 5px;
+    font-size: 1.0em;
+  }
+  .sc-btn-view:hover { color: #fff; }
+  /* Disabled state */
+  .sc-btn:disabled,
+  .sc-btn[disabled],
+  .sc-btn.disabled {
+    opacity: 0.32;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* Legacy aliases — prevent breakage in other templates */
+  .badge-auth        { display: inline-flex; align-items: center; height: 20px; padding: 0 7px;
+                       border-radius: 3px; font-size: 0.66em; font-weight: 700;
+                       letter-spacing: 0.4px; text-transform: uppercase;
+                       white-space: nowrap; line-height: 1; border: 1px solid transparent; }
+  .badge-auth-authorized  { background: rgba(0,200,83,0.13);  color: var(--green);  border-color: rgba(0,200,83,0.28); }
+  .badge-auth-in_progress { background: rgba(255,179,0,0.12); color: var(--yellow); border-color: rgba(255,179,0,0.28); }
+  .badge-auth-expired     { background: rgba(244,67,54,0.12); color: var(--red);    border-color: rgba(244,67,54,0.28); }
+  .badge-auth-not_auth    { background: rgba(158,158,158,0.08); color: var(--grey); border-color: rgba(158,158,158,0.2); }
+  .btn-assign { display: inline-flex; align-items: center; justify-content: center;
+                gap: 4px; height: 24px; padding: 0 10px; border-radius: 4px;
+                font-size: 0.70em; font-weight: 700; letter-spacing: 0.3px; cursor: pointer;
+                border: 1px solid rgba(0,255,204,0.28); background: rgba(0,255,204,0.07); color: var(--cyan);
+                transition: background 0.12s, border-color 0.12s; white-space: nowrap; }
+  .btn-assign:hover { background: rgba(0,255,204,0.15); border-color: rgba(0,255,204,0.45); }
+
+  /* Floating bulk action bar */
+  .bulk-float-bar {
+    display: none;
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--card);
+    border: 1px solid rgba(0,255,204,0.3);
+    border-radius: 8px;
+    padding: 12px 20px;
+    gap: 12px;
+    align-items: center;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    z-index: 500;
+    min-width: 360px;
+  }
+  .bulk-float-bar.visible { display: flex; }
+  .bulk-float-count { font-size: 0.82em; font-weight: 700; color: var(--cyan); }
+  .bulk-float-actions { display: flex; gap: 8px; margin-left: auto; }
+
+  /* ── Assign modal ────────────────────────────────────────────────────── */
+  .assign-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .assign-modal-overlay.open { display: flex; }
+
+  .assign-modal {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    width: 360px;
+    max-width: 90vw;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  }
+  .assign-modal-title {
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 4px;
+  }
+  .assign-modal-sys {
+    font-size: 0.9em;
     font-weight: 700;
     color: var(--text);
-    margin-bottom: 8px;
+    margin-bottom: 16px;
+  }
+  .assign-modal label {
+    display: block;
+    font-size: 0.72em;
+    font-weight: 700;
     letter-spacing: 1px;
     text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
   }
-  .empty-state p {
-    font-size: 0.85em;
-    margin-bottom: 20px;
+  .assign-modal select,
+  .assign-modal input[type=text] {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    padding: 7px 10px;
+    font-size: 0.82em;
+    margin-bottom: 14px;
+    outline: none;
+    transition: border-color 0.15s;
   }
+  .assign-modal select:focus,
+  .assign-modal input[type=text]:focus {
+    border-color: rgba(0,255,204,0.4);
+  }
+  .assign-modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+  .assign-modal-feedback {
+    font-size: 0.78em;
+    margin-top: 10px;
+    min-height: 1.2em;
+    text-align: center;
+  }
+  .assign-modal-feedback.ok  { color: var(--green); }
+  .assign-modal-feedback.err { color: var(--red); }
+
+  /* ── Stat filter cards ───────────────────────────────────────────────── */
+  .stat-filter {
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.08s;
+    user-select: none;
+  }
+  .stat-filter:hover {
+    border-color: rgba(0,255,204,0.2);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    transform: translateY(-1px);
+  }
+  .stat-filter:active { transform: translateY(1px); }
+  .stat-filter.active {
+    border-color: rgba(0,255,204,0.4) !important;
+    box-shadow: 0 0 0 1px rgba(0,255,204,0.12), 0 2px 8px rgba(0,0,0,0.4) !important;
+  }
+
+  /* Empty state */
+  .empty-state { text-align: center; padding: 60px 24px; color: var(--muted); }
+  .empty-state-icon {
+    font-size: 2.5em; margin-bottom: 16px; opacity: 0.4;
+    font-family: var(--mono); color: var(--cyan); letter-spacing: 2px;
+  }
+  .empty-state h2 {
+    font-size: 1em; font-weight: 700; color: var(--text);
+    margin-bottom: 8px; letter-spacing: 1px; text-transform: uppercase;
+  }
+  .empty-state p { font-size: 0.85em; margin-bottom: 20px; }
 </style>
 {% endblock %}
 
@@ -147,23 +481,32 @@
   {% endif %}
 </div>
 
-{# ── Stat row ─────────────────────────────────────────────────────────────── #}
-<div class="stats" style="margin-bottom:28px">
-  <div class="stat">
+{# ── Stat row — clickable status filters ─────────────────────────────────── #}
+<div class="stats" style="margin-bottom:24px">
+  <div class="stat stat-filter active" id="sf-all" onclick="filterByStatus('')"
+       style="cursor:pointer" title="Show all systems">
     <div class="stat-value">{{ systems | length }}</div>
-    <div class="stat-label">Total Systems</div>
+    <div class="stat-label">All Systems</div>
   </div>
-  <div class="stat">
+  <div class="stat stat-filter" id="sf-authorized" onclick="filterByStatus('authorized')"
+       style="cursor:pointer" title="Filter: Authorized">
     <div class="stat-value" style="color:var(--green)">{{ authorized_ct }}</div>
     <div class="stat-label">Authorized</div>
   </div>
-  <div class="stat">
+  <div class="stat stat-filter" id="sf-in_progress" onclick="filterByStatus('in_progress')"
+       style="cursor:pointer" title="Filter: In Progress">
     <div class="stat-value" style="color:var(--yellow)">{{ in_progress_ct }}</div>
     <div class="stat-label">In Progress</div>
   </div>
-  <div class="stat">
+  <div class="stat stat-filter" id="sf-expired" onclick="filterByStatus('expired')"
+       style="cursor:pointer" title="Filter: Expired">
     <div class="stat-value" style="color:var(--red)">{{ expired_ct }}</div>
     <div class="stat-label">Expired</div>
+  </div>
+  <div class="stat stat-filter" id="sf-not_authorized" onclick="filterByStatus('not_authorized')"
+       style="cursor:pointer" title="Filter: Not Authorized">
+    <div class="stat-value" style="color:var(--grey)">{{ not_auth_ct }}</div>
+    <div class="stat-label">Not Authorized</div>
   </div>
 </div>
 
@@ -184,102 +527,518 @@
 
 {% else %}
 
+{# ── Sort + bulk toolbar ──────────────────────────────────────────────────── #}
+<div class="sort-bulk-bar">
+  <span class="sort-label">Sort:</span>
+  <button class="sort-btn active" data-sort="name" onclick="sortCards(this)">
+    Name <span class="sort-dir" id="dir-name">↑</span>
+  </button>
+  <button class="sort-btn" data-sort="sec" onclick="sortCards(this)">
+    Security <span class="sort-dir" id="dir-sec"></span>
+  </button>
+  <button class="sort-btn" data-sort="owner" onclick="sortCards(this)">
+    Owner <span class="sort-dir" id="dir-owner"></span>
+  </button>
+  <button class="sort-btn" data-sort="status" onclick="sortCards(this)">
+    Status <span class="sort-dir" id="dir-status"></span>
+  </button>
+  <button class="sort-btn" data-sort="assigned" onclick="sortCards(this)">
+    Assigned <span class="sort-dir" id="dir-assigned"></span>
+  </button>
+
+  <div class="sort-divider"></div>
+
+  {# Bulk toolbar (shown when items are selected) #}
+  <div id="bulk-toolbar" class="bulk-toolbar" style="display:none">
+    <span class="bulk-count" id="bulk-count">0 selected</span>
+    <button class="btn btn-ghost btn-sm" style="font-size:0.72em" onclick="clearBulkSelect()">Clear</button>
+    {% if is_admin or user_role in ['issm'] %}
+    <button class="btn btn-primary btn-sm" style="font-size:0.72em" onclick="bulkAssignSelected()">Assign Selected</button>
+    {% endif %}
+  </div>
+</div>
+
 {# ── System card grid ─────────────────────────────────────────────────────── #}
-<div class="system-grid">
+<div class="system-grid" id="system-grid">
   {% for sys in systems %}
-  <div class="sys-card">
+  {# Compute sort values #}
+  {% set _c = (sys.confidentiality_impact or 'low') | lower %}
+  {% set _i = (sys.integrity_impact or 'low') | lower %}
+  {% set _a = (sys.availability_impact or 'low') | lower %}
+  {% set _lvl_map = {'high': 1, 'moderate': 2, 'low': 3} %}
+  {% set _sec_sort = [_lvl_map.get(_c, 3), _lvl_map.get(_i, 3), _lvl_map.get(_a, 3)] | min %}
+  {% set _status_sort = {'authorized': 1, 'in_progress': 2, 'expired': 4, 'not_authorized': 3}.get(sys.auth_status or 'not_authorized', 3) %}
+  {% set _is_assigned = sys.id in (assigned_sys_ids or []) %}
 
-    {# Name + abbreviation #}
-    <div class="sys-card-header">
-      <div class="sys-card-name">{{ sys.name }}</div>
-      {% if sys.abbreviation %}
-      <div class="sys-card-abbrev">{{ sys.abbreviation }}</div>
-      {% endif %}
+  <div class="sys-card{% if is_admin or user_role in ['issm'] %} has-check{% endif %} card-push"
+       data-id="{{ sys.id }}"
+       data-status="{{ sys.auth_status or 'not_authorized' }}"
+       data-sort-name="{{ sys.name | lower }}"
+       data-sort-sec="{{ _sec_sort }}"
+       data-sort-owner="{{ (sys.owner_name or '') | lower }}"
+       data-sort-status="{{ _status_sort }}"
+       data-sort-assigned="{{ '0' if _is_assigned else '1' }}"
+       onclick="cardClick(event, this)">
+
+    {# Checkbox column — admin + issm only #}
+    {% if is_admin or user_role in ['issm'] %}
+    <div class="sys-card-check">
+      <input type="checkbox" class="bulk-check" onchange="updateBulkBar()"
+             data-sys-id="{{ sys.id }}" data-sys-name="{{ sys.name | e }}" title="Select"
+             onclick="event.stopPropagation()">
     </div>
+    {% endif %}
 
-    {# Type + environment badges #}
-    <div class="sys-card-badges">
-      {% if sys.system_type %}
-      <span class="badge badge-processing">
-        {% if sys.system_type == 'major_application' %}Major Application
-        {% elif sys.system_type == 'general_support_system' %}General Support
-        {% elif sys.system_type == 'minor_application' %}Minor Application
-        {% else %}{{ sys.system_type }}{% endif %}
-      </span>
-      {% endif %}
-      {% if sys.environment %}
-      <span class="badge badge-not_found">
-        {% if sys.environment == 'on_prem' %}On-Prem
-        {% elif sys.environment == 'cloud' %}Cloud
-        {% elif sys.environment == 'hybrid' %}Hybrid
-        {% elif sys.environment == 'saas' %}SaaS
-        {% elif sys.environment == 'paas' %}PaaS
-        {% elif sys.environment == 'iaas' %}IaaS
-        {% else %}{{ sys.environment }}{% endif %}
-      </span>
-      {% endif %}
-    </div>
+    {# Card body: header (name / owner + FIPS) + footer (badges / buttons) #}
+    <div class="sys-card-body">
 
-    {# Owner + FIPS 199 CIA #}
-    <div class="sys-card-meta">
-      {% if sys.owner_name %}
-      <div class="sys-card-meta-row">
-        <span class="sys-card-meta-label">Owner</span>
-        <span style="color:var(--text)">{{ sys.owner_name }}</span>
-      </div>
-      {% endif %}
-
-      <div class="sys-card-meta-row">
-        <span class="sys-card-meta-label">FIPS 199</span>
-        <div class="fips-cia">
+      {# Header — name line 1, SO/IN line 2; FIPS right column #}
+      <div class="sys-card-head">
+        <div class="sys-card-name-block">
+          <div class="sys-card-name" title="{{ sys.name }}">{{ sys.name }}</div>
+          <div class="sys-card-meta">
+            {% if sys.owner_name %}
+            <span><span class="sys-meta-lbl">SO:</span> {{ sys.owner_name }}</span>
+            {% endif %}
+            {% if sys.inventory_number %}
+            <span><span class="sys-meta-lbl">IN:</span> {{ sys.inventory_number }}</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="fips-cia" title="FIPS 199 C/I/A">
           {% for key, val in [('C', sys.confidentiality_impact), ('I', sys.integrity_impact), ('A', sys.availability_impact)] %}
           <div class="fips-item">
-            <span class="fips-key">{{ key }}:</span>
+            <span class="fips-key">{{ key }}</span>
             {% set v = (val or 'low') | lower %}
-            {% if v == 'low' %}
-              <span class="fips-val-low">L</span>
-            {% elif v == 'moderate' %}
-              <span class="fips-val-moderate">M</span>
-            {% elif v == 'high' %}
-              <span class="fips-val-high">H</span>
-            {% else %}
-              <span style="color:var(--muted)">—</span>
-            {% endif %}
+            {% if v == 'low' %}<span class="fips-val-low">L</span>
+            {% elif v == 'moderate' %}<span class="fips-val-moderate">M</span>
+            {% elif v == 'high' %}<span class="fips-val-high">H</span>
+            {% else %}<span style="color:var(--muted)">—</span>{% endif %}
           </div>
           {% endfor %}
         </div>
       </div>
-    </div>
 
-    {# Footer: auth status + actions #}
-    <div class="sys-card-footer">
+      {# Footer — metadata left, actions right #}
+      <div class="sys-card-foot">
+        <div class="sys-card-foot-left">
+          {% if sys.system_type %}
+          <span class="sc-badge sc-badge-type">
+            {% if sys.system_type == 'major_application' %}Maj App
+            {% elif sys.system_type == 'general_support_system' %}GSS
+            {% elif sys.system_type == 'minor_application' %}Minor
+            {% else %}{{ sys.system_type }}{% endif %}
+          </span>
+          {% endif %}
+          {% if sys.environment %}
+          <span class="sc-badge sc-badge-env">
+            {% if sys.environment == 'on_prem' %}On-Prem
+            {% elif sys.environment == 'cloud' %}Cloud
+            {% elif sys.environment == 'hybrid' %}Hybrid
+            {% elif sys.environment == 'saas' %}SaaS
+            {% elif sys.environment == 'paas' %}PaaS
+            {% elif sys.environment == 'iaas' %}IaaS
+            {% else %}{{ sys.environment }}{% endif %}
+          </span>
+          {% endif %}
+        </div>
 
-      {# Auth status badge #}
-      {% if sys.auth_status == 'authorized' %}
-        <span class="badge badge-auth-authorized">Authorized</span>
-      {% elif sys.auth_status == 'in_progress' %}
-        <span class="badge badge-auth-in_progress">In Progress</span>
-      {% elif sys.auth_status == 'expired' %}
-        <span class="badge badge-auth-expired">Expired</span>
-      {% else %}
-        <span class="badge badge-auth-not_auth">Not Authorized</span>
-      {% endif %}
+        <div class="sys-card-foot-right">
+          {# Auth status badge #}
+          {% if sys.auth_status == 'authorized' %}
+            <span class="sc-badge sc-badge-ato">ATO</span>
+          {% elif sys.auth_status == 'in_progress' %}
+            <span class="sc-badge sc-badge-in-prog">In Prog</span>
+          {% elif sys.auth_status == 'expired' %}
+            <span class="sc-badge sc-badge-expired">Expired</span>
+          {% else %}
+            <span class="sc-badge sc-badge-not-auth">Not Auth</span>
+          {% endif %}
 
-      {# Action links #}
-      <div style="display:flex;align-items:center;gap:8px">
-        {% if is_admin %}
-        <a href="/systems/{{ sys.id }}/edit"
-           class="btn btn-ghost btn-sm"
-           style="font-size:0.72em;padding:3px 10px">Edit</a>
-        {% endif %}
-        <a href="/systems/{{ sys.id }}"
-           style="font-size:0.8em;color:var(--cyan);white-space:nowrap">View Details →</a>
+          {# Assign button — disabled+relabelled when current user is already assigned #}
+          {% if is_admin or user_role in ['issm'] %}
+          {% set _already_mine = sys.id in (my_assigned_sys_ids | default([])) %}
+          <button class="sc-btn {% if _already_mine %}sc-btn-assigned{% else %}sc-btn-primary{% endif %}"
+                  {% if not _already_mine %}onclick="openAssignModal('{{ sys.id }}', '{{ sys.name | e }}')"{% endif %}
+                  {% if _already_mine %}disabled title="You are already assigned to this system"{% else %}title="Assign employee to this system"{% endif %}>
+            {% if _already_mine %}✓ Assigned{% else %}⊕ Assign{% endif %}
+          </button>
+          {% endif %}
+
+          {# Edit #}
+          {% if is_admin %}
+          <a href="/systems/{{ sys.id }}/edit" class="sc-btn sc-btn-ghost">Edit</a>
+          {% endif %}
+
+          {# View → #}
+          <a href="/systems/{{ sys.id }}" class="sc-btn sc-btn-view" title="View system">→</a>
+        </div>
       </div>
 
-    </div>
+    </div>{# end .sys-card-body #}
   </div>
   {% endfor %}
 </div>
+
+{# ── Catalog pagination controls ──────────────────────────────────────────── #}
+<div id="catalog-pagination" style="display:none;align-items:center;justify-content:space-between;
+     padding:12px 4px;flex-wrap:wrap;gap:8px;font-size:0.82em;margin-top:10px">
+  <span style="color:var(--muted)">
+    Per page:
+    <span id="pg-size-12" onclick="setPageSize(12)" style="padding:2px 8px;cursor:pointer;border-radius:3px">12</span>
+    <span id="pg-size-24" onclick="setPageSize(24)" style="padding:2px 8px;cursor:pointer;border-radius:3px">24</span>
+    <span id="pg-size-48" onclick="setPageSize(48)" style="padding:2px 8px;cursor:pointer;border-radius:3px">48</span>
+  </span>
+  <span id="pg-info" style="color:var(--muted)"></span>
+  <div style="display:flex;gap:4px;align-items:center" id="pg-buttons"></div>
+</div>
+
+{# ── Floating bulk action bar ─────────────────────────────────────────────── #}
+{% if is_admin or user_role in ['issm'] %}
+<div id="bulk-float-bar" class="bulk-float-bar">
+  <span class="bulk-float-count" id="float-count">0 selected</span>
+  <div class="bulk-float-actions">
+    <button class="btn btn-ghost btn-sm" onclick="clearBulkSelect()">Clear</button>
+    <button class="btn btn-primary btn-sm" onclick="bulkAssignSelected()">⊕ Assign Selected</button>
+  </div>
+</div>
 {% endif %}
 
+{# ── Assign modal ──────────────────────────────────────────────────────────── #}
+{% if is_admin %}
+<div id="assign-overlay" class="assign-modal-overlay" onclick="closeAssignOnOverlay(event)">
+  <div class="assign-modal">
+    <div class="assign-modal-title">Assign Employee</div>
+    <div class="assign-modal-sys" id="assign-modal-sysname">—</div>
+
+    <label>Employee</label>
+    <select id="assign-select">
+      {% for emp in employees %}
+      <option value="{{ emp.username }}">{{ emp.name }} ({{ emp.username }})</option>
+      {% endfor %}
+    </select>
+
+    <label>Note <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+    <input type="text" id="assign-note" placeholder="e.g. ISSO for production system" maxlength="200">
+
+    <div id="assign-feedback" class="assign-modal-feedback"></div>
+
+    <div class="assign-modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeAssignModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="submitAssign()">Assign</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Card click — navigate to system detail unless clicking interactive element ──
+function cardClick(e, card) {
+  // Suppress navigation if click landed on a button, link, or the checkbox column
+  if (e.target.closest('a, button, input, .sys-card-check')) return;
+  window.location.href = '/systems/' + card.dataset.id;
+}
+
+// ── Sort ────────────────────────────────────────────────────────────────────
+const _sortState = { key: 'name', dir: 1 };  // dir: 1=asc, -1=desc
+
+function sortCards(btn) {
+  const key = btn.dataset.sort;
+  if (_sortState.key === key) {
+    _sortState.dir *= -1;  // toggle direction
+  } else {
+    _sortState.key = key;
+    _sortState.dir = 1;
+  }
+
+  // Update button styles
+  document.querySelectorAll('.sort-btn').forEach(b => {
+    b.classList.remove('active');
+    const d = document.getElementById('dir-' + b.dataset.sort);
+    if (d) d.textContent = '';
+  });
+  btn.classList.add('active');
+  const dirEl = document.getElementById('dir-' + key);
+  if (dirEl) dirEl.textContent = _sortState.dir === 1 ? '↑' : '↓';
+
+  const grid = document.getElementById('system-grid');
+  if (!grid) return;
+  const cards = Array.from(grid.querySelectorAll('.sys-card'));
+  const attr = 'sortSort' + key.charAt(0).toUpperCase() + key.slice(1);  // e.g. sortSortName
+  // Use dataset attributes: data-sort-name → dataset.sortName (note: hyphens become camelCase)
+  const dataKey = 'sort' + key.charAt(0).toUpperCase() + key.slice(1);  // sortName, sortSec, etc.
+
+  cards.sort(function(a, b) {
+    const av = a.dataset[dataKey] || '';
+    const bv = b.dataset[dataKey] || '';
+    const cmp = av.localeCompare(bv, undefined, { numeric: true });
+    return cmp * _sortState.dir;
+  });
+  cards.forEach(c => grid.appendChild(c));
+}
+
+// ── Bulk select ─────────────────────────────────────────────────────────────
+function updateBulkBar() {
+  const checked = document.querySelectorAll('.bulk-check:checked');
+  const count   = checked.length;
+  const toolbar = document.getElementById('bulk-toolbar');
+  const floatBar = document.getElementById('bulk-float-bar');
+  const countEl  = document.getElementById('bulk-count');
+  const floatCountEl = document.getElementById('float-count');
+  if (countEl)      countEl.textContent = count + ' selected';
+  if (floatCountEl) floatCountEl.textContent = count + ' selected';
+  if (toolbar)  toolbar.style.display = count > 0 ? '' : 'none';
+  if (floatBar) floatBar.classList.toggle('visible', count > 0);
+  // Highlight selected cards
+  document.querySelectorAll('.sys-card').forEach(card => {
+    const cb = card.querySelector('.bulk-check');
+    card.classList.toggle('bulk-selected', cb && cb.checked);
+  });
+}
+
+function clearBulkSelect() {
+  document.querySelectorAll('.bulk-check').forEach(cb => { cb.checked = false; });
+  updateBulkBar();
+}
+
+function bulkAssignSelected() {
+  const checked = Array.from(document.querySelectorAll('.bulk-check:checked'));
+  if (!checked.length) return;
+  // Collect all selected system IDs (bug fix 2026-03-01: previously only submitted first)
+  _bulkAssignQueue = checked.map(cb => {
+    const card = cb.closest('.sys-card');
+    return { id: card ? card.dataset.id : null, name: cb.dataset.sysName || '' };
+  }).filter(s => s.id);
+  _bulkAssignResults = [];
+  if (!_bulkAssignQueue.length) return;
+  // Open modal showing count — will iterate after user picks the assignee
+  const first = _bulkAssignQueue[0];
+  document.getElementById('assign-modal-sysname').textContent =
+    _bulkAssignQueue.length > 1
+      ? `${_bulkAssignQueue.length} systems selected`
+      : first.name || first.id;
+  document.getElementById('assign-feedback').textContent = '';
+  document.getElementById('assign-feedback').className = 'assign-modal-feedback';
+  document.getElementById('assign-note').value = '';
+  document.getElementById('assign-overlay').classList.add('open');
+  _assignSysId = null;  // multi-mode: handled in submitAssign
+}
+
+let _bulkAssignQueue = [];
+let _bulkAssignResults = [];
+
+// ── Assign modal ─────────────────────────────────────────────────────────────
+let _assignSysId = null;
+
+function openAssignModal(sysId, sysName) {
+  _assignSysId = sysId;
+  document.getElementById('assign-modal-sysname').textContent = sysName;
+  document.getElementById('assign-feedback').textContent = '';
+  document.getElementById('assign-feedback').className = 'assign-modal-feedback';
+  document.getElementById('assign-note').value = '';
+  document.getElementById('assign-overlay').classList.add('open');
+}
+
+function closeAssignModal() {
+  document.getElementById('assign-overlay').classList.remove('open');
+  _assignSysId = null;
+}
+
+function closeAssignOnOverlay(e) {
+  if (e.target === document.getElementById('assign-overlay')) closeAssignModal();
+}
+
+async function submitAssign() {
+  const username = document.getElementById('assign-select').value;
+  const note     = document.getElementById('assign-note').value;
+  const fb       = document.getElementById('assign-feedback');
+
+  // Determine target list: bulk queue or single modal
+  const targets = (_bulkAssignQueue && _bulkAssignQueue.length)
+    ? _bulkAssignQueue
+    : (_assignSysId ? [{ id: _assignSysId, name: _assignSysId }] : []);
+
+  if (!targets.length) return;
+
+  fb.textContent = `Assigning ${targets.length} system(s)…`;
+  fb.className = 'assign-modal-feedback';
+
+  let ok = 0, already = 0, errs = 0;
+  for (const sys of targets) {
+    const fd = new FormData();
+    fd.append('username', username);
+    fd.append('note', note);
+    try {
+      const r = await fetch(`/systems/${sys.id}/assign`, { method: 'POST', body: fd });
+      const j = await r.json();
+      if (j.status === 'assigned') ok++;
+      else if (j.status === 'already_assigned') already++;
+      else errs++;
+    } catch(e) {
+      errs++;
+    }
+  }
+
+  const parts = [];
+  if (ok)      parts.push(`${ok} assigned`);
+  if (already) parts.push(`${already} already assigned`);
+  if (errs)    parts.push(`${errs} error(s)`);
+  fb.textContent = parts.join(', ') + '.';
+  fb.className = errs ? 'assign-modal-feedback err' : 'assign-modal-feedback ok';
+
+  _bulkAssignQueue = [];
+  _bulkAssignResults = [];
+  setTimeout(() => { closeAssignModal(); clearBulkSelect(); }, 1800);
+}
+</script>
+{% endif %}
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Status filter + JS pagination ─────────────────────────────────────────
+let _activeFilter = '';
+let _pgSize = 24;
+let _pgCurrent = 1;
+
+function filterByStatus(status) {
+  _activeFilter = status;
+  _pgCurrent = 1;
+
+  // Update stat card active states
+  document.querySelectorAll('.stat-filter').forEach(el => el.classList.remove('active'));
+  const activeId = status ? 'sf-' + status : 'sf-all';
+  const activeEl = document.getElementById(activeId);
+  if (activeEl) activeEl.classList.add('active');
+
+  renderPage(_pgCurrent);
+}
+
+function setPageSize(n) {
+  _pgSize = n;
+  _pgCurrent = 1;
+  updatePageSizeButtons();
+  renderPage(_pgCurrent);
+}
+
+function updatePageSizeButtons() {
+  [12, 24, 48].forEach(n => {
+    const el = document.getElementById('pg-size-' + n);
+    if (!el) return;
+    if (n === _pgSize) {
+      el.style.color = 'var(--cyan)';
+      el.style.fontWeight = '700';
+      el.style.background = 'rgba(0,255,204,0.08)';
+    } else {
+      el.style.color = 'var(--muted)';
+      el.style.fontWeight = '';
+      el.style.background = '';
+    }
+  });
+}
+
+function renderPage(pageNum) {
+  const allCards = Array.from(document.querySelectorAll('.sys-card'));
+  // Filter to those matching the active status filter
+  const filtered = allCards.filter(card => !_activeFilter || card.dataset.status === _activeFilter);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / _pgSize));
+  _pgCurrent = Math.min(pageNum, totalPages);
+
+  const start = (_pgCurrent - 1) * _pgSize;
+  const end   = start + _pgSize;
+
+  // Show/hide all cards
+  allCards.forEach(card => { card.style.display = 'none'; });
+  filtered.forEach((card, idx) => {
+    card.style.display = (idx >= start && idx < end) ? '' : 'none';
+  });
+
+  // Update empty state
+  const grid = document.getElementById('system-grid');
+  if (grid) {
+    let hint = document.getElementById('filter-empty-hint');
+    if (filtered.length === 0) {
+      if (!hint) {
+        hint = document.createElement('div');
+        hint.id = 'filter-empty-hint';
+        hint.className = 'empty-state';
+        hint.style.gridColumn = '1 / -1';
+        hint.innerHTML = '<div class="empty-state-icon">[ ]</div>' +
+          '<h2>No systems match this filter</h2>' +
+          '<p style="margin-bottom:12px">No systems currently have this authorization status.</p>' +
+          '<button class="btn btn-ghost btn-sm" onclick="filterByStatus(\'\')">Show All</button>';
+        grid.appendChild(hint);
+      }
+    } else if (hint) {
+      hint.remove();
+    }
+  }
+
+  // Pagination controls
+  const pgDiv = document.getElementById('catalog-pagination');
+  const pgInfo = document.getElementById('pg-info');
+  const pgBtns = document.getElementById('pg-buttons');
+  if (!pgDiv) return;
+
+  pgDiv.style.display = (filtered.length > _pgSize || filtered.length > 12) ? 'flex' : 'none';
+
+  if (pgInfo) {
+    const shown = Math.min(_pgSize, filtered.length - start);
+    pgInfo.textContent = `${start + 1}–${start + shown} of ${filtered.length}`;
+  }
+
+  if (pgBtns) {
+    pgBtns.innerHTML = '';
+    if (totalPages > 1) {
+      if (_pgCurrent > 1) {
+        const prev = document.createElement('a');
+        prev.className = 'btn btn-sm btn-ghost';
+        prev.textContent = '‹';
+        prev.style.cursor = 'pointer';
+        prev.onclick = () => renderPage(_pgCurrent - 1);
+        pgBtns.appendChild(prev);
+      }
+      for (let p = 1; p <= totalPages; p++) {
+        if (p === _pgCurrent) {
+          const cur = document.createElement('span');
+          cur.className = 'btn btn-sm';
+          cur.style.cssText = 'background:rgba(0,255,204,.15);color:var(--cyan);min-width:32px;text-align:center';
+          cur.textContent = p;
+          pgBtns.appendChild(cur);
+        } else if (p <= 2 || p >= totalPages - 1 || (p >= _pgCurrent - 2 && p <= _pgCurrent + 2)) {
+          const pg = document.createElement('a');
+          pg.className = 'btn btn-sm btn-ghost';
+          pg.style.minWidth = '32px';
+          pg.textContent = p;
+          pg.style.cursor = 'pointer';
+          pg.onclick = ((pNum) => () => renderPage(pNum))(p);
+          pgBtns.appendChild(pg);
+        } else if (p === 3 || p === totalPages - 2) {
+          const dots = document.createElement('span');
+          dots.style.cssText = 'color:var(--muted);padding:0 4px';
+          dots.textContent = '…';
+          pgBtns.appendChild(dots);
+        }
+      }
+      if (_pgCurrent < totalPages) {
+        const next = document.createElement('a');
+        next.className = 'btn btn-sm btn-ghost';
+        next.textContent = '›';
+        next.style.cursor = 'pointer';
+        next.onclick = () => renderPage(_pgCurrent + 1);
+        pgBtns.appendChild(next);
+      }
+    }
+  }
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', () => {
+  updatePageSizeButtons();
+  renderPage(1);
+});
+</script>
 {% endblock %}

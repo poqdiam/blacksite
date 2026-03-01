@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ app_name }} — {% if item %}{{ item.weakness_name }}{% else %}New POA&M Item{% endif %}{% endblock %}
+{% block title %}{{ app_name }} — {% if item %}{{ item.poam_id or item.weakness_name }}{% else %}New POA&M Item{% endif %}{% endblock %}
 
 {% block content %}
 {% set title = item.weakness_name if item else "New POA&M Item" %}
@@ -11,49 +11,42 @@
   <span>{{ title }}</span>
 </div>
 
+{% if item and item.approval_stage == 'pending_ao' %}
+<div style="border-left:3px solid var(--yellow);background:rgba(255,179,0,0.08);
+            border-radius:6px;padding:12px 16px;margin-bottom:20px;font-size:0.85em">
+  <strong style="color:var(--yellow)">&#x23F3; Pending AO Approval</strong><br>
+  <span style="color:var(--muted)">This Accepted Risk requires AO sign-off before taking effect.</span>
+</div>
+{% endif %}
+
 {# ── Page header ──────────────────────────────────────────────────────────── #}
 {% if item %}
-  {# Editing: show rich header with badges #}
   {% set sev = item.severity or 'Low' %}
-  {% if sev == 'Critical' %}
-    {% set sev_color = 'var(--red)' %}
-    {% set sev_bg = 'rgba(244,67,54,0.15)' %}
-  {% elif sev == 'High' %}
-    {% set sev_color = '#ff6b35' %}
-    {% set sev_bg = 'rgba(255,107,53,0.15)' %}
-  {% elif sev == 'Moderate' %}
-    {% set sev_color = 'var(--yellow)' %}
-    {% set sev_bg = 'rgba(255,179,0,0.15)' %}
-  {% elif sev == 'Low' %}
-    {% set sev_color = 'var(--green)' %}
-    {% set sev_bg = 'rgba(0,200,83,0.15)' %}
-  {% else %}
-    {% set sev_color = 'var(--grey)' %}
-    {% set sev_bg = 'rgba(158,158,158,0.1)' %}
+  {% if sev == 'Critical' %}{% set sev_color = 'var(--red)' %}{% set sev_bg = 'rgba(244,67,54,0.15)' %}
+  {% elif sev == 'High' %}{% set sev_color = '#ff6b35' %}{% set sev_bg = 'rgba(255,107,53,0.15)' %}
+  {% elif sev == 'Moderate' %}{% set sev_color = 'var(--yellow)' %}{% set sev_bg = 'rgba(255,179,0,0.15)' %}
+  {% elif sev == 'Low' %}{% set sev_color = 'var(--green)' %}{% set sev_bg = 'rgba(0,200,83,0.15)' %}
+  {% else %}{% set sev_color = 'var(--grey)' %}{% set sev_bg = 'rgba(158,158,158,0.1)' %}
   {% endif %}
   {% set st = item.status or 'open' %}
-  {% if st == 'closed' %}
-    {% set st_color = 'var(--green)' %}
-    {% set st_bg = 'rgba(0,200,83,0.15)' %}
-  {% elif st == 'in_progress' %}
-    {% set st_color = 'var(--yellow)' %}
-    {% set st_bg = 'rgba(255,179,0,0.15)' %}
-  {% elif st == 'risk_accepted' %}
-    {% set st_color = 'var(--cyan)' %}
-    {% set st_bg = 'rgba(0,255,204,0.1)' %}
-  {% elif st == 'false_positive' %}
-    {% set st_color = 'var(--muted)' %}
-    {% set st_bg = 'rgba(136,136,136,0.1)' %}
-  {% else %}
-    {% set st_color = 'var(--grey)' %}
-    {% set st_bg = 'rgba(158,158,158,0.1)' %}
+  {% if st == 'closed_verified' %}{% set st_color = 'var(--green)' %}{% set st_bg = 'rgba(0,200,83,0.15)' %}
+  {% elif st == 'ready_for_review' %}{% set st_color = '#00cfff' %}{% set st_bg = 'rgba(0,200,255,0.12)' %}
+  {% elif st == 'in_progress' %}{% set st_color = 'var(--yellow)' %}{% set st_bg = 'rgba(255,179,0,0.15)' %}
+  {% elif st == 'blocked' %}{% set st_color = '#ff5252' %}{% set st_bg = 'rgba(255,82,82,0.12)' %}
+  {% elif st == 'deferred_waiver' %}{% set st_color = '#ff8c42' %}{% set st_bg = 'rgba(255,140,66,0.12)' %}
+  {% elif st == 'accepted_risk' %}{% set st_color = 'var(--cyan)' %}{% set st_bg = 'rgba(0,255,204,0.1)' %}
+  {% elif st in ['false_positive', 'draft'] %}{% set st_color = 'var(--muted)' %}{% set st_bg = 'rgba(136,136,136,0.1)' %}
+  {% else %}{% set st_color = 'var(--grey)' %}{% set st_bg = 'rgba(158,158,158,0.1)' %}
   {% endif %}
+  {% set _slabels = poam_status_labels if poam_status_labels is defined else {} %}
+  {% set st_label = _slabels[st] if st in _slabels else st | replace('_',' ') | title %}
+
   <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
     <div>
       <h1 style="margin:0;margin-bottom:8px">{{ item.weakness_name }}</h1>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span class="badge" style="background:{{ sev_bg }};color:{{ sev_color }}">{{ sev }}</span>
-        <span class="badge" style="background:{{ st_bg }};color:{{ st_color }}">{{ st | replace('_', ' ') }}</span>
+        <span class="badge" style="background:{{ st_bg }};color:{{ st_color }}">{{ st_label }}</span>
         {% if item.control_id %}
         <span class="mono" style="font-size:0.78em;color:var(--cyan)">{{ item.control_id }}</span>
         {% endif %}
@@ -64,6 +57,12 @@
         {% endif %}
       </div>
     </div>
+    {% if item.poam_id %}
+    <div style="text-align:right">
+      <div style="font-size:0.62em;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">POA&M ID</div>
+      <div class="mono" style="font-size:1.15em;font-weight:900;color:var(--cyan);letter-spacing:1px">{{ item.poam_id }}</div>
+    </div>
+    {% endif %}
   </div>
 {% else %}
   <div style="margin-bottom:24px">
@@ -74,7 +73,7 @@
 
 {# ── Form card ────────────────────────────────────────────────────────────── #}
 <div class="card">
-  <form method="POST" action="{{ action }}">
+  <form method="POST" action="{{ action }}" id="poam-form">
 
     {# ── Section: Identification ── #}
     <div style="margin-bottom:28px">
@@ -89,8 +88,8 @@
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div class="form-group" style="margin-bottom:0">
-          <label for="system_id">System</label>
-          <select id="system_id" name="system_id">
+          <label for="system_id">System <span style="color:var(--red)">*</span></label>
+          <select id="system_id" name="system_id" required>
             <option value="">— No System —</option>
             {% for sys in systems %}
             <option value="{{ sys.id }}"
@@ -103,10 +102,24 @@
         </div>
 
         <div class="form-group" style="margin-bottom:0">
-          <label for="control_id">Control ID</label>
-          <input type="text" id="control_id" name="control_id"
-                 value="{{ item.control_id if item else (control_id or '') }}"
-                 placeholder="e.g. ac-2, si-3">
+          <label for="control_id">Control ID <span style="color:var(--red)">*</span></label>
+          <div style="position:relative;display:flex;gap:6px">
+            <input type="text" id="control_id" name="control_id"
+                   value="{{ item.control_id if item else (control_id or '') }}"
+                   placeholder="e.g. ac-2 or ac-2, si-3"
+                   autocomplete="off"
+                   required
+                   style="flex:1"
+                   list="ctrl-datalist">
+            <datalist id="ctrl-datalist">
+              {% for cid in catalog_ids if catalog_ids is defined %}
+              <option value="{{ cid | upper }}">
+              {% endfor %}
+            </datalist>
+          </div>
+          <div style="font-size:0.72em;color:var(--muted);margin-top:4px">
+            Type a control ID or pick from the list. Comma-separate multiple controls.
+          </div>
         </div>
       </div>
 
@@ -191,16 +204,22 @@
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div class="form-group" style="margin-bottom:0">
-          <label for="scheduled_completion">Scheduled Completion</label>
+          <label for="scheduled_completion">Scheduled Completion <span style="color:var(--red)">*</span></label>
           <input type="date" id="scheduled_completion" name="scheduled_completion"
+                 required
                  value="{{ item.scheduled_completion.strftime('%Y-%m-%d') if item and item.scheduled_completion and item.scheduled_completion.strftime is defined else (item.scheduled_completion if item and item.scheduled_completion else '') }}">
         </div>
 
         {% if item %}
+        {% set _terminal_st = ['closed_verified','deferred_waiver','accepted_risk','false_positive'] %}
+        {% set _can_complete = item.status in _terminal_st %}
         <div class="form-group" style="margin-bottom:0">
-          <label for="completion_date">Actual Completion Date</label>
+          <label for="completion_date">Actual Completion Date
+            <span style="font-size:0.8em;color:var(--muted);font-weight:400"> — terminal statuses only</span>
+          </label>
           <input type="date" id="completion_date" name="completion_date"
-                 value="{{ item.completion_date.strftime('%Y-%m-%d') if item.completion_date and item.completion_date.strftime is defined else (item.completion_date if item.completion_date else '') }}">
+                 value="{{ item.completion_date.strftime('%Y-%m-%d') if item.completion_date and item.completion_date.strftime is defined else (item.completion_date if item.completion_date else '') }}"
+                 {% if not _can_complete %}disabled style="opacity:0.4"{% endif %}>
         </div>
         {% endif %}
       </div>
@@ -209,27 +228,235 @@
     {# ── Status — edit only ── #}
     {% if item %}
     <div style="margin-bottom:28px">
-      <div class="section-header" style="margin-bottom:18px">Status</div>
+      <div class="section-header" style="margin-bottom:6px">Status</div>
+      {% set _role = user_role if user_role is defined else 'isso' %}
+      <div style="font-size:0.75em;color:var(--muted);margin-bottom:14px">
+        Your role (<strong>{{ _role | replace('_',' ') | upper }}</strong>) can set:
+        {% for st_opt in (allowed_statuses if allowed_statuses is defined else []) %}
+        <span class="mono" style="font-size:0.9em;color:var(--cyan)">{{ st_opt | replace('_',' ') | title }}</span>{% if not loop.last %},{% endif %}
+        {% endfor %}
+      </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div class="form-group" style="margin-bottom:0">
           <label for="status">Current Status</label>
-          <select id="status" name="status">
-            {% for st_opt, st_label in [
-                ('open',           'Open'),
-                ('in_progress',    'In Progress'),
-                ('closed',         'Closed'),
-                ('risk_accepted',  'Risk Accepted'),
-                ('false_positive', 'False Positive'),
-            ] %}
+          <select id="status" name="status" onchange="onStatusChange(this.value)">
+            {% set _statuses = poam_statuses if poam_statuses is defined else
+               ['draft','open','in_progress','blocked','ready_for_review',
+                'closed_verified','deferred_waiver','accepted_risk','false_positive'] %}
+            {% set _labels = poam_status_labels if poam_status_labels is defined else {} %}
+            {% set _allowed = allowed_statuses if allowed_statuses is defined else _statuses %}
+            {% for st_opt in _statuses %}
             <option value="{{ st_opt }}"
-              {% if item.status == st_opt %}selected{% endif %}>
-              {{ st_label }}
+              {% if item and item.status == st_opt %}selected{% endif %}
+              {% if st_opt != item.status and st_opt not in _allowed %}disabled style="color:#444"{% endif %}>
+              {{ _labels[st_opt] if st_opt in _labels else st_opt | replace('_',' ') | title }}
+              {% if st_opt != item.status and st_opt not in _allowed %} (locked){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label for="risk_accept_review">Risk Accept Review Date</label>
+          <input type="date" id="risk_accept_review" name="risk_accept_review"
+                 value="{{ item.risk_accept_review or '' if item else '' }}"
+                 title="Required annual review date for Accepted Risk items">
+        </div>
+      </div>
+    </div>
+
+    {# ── Blocked fields (shown when status = blocked) ── #}
+    <div id="section-blocked" class="status-section" style="margin-bottom:28px;display:{% if item and item.status == 'blocked' %}block{% else %}none{% endif %}">
+      <div class="section-header" style="margin-bottom:18px">Blocked Details</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label for="blocker_category">Blocker Category</label>
+          <select id="blocker_category" name="blocker_category">
+            {% for opt in ['technical','process','resource','external'] %}
+            <option value="{{ opt }}" {% if item and item.blocker_category == opt %}selected{% endif %}>
+              {{ opt | title }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label for="blocker_owner">Dependency Owner</label>
+          <input type="text" id="blocker_owner" name="blocker_owner"
+                 value="{{ item.blocker_owner or '' if item else '' }}"
+                 placeholder="Who or what is blocking progress">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label for="unblock_plan">Unblock Plan</label>
+        <textarea id="unblock_plan" name="unblock_plan" rows="3"
+                  placeholder="Steps to resolve the blocker and proposed revised dates…">{{ item.unblock_plan or '' if item else '' }}</textarea>
+      </div>
+    </div>
+
+    {# ── Ready for Review fields ── #}
+    <div id="section-rfr" class="status-section" style="margin-bottom:28px;display:{% if item and item.status == 'ready_for_review' %}block{% else %}none{% endif %}">
+      <div class="section-header" style="margin-bottom:18px">Ready for Review Details</div>
+      <div class="form-group" style="margin-bottom:0">
+        <label for="residual_risk">Residual Risk Statement</label>
+        <textarea id="residual_risk" name="residual_risk" rows="3"
+                  placeholder="Describe remaining risk after remediation is complete…">{{ item.residual_risk or '' if item else '' }}</textarea>
+      </div>
+    </div>
+
+    {# ── Closed Verified / False Positive — verification fields ── #}
+    <div id="section-verify" class="status-section" style="margin-bottom:28px;display:{% if item and item.status in ['closed_verified','false_positive'] %}block{% else %}none{% endif %}">
+      <div class="section-header" style="margin-bottom:18px">Verification</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label for="verifier">Verifier</label>
+          <input type="text" id="verifier" name="verifier"
+                 value="{{ item.verifier or '' if item else '' }}"
+                 placeholder="Name of verifying assessor">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label for="verification_date">Verification Date</label>
+          <input type="date" id="verification_date" name="verification_date"
+                 value="{{ item.verification_date or '' if item else '' }}">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label for="verification_method">Verification Method</label>
+          <select id="verification_method" name="verification_method">
+            {% for opt, lbl in [('automated_scan','Automated Scan'),('manual_review','Manual Review'),
+                                ('pen_test','Pen Test'),('external_audit','External Audit')] %}
+            <option value="{{ opt }}" {% if item and item.verification_method == opt %}selected{% endif %}>
+              {{ lbl }}
             </option>
             {% endfor %}
           </select>
         </div>
       </div>
+    </div>
+
+    {# ── Deferred by Waiver fields ── #}
+    <div id="section-waiver" class="status-section" style="margin-bottom:28px;display:{% if item and item.status == 'deferred_waiver' %}block{% else %}none{% endif %}">
+      <div class="section-header" style="margin-bottom:18px">Waiver Details</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label for="waiver_start">Waiver Start</label>
+          <input type="date" id="waiver_start" name="waiver_start"
+                 value="{{ item.waiver_start or '' if item else '' }}">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label for="waiver_end">Waiver End</label>
+          <input type="date" id="waiver_end" name="waiver_end"
+                 value="{{ item.waiver_end or '' if item else '' }}">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="compensating_controls">Compensating Controls</label>
+        <textarea id="compensating_controls" name="compensating_controls" rows="3"
+                  placeholder="Controls in place to compensate while the waiver is active…">{{ item.compensating_controls or '' if item else '' }}</textarea>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label for="monitoring_checkpoints">Monitoring Checkpoints</label>
+        <textarea id="monitoring_checkpoints" name="monitoring_checkpoints" rows="2"
+                  placeholder="Scheduled check-in dates and reviewers…">{{ item.monitoring_checkpoints or '' if item else '' }}</textarea>
+      </div>
+    </div>
+
+    {# ── Accepted Risk fields ── #}
+    <div id="section-accepted-risk" class="status-section" style="margin-bottom:28px;display:{% if item and item.status == 'accepted_risk' %}block{% else %}none{% endif %}">
+      <div class="section-header" style="margin-bottom:18px">Risk Acceptance Details</div>
+      <div class="form-group">
+        <label for="compensating_controls_ar">Compensating Controls</label>
+        <textarea id="compensating_controls_ar" name="compensating_controls" rows="3"
+                  placeholder="Controls in place to reduce impact of the accepted risk…">{{ item.compensating_controls or '' if item else '' }}</textarea>
+      </div>
+    </div>
+
+    {# ── False Positive fields ── #}
+    <div id="section-fp" class="status-section" style="margin-bottom:28px;display:{% if item and item.status == 'false_positive' %}block{% else %}none{% endif %}">
+      <div class="section-header" style="margin-bottom:18px">False Positive Details</div>
+      <div class="form-group" style="margin-bottom:0">
+        <label for="non_applicability_rationale">Non-Applicability Rationale</label>
+        <textarea id="non_applicability_rationale" name="non_applicability_rationale" rows="4"
+                  placeholder="Explain why this finding is not applicable or was incorrectly detected. Include supporting evidence references…">{{ item.non_applicability_rationale or '' if item else '' }}</textarea>
+      </div>
+    </div>
+
+    {# ── Signoff trail ── #}
+    {% if item and item.signoff_trail %}
+    {% set _trail = [] %}
+    <div style="margin-bottom:28px">
+      <div class="section-header" style="margin-bottom:12px">Approval Trail</div>
+      <div style="font-size:0.8em;color:var(--muted);font-family:var(--mono)">
+        <pre style="background:var(--surface);padding:12px;border-radius:6px;border:1px solid var(--border);white-space:pre-wrap;margin:0">{{ item.signoff_trail }}</pre>
+      </div>
+    </div>
+    {% endif %}
+
+    {% endif %}{# end if item #}
+
+    {# ── Required Fields ── #}
+    <div style="margin-bottom:28px">
+      <div class="section-header" style="margin-bottom:18px">Required Fields</div>
+      <div class="form-group">
+        <label for="root_cause">Root Cause Summary</label>
+        <textarea id="root_cause" name="root_cause" rows="3"
+                  placeholder="Concise root cause: configuration gap, missing process, tool limitation…">{{ (item.root_cause or '') if item else '' }}</textarea>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label for="closure_evidence">Closure Evidence</label>
+        <textarea id="closure_evidence" name="closure_evidence" rows="3"
+                  placeholder="Required before marking Closed Verified: artifact names, screenshot paths, scan results…">{{ (item.closure_evidence or '') if item else '' }}</textarea>
+      </div>
+    </div>
+
+    {# ── Closure Evidence File Upload (edit mode only) ── #}
+    {% if item %}
+    <div style="margin-bottom:28px">
+      <div class="section-header" style="margin-bottom:14px">Evidence Files</div>
+
+      {% if evidence_files %}
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+        {% for ev in evidence_files %}
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px">
+          <span style="font-size:1.1em">📎</span>
+          <div style="flex:1;min-width:0">
+            <a href="/poam/{{ item.id }}/evidence/{{ ev.id }}" target="_blank"
+               style="font-size:0.85em;font-weight:600;color:var(--cyan)">{{ ev.filename }}</a>
+            {% if ev.description %}
+            <div style="font-size:0.75em;color:var(--muted)">{{ ev.description }}</div>
+            {% endif %}
+          </div>
+          <span style="font-size:0.72em;color:var(--muted);white-space:nowrap">
+            {{ ev.uploaded_by or '' }}
+            {% if ev.uploaded_at %}· {{ ev.uploaded_at.strftime('%Y-%m-%d') if ev.uploaded_at.strftime is defined else ev.uploaded_at }}{% endif %}
+            {% if ev.file_size %}· {{ (ev.file_size / 1024) | round(1) }} KB{% endif %}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="font-size:0.82em;color:var(--muted);margin-bottom:12px">No evidence files uploaded yet.</div>
+      {% endif %}
+
+      {# Upload form — submits to separate endpoint, preserves main form data #}
+      <form method="POST" action="/poam/{{ item.id }}/evidence" enctype="multipart/form-data"
+            style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:2;min-width:200px">
+          <label style="font-size:0.75em;color:var(--muted);display:block;margin-bottom:4px">
+            Attach File
+            <span style="color:#555;font-weight:400"> — PDF, DOCX, XLSX, PPTX, TXT, PNG, JPG, GIF, WEBP only</span>
+          </label>
+          <input type="file" name="file" required
+                 accept=".pdf,.docx,.xlsx,.pptx,.txt,.png,.jpg,.jpeg,.gif,.webp"
+                 style="width:100%;background:var(--surface);
+                 border:1px solid var(--border);border-radius:4px;padding:6px;font-size:0.82em;color:var(--text)">
+        </div>
+        <div style="flex:2;min-width:180px">
+          <label style="font-size:0.75em;color:var(--muted);display:block;margin-bottom:4px">Description (optional)</label>
+          <input type="text" name="description" placeholder="e.g. Scan report 2026-02-28"
+                 style="width:100%;background:var(--surface);border:1px solid var(--border);
+                        border-radius:4px;padding:8px;font-size:0.82em;color:var(--text)">
+        </div>
+        <button type="submit" class="btn btn-ghost btn-sm" style="white-space:nowrap">Upload Evidence</button>
+      </form>
     </div>
     {% endif %}
 
@@ -263,10 +490,61 @@ function updateSevColor(sel) {
   sel.style.color = color;
   sel.style.borderColor = color + '66';
 }
-// Apply on load
+
+// Show/hide status-conditional sections
+const STATUS_SECTIONS = {
+  'blocked':         ['section-blocked'],
+  'ready_for_review':['section-rfr'],
+  'closed_verified': ['section-verify'],
+  'false_positive':  ['section-verify', 'section-fp'],
+  'deferred_waiver': ['section-waiver'],
+  'accepted_risk':   ['section-accepted-risk'],
+};
+const ALL_SECTIONS = ['section-blocked','section-rfr','section-verify',
+                      'section-fp','section-waiver','section-accepted-risk'];
+
+// Completion date gating: only enabled for terminal statuses
+const TERMINAL_STATUSES = ['closed_verified','deferred_waiver','accepted_risk','false_positive'];
+function updateCompletionDate(val) {
+  const f = document.getElementById('completion_date');
+  if (!f) return;
+  f.disabled = !TERMINAL_STATUSES.includes(val);
+  f.style.opacity = TERMINAL_STATUSES.includes(val) ? '1' : '0.4';
+}
+
+function onStatusChange(val) {
+  ALL_SECTIONS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  const show = STATUS_SECTIONS[val] || [];
+  show.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'block';
+  });
+  updateCompletionDate(val);
+}
+
+// Scroll-to-first-invalid-field on submit
+const poamForm = document.getElementById('poam-form');
+if (poamForm) {
+  poamForm.addEventListener('submit', function(e) {
+    const first = this.querySelector(':invalid');
+    if (first) {
+      e.preventDefault();
+      first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      first.focus();
+      first.style.outline = '2px solid var(--red)';
+      setTimeout(() => { first.style.outline = ''; }, 2000);
+    }
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   const sel = document.getElementById('severity');
   if (sel) updateSevColor(sel);
+  const stSel = document.getElementById('status');
+  if (stSel) onStatusChange(stSel.value);
 });
 </script>
 {% endblock %}

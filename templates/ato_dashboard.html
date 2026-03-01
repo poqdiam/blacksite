@@ -1,77 +1,354 @@
 {% extends "base.html" %}
 {% block title %}ATO Package Dashboard — BLACKSITE{% endblock %}
+{% block head %}
+<style>
+  .ato-stat-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:24px; }
+  .ato-stat { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:14px 16px; text-align:center; }
+  .ato-stat-value { font-size:1.6em; font-weight:700; font-family:var(--mono); line-height:1; }
+  .ato-stat-label { font-size:0.72em; color:var(--muted); margin-top:6px; text-transform:uppercase; letter-spacing:0.5px; }
+  .ato-progress-bar { height:6px; border-radius:3px; background:var(--border); margin-top:10px; overflow:hidden; }
+  .ato-progress-fill { height:100%; border-radius:3px; transition:width 0.4s; }
+  .ato-cat-label {
+    font-size:0.68em; font-weight:700; text-transform:uppercase;
+    letter-spacing:0.6px; color:var(--muted); margin:12px 0 6px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .ato-cat-label::after { content:''; flex:1; height:1px; background:var(--border); }
+  .ato-badge {
+    display:inline-flex; align-items:center; gap:4px;
+    padding:4px 9px; border-radius:4px; font-size:0.73em; font-weight:600;
+    text-decoration:none; border:1px solid; transition:opacity 0.15s; white-space:nowrap;
+  }
+  .ato-badge:hover { opacity:0.75; }
+  .ato-badge-finalized { background:rgba(0,255,204,0.10); border-color:var(--cyan);   color:var(--cyan); }
+  .ato-badge-approved  { background:rgba(0,200,100,0.10); border-color:#00cc88;       color:#00cc88; }
+  .ato-badge-in_review { background:rgba(255,180,0,0.10); border-color:var(--yellow); color:var(--yellow); }
+  .ato-badge-draft     { background:rgba(255,255,255,0.04); border-color:var(--border); color:var(--text); }
+  .ato-badge-missing   { background:rgba(255,60,60,0.06); border-color:rgba(255,60,60,0.3); color:var(--muted); }
+  .sys-action-bar {
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:10px 14px; background:rgba(0,0,0,0.12);
+    border-top:1px solid var(--border); margin-top:14px; border-radius:0 0 6px 6px;
+  }
+  .qa-btn-gen {
+    display:inline-flex; align-items:center; gap:4px;
+    padding:3px 10px; border-radius:4px; font-size:0.73em; font-weight:600;
+    background:rgba(0,255,204,0.07); border:1px solid rgba(0,255,204,0.2);
+    color:var(--cyan); cursor:pointer; transition:background 0.15s;
+  }
+  .qa-btn-gen:hover { background:rgba(0,255,204,0.14); }
+  .qa-btn-up {
+    display:inline-flex; align-items:center; gap:4px;
+    padding:3px 10px; border-radius:4px; font-size:0.73em; font-weight:600;
+    background:rgba(255,255,255,0.04); border:1px solid var(--border);
+    color:var(--muted); cursor:pointer; transition:background 0.15s;
+  }
+  .qa-btn-up:hover { background:rgba(255,255,255,0.08); color:var(--text); }
+
+  /* Upload modal */
+  #ato-upload-modal {
+    display:none; position:fixed; inset:0; z-index:900;
+    background:rgba(0,0,0,0.65); align-items:center; justify-content:center;
+  }
+  #ato-upload-modal.open { display:flex; }
+  .ato-modal-box {
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:28px 32px; width:420px; max-width:95vw;
+  }
+</style>
+{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h1 class="page-title">ATO Package Dashboard</h1>
-  <p class="page-sub">Authorization To Operate — document completion status across all systems</p>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:8px">
+  <div>
+    <h1 class="page-title" style="margin:0">ATO Package Dashboard</h1>
+    <p style="margin:4px 0 0;font-size:0.85em;color:var(--muted)">Authorization To Operate — document status across all systems</p>
+  </div>
 </div>
 
 {% if not systems %}
-<div class="empty-state">
-  <p>No systems assigned. <a href="/systems">View system catalog →</a></p>
+<div class="card" style="padding:48px;text-align:center">
+  <div style="font-size:2em;color:var(--border);margin-bottom:12px">📋</div>
+  <div style="color:var(--muted);margin-bottom:16px">No systems assigned to your account.</div>
+  <a href="/systems" class="btn btn-ghost btn-sm">View System Catalog →</a>
 </div>
 {% else %}
 
-<!-- Summary strip -->
-<div class="stat-row" style="margin-bottom:1.5rem">
-  {% for sys in systems %}
-  {% set s = sys_summary[sys.id] %}
-  <a href="/ato/{{ sys.id }}" class="stat-card" style="text-decoration:none">
-    <div class="stat-label">{{ sys.name }}</div>
-    <div class="stat-value" style="font-size:1.4rem">{{ s.finalized }}/{{ s.total }}</div>
-    <div style="font-size:.75rem;color:var(--muted);margin-top:.3rem">finalized</div>
-    <div style="margin-top:.5rem;background:var(--bg-card);border-radius:4px;height:6px;overflow:hidden">
-      <div style="height:6px;width:{{ ((s.finalized / s.total) * 100)|int }}%;background:var(--accent)"></div>
+{% if not show_all and total_systems > ato_default_cap %}
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;
+            padding:8px 14px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);
+            border-radius:6px;font-size:0.82em;color:var(--muted)">
+  <span style="color:var(--yellow)">&#9432;</span>
+  Showing first <strong style="color:var(--text)">{{ ato_default_cap }}</strong> of
+  <strong style="color:var(--text)">{{ total_systems }}</strong> systems.
+  <a href="/ato?show_all=1" style="color:var(--cyan);margin-left:4px">Show all {{ total_systems }} →</a>
+</div>
+{% endif %}
+
+{# ── Overall summary ── #}
+<div class="ato-stat-row">
+  <div class="ato-stat">
+    <div class="ato-stat-value" style="color:var(--cyan)">{{ ato_overall.finalized }}</div>
+    <div class="ato-stat-label">Finalized</div>
+    <div class="ato-progress-bar">
+      <div class="ato-progress-fill" style="width:{{ ato_overall.pct }}%;background:var(--cyan)"></div>
     </div>
-  </a>
-  {% endfor %}
+  </div>
+  <div class="ato-stat">
+    <div class="ato-stat-value" style="color:var(--yellow)">{{ ato_overall.in_review }}</div>
+    <div class="ato-stat-label">In Review</div>
+  </div>
+  <div class="ato-stat">
+    <div class="ato-stat-value">{{ ato_overall.draft }}</div>
+    <div class="ato-stat-label">Draft</div>
+  </div>
+  <div class="ato-stat">
+    <div class="ato-stat-value" style="color:{% if ato_overall.missing > 0 %}var(--red){% else %}var(--muted){% endif %}">{{ ato_overall.missing }}</div>
+    <div class="ato-stat-label">Not Started</div>
+  </div>
+  <div class="ato-stat">
+    <div class="ato-stat-value">{{ ato_overall.pct }}%</div>
+    <div class="ato-stat-label">Overall Complete</div>
+  </div>
 </div>
 
-<!-- Matrix table -->
+{# ── Per-system cards ── #}
+{% set ato_categories = [
+    ('core',          'Core RMF Documents'),
+    ('preparation',   'FedRAMP Preparation'),
+    ('authorization', 'Authorization Package'),
+    ('conmon',        'Continuous Monitoring'),
+] %}
+
 {% for sys in systems %}
-<div class="card" style="margin-bottom:2rem">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-    <h2 style="font-size:1rem;font-weight:600;color:var(--fg)">
-      <a href="/ato/{{ sys.id }}" style="color:var(--accent);text-decoration:none">{{ sys.name }}</a>
-      <span style="color:var(--muted);font-weight:400;font-size:.85rem;margin-left:.5rem">{{ sys.classification or '' }}</span>
-    </h2>
-    {% set s = sys_summary[sys.id] %}
-    <span style="font-size:.8rem;color:var(--muted)">
-      <span style="color:var(--accent)">{{ s.finalized }}</span> finalized •
-      <span style="color:var(--ok)">{{ s.approved }}</span> approved •
-      <span style="color:var(--warn)">{{ s.in_review }}</span> in review •
-      {{ s.draft }} draft •
-      <span style="color:var(--danger)">{{ s.missing }}</span> missing
+{% set s = sys_summary[sys.id] %}
+
+<div class="card" style="padding:20px;margin-bottom:20px">
+  {# System header row #}
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <a href="/ato/{{ sys.id }}" style="font-size:1.05em;font-weight:700;color:var(--cyan);text-decoration:none">
+        {{ sys.name }}
+      </a>
+      {% if sys.classification %}
+      <span style="font-size:0.72em;font-weight:700;padding:2px 8px;border-radius:3px;
+                   background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.25);color:var(--gold)">
+        {{ sys.classification }}
+      </span>
+      {% endif %}
+    </div>
+    <span style="font-size:0.8em;color:var(--muted)">
+      <span style="color:var(--cyan)">{{ s.finalized }}</span> finalized ·
+      <span style="color:var(--yellow)">{{ s.in_review }}</span> review ·
+      {{ s.draft }} draft ·
+      <span style="color:{% if s.missing > 0 %}var(--red){% else %}var(--muted){% endif %}">
+        {{ s.missing }}
+      </span> missing
+      · <strong>{{ s.pct }}%</strong>
     </span>
   </div>
 
-  <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+  {# Progress bar #}
+  <div class="ato-progress-bar" style="margin:8px 0 14px">
+    <div class="ato-progress-fill" style="width:{{ s.pct }}%;
+         background:{% if s.pct >= 80 %}var(--cyan){% elif s.pct >= 40 %}var(--yellow){% else %}rgba(255,80,80,0.7){% endif %}">
+    </div>
+  </div>
+
+  {# Doc badges grouped by category #}
+  {% for cat_key, cat_label in ato_categories %}
+    {# collect docs in this category #}
+    {% set ns = namespace(has_docs=false) %}
     {% for key in ato_doc_keys %}
-    {% set doc = ato_map.get((sys.id, key)) %}
-    {% set meta = ato_doc_types[key] %}
-    {% set st = doc.status if doc else 'missing' %}
-    <a href="/ato/{{ sys.id }}/{{ key }}"
-       title="{{ meta.name }}"
-       style="display:inline-flex;align-items:center;gap:.35rem;padding:.35rem .65rem;border-radius:4px;font-size:.75rem;font-weight:600;text-decoration:none;border:1px solid;
-       {% if st == 'finalized' %}background:rgba(0,200,150,.12);border-color:var(--accent);color:var(--accent)
-       {% elif st == 'approved' %}background:rgba(0,180,100,.1);border-color:var(--ok);color:var(--ok)
-       {% elif st == 'in_review' %}background:rgba(255,180,0,.1);border-color:var(--warn);color:var(--warn)
-       {% elif st == 'draft' %}background:rgba(255,255,255,.05);border-color:var(--border);color:var(--fg)
-       {% else %}background:rgba(255,60,60,.07);border-color:rgba(255,60,60,.3);color:var(--muted)
-       {% endif %}">
-      {{ meta.short }}
-    </a>
+      {% if ato_doc_types[key].get('category','core') == cat_key %}
+        {% set ns.has_docs = true %}
+      {% endif %}
     {% endfor %}
+    {% if ns.has_docs %}
+    <div class="ato-cat-label">{{ cat_label }}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:2px">
+      {% for key in ato_doc_keys %}
+      {% set meta = ato_doc_types[key] %}
+      {% if meta.get('category','core') == cat_key %}
+      {% set doc = ato_map.get((sys.id, key)) %}
+      {% set st = doc.status if doc else 'missing' %}
+      <a href="/ato/{{ sys.id }}/{{ key }}"
+         title="{{ meta.name }}{% if st == 'missing' %} — click to start{% elif doc and doc.version %} · v{{ doc.version }}{% endif %}"
+         class="ato-badge ato-badge-{{ st }}">
+        {%- if st == 'finalized' %}✓{% elif st == 'approved' %}✓{% elif st == 'in_review' %}◎{% elif st == 'missing' %}+{% endif %}
+        {{ meta.short -}}
+      </a>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endfor %}
+
+  {# Quick Actions — generate/upload for non-finalized docs #}
+  {% set ns_qa = namespace(has_actions=false) %}
+  {% for key in ato_doc_keys %}
+    {% set doc = ato_map.get((sys.id, key)) %}
+    {% set st = doc.status if doc else 'missing' %}
+    {% if st in ('missing', 'draft') %}{% set ns_qa.has_actions = true %}{% endif %}
+  {% endfor %}
+  {% if ns_qa.has_actions %}
+  <details style="margin-top:12px;padding:0 2px">
+    <summary style="cursor:pointer;font-size:0.78em;color:var(--muted);user-select:none;
+                    list-style:none;display:flex;align-items:center;gap:6px">
+      <span class="qa-toggle-icon">▸</span>
+      <span>Quick Actions</span>
+      <span style="font-size:0.85em;opacity:0.6">(generate or upload missing documents)</span>
+    </summary>
+    <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;padding-bottom:4px">
+      {% for key in ato_doc_keys %}
+      {% set doc = ato_map.get((sys.id, key)) %}
+      {% set st = doc.status if doc else 'missing' %}
+      {% if st in ('missing', 'draft') %}
+        {% set meta = ato_doc_types[key] %}
+        {% if key in generatable_docs %}
+          <form method="post" action="/ato/{{ sys.id }}/{{ key }}/generate" style="display:inline">
+            <button type="submit" class="qa-btn-gen" title="Auto-generate {{ meta.name }} from system data">
+              ⚙ {{ meta.short }}
+            </button>
+          </form>
+        {% else %}
+          <button class="qa-btn-up"
+                  onclick="openAtoUpload('{{ sys.id }}','{{ key }}','{{ meta.name }}')"
+                  title="Upload {{ meta.name }}">
+            ↑ {{ meta.short }}
+          </button>
+        {% endif %}
+      {% endif %}
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+
+  {# Action bar #}
+  <div class="sys-action-bar">
+    <a href="/ato/{{ sys.id }}" class="btn btn-ghost btn-sm" style="color:var(--cyan)">Open Package →</a>
+    {% if s.finalized == s.total %}
+    <span style="font-size:0.82em;color:var(--cyan)">✓ Package complete</span>
+    {% else %}
+      {% if s.missing > 0 %}
+      <span style="font-size:0.82em;color:var(--muted)">
+        {{ s.missing }} doc{{ 's' if s.missing != 1 else '' }} not started
+      </span>
+      {% endif %}
+      {% if s.in_review > 0 %}
+      <span style="font-size:0.82em;color:var(--yellow)">
+        {{ s.in_review }} awaiting review
+      </span>
+      {% endif %}
+    {% endif %}
+    <a href="/systems/{{ sys.id }}/controls" class="btn btn-ghost btn-sm"
+       style="margin-left:auto;color:var(--muted)">Controls →</a>
   </div>
 </div>
 {% endfor %}
 
-<div style="margin-top:1rem;font-size:.78rem;color:var(--muted);display:flex;gap:1.5rem;flex-wrap:wrap">
-  <span style="color:var(--accent)">&#9632;</span> Finalized &nbsp;
-  <span style="color:var(--ok)">&#9632;</span> Approved &nbsp;
-  <span style="color:var(--warn)">&#9632;</span> In Review &nbsp;
-  <span style="color:var(--fg)">&#9632;</span> Draft &nbsp;
-  <span style="color:var(--danger)">&#9632;</span> Missing
+{# Legend #}
+<div style="margin-top:8px;font-size:0.77em;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap">
+  <span><span class="ato-badge ato-badge-finalized" style="padding:2px 7px">✓</span> Finalized</span>
+  <span><span class="ato-badge ato-badge-approved"  style="padding:2px 7px">✓</span> Approved</span>
+  <span><span class="ato-badge ato-badge-in_review" style="padding:2px 7px">◎</span> In Review</span>
+  <span><span class="ato-badge ato-badge-draft"     style="padding:2px 7px"> &nbsp;</span> Draft</span>
+  <span><span class="ato-badge ato-badge-missing"   style="padding:2px 7px">+</span> Not Started — click to begin</span>
 </div>
 {% endif %}
+
+{# ── Upload modal ── #}
+<div id="ato-upload-modal" role="dialog" aria-modal="true" aria-label="Upload document">
+  <div class="ato-modal-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <div>
+        <div style="font-size:0.7em;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">ATO Package</div>
+        <div style="font-weight:700;font-size:0.95em" id="ato-upload-modal-title">Upload Document</div>
+      </div>
+      <button onclick="closeAtoUpload()"
+              style="background:none;border:none;color:var(--muted);font-size:1.3em;cursor:pointer;line-height:1"
+              title="Close">✕</button>
+    </div>
+    <form id="ato-upload-form" method="post" enctype="multipart/form-data">
+      <div style="margin-bottom:14px">
+        <div style="font-size:0.78em;color:var(--muted);margin-bottom:6px">File</div>
+        <div id="ato-drop-zone"
+             style="border:2px dashed var(--border);border-radius:6px;padding:24px;text-align:center;
+                    cursor:pointer;transition:border-color 0.15s;position:relative"
+             onclick="document.getElementById('ato-file-input').click()"
+             ondragover="event.preventDefault();this.style.borderColor='var(--cyan)'"
+             ondragleave="this.style.borderColor='var(--border)'"
+             ondrop="handleAtoDrop(event)">
+          <div style="font-size:1.4em;margin-bottom:6px;color:var(--muted)">↑</div>
+          <div style="font-size:0.82em;color:var(--muted)">Drag & drop or click to select</div>
+          <div id="ato-file-label" style="font-size:0.78em;color:var(--cyan);margin-top:6px"></div>
+          <input type="file" id="ato-file-input" name="file"
+                 accept=".pdf,.docx,.xlsx,.pptx,.txt,.json,.xml"
+                 style="display:none"
+                 onchange="onAtoFileSelect(this)">
+        </div>
+        <div style="font-size:0.72em;color:var(--muted);margin-top:4px">
+          Allowed: PDF, DOCX, XLSX, PPTX, TXT, JSON, XML
+        </div>
+      </div>
+      <div style="margin-bottom:18px">
+        <div style="font-size:0.78em;color:var(--muted);margin-bottom:6px">Description (optional)</div>
+        <input type="text" name="description" placeholder="e.g. Signed by CISO 2026-02-28"
+               style="width:100%;background:var(--surface);border:1px solid var(--border);
+                      color:var(--text);border-radius:5px;padding:7px 10px;font-size:0.85em">
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button type="button" onclick="closeAtoUpload()" class="btn btn-ghost btn-sm">Cancel</button>
+        <button type="submit" id="ato-upload-submit" class="btn btn-sm"
+                style="background:rgba(0,255,204,0.1);border:1px solid rgba(0,255,204,0.3);
+                       color:var(--cyan)" disabled>Upload</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openAtoUpload(sysId, docKey, docName) {
+  document.getElementById('ato-upload-modal-title').textContent = 'Upload: ' + docName;
+  document.getElementById('ato-upload-form').action = '/ato/' + sysId + '/' + docKey + '/upload';
+  document.getElementById('ato-file-label').textContent = '';
+  document.getElementById('ato-file-input').value = '';
+  document.getElementById('ato-upload-submit').disabled = true;
+  document.getElementById('ato-drop-zone').style.borderColor = 'var(--border)';
+  document.getElementById('ato-upload-modal').classList.add('open');
+}
+function closeAtoUpload() {
+  document.getElementById('ato-upload-modal').classList.remove('open');
+}
+function onAtoFileSelect(input) {
+  if (input.files && input.files[0]) {
+    document.getElementById('ato-file-label').textContent = input.files[0].name;
+    document.getElementById('ato-upload-submit').disabled = false;
+  }
+}
+function handleAtoDrop(e) {
+  e.preventDefault();
+  document.getElementById('ato-drop-zone').style.borderColor = 'var(--border)';
+  const files = e.dataTransfer.files;
+  if (files && files[0]) {
+    const input = document.getElementById('ato-file-input');
+    const dt = new DataTransfer();
+    dt.items.add(files[0]);
+    input.files = dt.files;
+    document.getElementById('ato-file-label').textContent = files[0].name;
+    document.getElementById('ato-upload-submit').disabled = false;
+  }
+}
+// Close modal on backdrop click
+document.getElementById('ato-upload-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeAtoUpload();
+});
+// Expand/collapse icon rotation for quick actions
+document.addEventListener('toggle', function(e) {
+  if (e.target && e.target.tagName === 'DETAILS') {
+    const icon = e.target.querySelector('.qa-toggle-icon');
+    if (icon) icon.textContent = e.target.open ? '▾' : '▸';
+  }
+}, true);
+</script>
 {% endblock %}

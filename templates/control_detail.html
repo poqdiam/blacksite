@@ -1,10 +1,166 @@
 {% extends "base.html" %}
 {% block title %}{{ app_name }} — {{ ctrl_id | upper }}{% endblock %}
 
+{% block head %}
+<style>
+  /* Inline parameter placeholder */
+  .ctrl-param-inline {
+    font-style: italic;
+    color: var(--cyan);
+    opacity: 0.85;
+    cursor: help;
+    border-bottom: 1px dashed rgba(0,255,204,0.35);
+  }
+
+  /* Control cross-reference link */
+  .ctrl-ref {
+    color: var(--gold);
+    text-decoration: none;
+    font-weight: 600;
+    border-bottom: 1px dashed rgba(255,215,0,0.45);
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .ctrl-ref:hover { color: #ffe55c; border-color: #ffe55c; }
+
+  /* Definition body */
+  .ctrl-definition-body {
+    font-size: 0.87em;
+    line-height: 1.85;
+    color: var(--text);
+    white-space: pre-wrap;
+    font-family: var(--sans);
+  }
+
+  /* Guidance body */
+  .ctrl-guidance-body {
+    font-size: 0.84em;
+    line-height: 1.8;
+    color: var(--muted);
+    white-space: pre-wrap;
+    font-family: var(--sans);
+  }
+
+  /* Related controls pills */
+  .related-ctrl-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .related-ctrl-pill {
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 0.78em;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    background: rgba(255,215,0,0.08);
+    border: 1px solid rgba(255,215,0,0.25);
+    color: var(--gold);
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+  .related-ctrl-pill:hover { background: rgba(255,215,0,0.16); }
+
+  /* ── Framework overlay badges ──────────────────────────────── */
+  .overlay-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  /* Base (no link — dimmed) */
+  .overlay-pill {
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    background: rgba(147,112,219,0.07);
+    border: 1px solid rgba(147,112,219,0.2);
+    color: rgba(197,169,247,0.6);
+    white-space: nowrap;
+  }
+  /* Linked (has authoritative .gov/.mil/.org URL — brighter) */
+  .overlay-pill-linked {
+    background: rgba(147,112,219,0.18);
+    border: 1px solid rgba(147,112,219,0.55);
+    color: #d4b4ff;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .overlay-pill-linked:hover { background: rgba(147,112,219,0.3); }
+
+  /* ── CSF category tags ─────────────────────────────────────── */
+  .csf-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  /* All CSF categories link to NIST — use the "linked" style for all */
+  .csf-tag {
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 0.72em;
+    font-weight: 600;
+    background: rgba(0,180,216,0.14);
+    border: 1px solid rgba(0,180,216,0.45);
+    color: #4fd8f5;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: background 0.15s;
+  }
+  .csf-tag:hover { background: rgba(0,180,216,0.24); }
+
+  /* ── Implementation Guidance section ──────────────────────── */
+  .impl-section { margin-bottom: 18px; }
+  .impl-section:last-child { margin-bottom: 0; }
+  .impl-label {
+    font-size: 0.72em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .impl-label .impl-icon { font-size: 1.1em; }
+  .impl-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .impl-list li {
+    font-size: 0.82em;
+    color: var(--text);
+    line-height: 1.5;
+    padding: 5px 10px;
+    background: rgba(255,255,255,0.025);
+    border-radius: 4px;
+    border-left: 2px solid transparent;
+  }
+  .impl-list.examine li  { border-left-color: rgba(0,255,204,0.3); }
+  .impl-list.interview li{ border-left-color: rgba(255,179,0,0.35); }
+  .impl-list.test li     { border-left-color: rgba(0,180,216,0.4); }
+  .impl-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 16px 0;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<div style="margin-bottom:6px">
-  <a href="/controls" style="color:var(--muted);font-size:0.82em">← Control Catalog</a>
-</div>
+{# ── Control search bar ── #}
+<form method="get" action="/controls" style="margin-bottom:16px">
+  <div style="display:flex;gap:8px;align-items:center">
+    <input type="text" name="q" placeholder="Search controls…"
+           style="flex:1;max-width:380px;background:var(--surface);border:1px solid var(--border);
+                  border-radius:4px;padding:6px 12px;font-size:0.85em;color:var(--text);outline:none">
+    <button type="submit" class="btn btn-ghost btn-sm">Search</button>
+  </div>
+</form>
 
 <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:20px;flex-wrap:wrap">
   <h1 style="margin:0;font-family:var(--mono)">{{ ctrl_id | upper }}</h1>
@@ -14,29 +170,167 @@
                background:rgba(0,255,204,0.08);border:1px solid rgba(0,255,204,0.2);color:var(--cyan)">
     {{ ctrl_id.split('-')[0] | upper }}
   </span>
-</div>
-
-<div class="card" style="padding:24px;margin-bottom:20px">
-  <div class="card-title">Control Statement</div>
-  <div style="font-size:0.88em;line-height:1.7;color:var(--text);white-space:pre-wrap">{{ ctrl.text or '(No description available)' }}</div>
-</div>
-
-{% if ctrl.parameters %}
-<div class="card" style="padding:24px;margin-bottom:20px">
-  <div class="card-title">Parameters</div>
-  {% for p in ctrl.parameters %}
-  <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:0.85em">
-    <span style="font-family:var(--mono);color:var(--cyan)">{{ p.id }}</span>
-    {% if p.label %}<span style="color:var(--muted);margin-left:8px">{{ p.label }}</span>{% endif %}
+  <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+    {% if prev_ctrl_id %}
+    <a href="/controls/{{ prev_ctrl_id }}" class="btn btn-ghost btn-sm" title="{{ prev_ctrl_id | upper }}"
+       style="padding:4px 8px;font-size:1em;line-height:1">‹</a>
+    {% else %}
+    <span class="btn btn-ghost btn-sm" style="padding:4px 8px;font-size:1em;line-height:1;opacity:0.25;cursor:default">‹</span>
+    {% endif %}
+    <a href="/controls" class="btn btn-ghost btn-sm">Catalog</a>
+    {% if next_ctrl_id %}
+    <a href="/controls/{{ next_ctrl_id }}" class="btn btn-ghost btn-sm" title="{{ next_ctrl_id | upper }}"
+       style="padding:4px 8px;font-size:1em;line-height:1">›</a>
+    {% else %}
+    <span class="btn btn-ghost btn-sm" style="padding:4px 8px;font-size:1em;line-height:1;opacity:0.25;cursor:default">›</span>
+    {% endif %}
+    {% if is_admin %}
+    <span style="color:var(--border);padding:0 2px">|</span>
+    <a href="/systems" class="btn btn-ghost btn-sm" style="color:var(--cyan)">View Systems</a>
+    {% endif %}
   </div>
-  {% endfor %}
+</div>
+
+{# ── Control Definition ── #}
+<div class="card" style="padding:24px;margin-bottom:20px">
+  <div class="card-title" style="margin-bottom:14px">Control Definition</div>
+  {% if ctrl.statement %}
+  <div class="ctrl-definition-body">{{ ctrl.statement | fmt_ctrl_inline(ctrl.parameters | default([])) | safe }}</div>
+  {% else %}
+  <p style="color:var(--muted);font-size:0.87em;font-style:italic">(No definition available)</p>
+  {% endif %}
+</div>
+
+{# ── Supplemental Guidance ── #}
+{% set supp = meta.supplemental if meta.supplemental else ctrl.guidance %}
+{% if supp %}
+<div class="card" style="padding:24px;margin-bottom:20px">
+  <div class="card-title" style="color:var(--muted);margin-bottom:14px">Supplemental Guidance</div>
+  <div class="ctrl-guidance-body">{{ supp }}</div>
 </div>
 {% endif %}
 
-<div style="display:flex;gap:10px;flex-wrap:wrap">
-  <a href="/controls" class="btn btn-ghost">← Catalog</a>
-  {% if is_admin %}
-  <a href="/systems" class="btn btn-ghost" style="color:var(--cyan)">View Systems →</a>
+{# ── Implementation Guidance ── #}
+{% if assess_ctx %}
+<div class="card" style="padding:24px;margin-bottom:20px">
+  <div class="card-title" style="margin-bottom:4px">Implementation Guidance
+    <span style="font-size:0.7em;font-weight:400;color:var(--muted);margin-left:8px">
+      What you need to satisfy this control
+    </span>
+  </div>
+  <p style="font-size:0.8em;color:var(--muted);margin:10px 0 18px">
+    The following are drawn from NIST SP 800-53A Rev 5 assessment procedures.
+    Assessors will look for these specific artifacts, stakeholders, and technical evidence
+    when evaluating compliance with <strong style="color:var(--text)">{{ ctrl_id | upper }}</strong>.
+  </p>
+
+  {% if assess_ctx.examine %}
+  <div class="impl-section">
+    <div class="impl-label" style="color:var(--cyan)">
+      <span class="impl-icon">📄</span>
+      Documents &amp; Artifacts to Collect
+    </div>
+    <ul class="impl-list examine">
+      {% for item in assess_ctx.examine %}
+      <li>{{ item }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if assess_ctx.interview %}
+  {% if assess_ctx.examine %}<hr class="impl-divider">{% endif %}
+  <div class="impl-section">
+    <div class="impl-label" style="color:var(--yellow)">
+      <span class="impl-icon">👤</span>
+      Stakeholders to Interview
+    </div>
+    <ul class="impl-list interview">
+      {% for item in assess_ctx.interview %}
+      <li>{{ item }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if assess_ctx.test %}
+  {% if assess_ctx.examine or assess_ctx.interview %}<hr class="impl-divider">{% endif %}
+  <div class="impl-section">
+    <div class="impl-label" style="color:#4fd8f5">
+      <span class="impl-icon">🔧</span>
+      Technical Evidence &amp; Testing
+    </div>
+    <ul class="impl-list test">
+      {% for item in assess_ctx.test %}
+      <li>{{ item }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+</div>
+{% endif %}
+
+{# ── Framework Overlays ── #}
+{% if meta.overlays %}
+<div class="card" style="padding:20px 24px;margin-bottom:20px">
+  <div class="card-title" style="margin-bottom:4px">Framework Overlays
+    <span style="font-size:0.7em;font-weight:400;color:var(--muted);margin-left:6px">({{ meta.overlays | length }})</span>
+  </div>
+  <p style="font-size:0.75em;color:var(--muted);margin:6px 0 10px">
+    Brighter badges link to an authoritative .gov / .mil / .org source.
+  </p>
+  <div class="overlay-list">
+    {% for ov in meta.overlays %}
+    {% set ov_url = overlay_urls.get(ov, '') %}
+    {% if ov_url %}
+    <a href="{{ ov_url }}" target="_blank" rel="noopener noreferrer"
+       class="overlay-pill overlay-pill-linked">{{ ov }}<span style="font-size:0.8em;opacity:0.7">↗</span></a>
+    {% else %}
+    <span class="overlay-pill" title="No public authoritative reference available">{{ ov }}</span>
+    {% endif %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ── CSF Categories ── #}
+{% if meta.csf_categories %}
+<div class="card" style="padding:20px 24px;margin-bottom:20px">
+  <div class="card-title" style="margin-bottom:4px">NIST CSF Categories
+    <span style="font-size:0.7em;font-weight:400;color:var(--muted);margin-left:6px">({{ meta.csf_categories | length }})</span>
+  </div>
+  <p style="font-size:0.75em;color:var(--muted);margin:6px 0 10px">
+    All categories link to the NIST Cybersecurity Framework (nist.gov/cyberframework).
+  </p>
+  <div class="csf-list">
+    {% for cat in meta.csf_categories %}
+    <a href="{{ csf_base_url }}" target="_blank" rel="noopener noreferrer"
+       class="csf-tag" title="NIST CSF — {{ cat }}">{{ cat }}<span style="font-size:0.8em;opacity:0.7">↗</span></a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ── Related Controls ── #}
+{% if ctrl.related_controls %}
+<div class="card" style="padding:20px 24px;margin-bottom:20px">
+  <div class="card-title" style="margin-bottom:4px">Related Controls</div>
+  <div class="related-ctrl-list">
+    {% for rc in ctrl.related_controls %}
+    <a href="/controls/{{ rc }}" class="related-ctrl-pill">{{ rc | upper }}</a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div style="margin-top:16px;display:flex;gap:12px;align-items:center">
+  {% if prev_ctrl_id %}
+  <a href="/controls/{{ prev_ctrl_id }}" class="btn btn-ghost btn-sm">‹ {{ prev_ctrl_id | upper }}</a>
+  {% endif %}
+  <a href="/controls" style="color:var(--muted);font-size:0.82em">← Catalog</a>
+  {% if next_ctrl_id %}
+  <a href="/controls/{{ next_ctrl_id }}" class="btn btn-ghost btn-sm">{{ next_ctrl_id | upper }} ›</a>
   {% endif %}
 </div>
 {% endblock %}

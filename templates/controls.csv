@@ -1,0 +1,301 @@
+control_id,title,confidentiality,integrity,availability,overlays,csf_categories,source_url
+AC-1,Policy and Procedures,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, NC3, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3, PR.AC-3, PR.AC-4",https://app.xylok.io/reference/controls/control/AC-1/
+AC-2,Account Management,,,,"CMMC, DAF Baseline, NC3, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","DE.CM-3, PR.AC-4",https://app.xylok.io/reference/controls/control/AC-2/
+AC-3,Access Enforcement,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.AC-4, PR.PT-3",https://app.xylok.io/reference/controls/control/AC-3/
+AC-4,Information Flow Enforcement,,,,"CMMC, DAF Baseline, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","DE.AE-1, ID.AM-3, PR.AC-5, PR.DS-5",https://app.xylok.io/reference/controls/control/AC-4/
+AC-5,Separation of Duties,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.AC-4, PR.DS-5",https://app.xylok.io/reference/controls/control/AC-5/
+AC-6,Least Privilege,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.AC-4, PR.DS-5",https://app.xylok.io/reference/controls/control/AC-6/
+AC-7,Unsuccessful Logon Attempts,,,,"CMMC, DAF Baseline",None,https://app.xylok.io/reference/controls/control/AC-7/
+AC-8,System Use Notification,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/AC-8/
+AC-9,Previous Logon Notification,,,,"DAF Baseline, Int-A, Int-B, Int-C",None,https://app.xylok.io/reference/controls/control/AC-9/
+AC-10,Concurrent Session Control,,,,"DAF Baseline, Int-B, Int-C",PR.AC-5,https://app.xylok.io/reference/controls/control/AC-10/
+AC-11,Device Lock,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/AC-11/
+AC-12,Session Termination,,,,"CMMC, DAF Baseline, Int-A, Int-B, Int-C",PR.PT-4,https://app.xylok.io/reference/controls/control/AC-12/
+AC-14,Permitted Actions Without Identification or Authentication,,,,DAF Baseline,"PR.AC-4, PR.AC-7",https://app.xylok.io/reference/controls/control/AC-14/
+AC-16,Security and Privacy Attributes,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (high), Privacy (moderate)","PR.AC-4, PR.AC-6",https://app.xylok.io/reference/controls/control/AC-16/
+AC-17,Remote Access,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.AC-3, PR.PT-4",https://app.xylok.io/reference/controls/control/AC-17/
+AC-18,Wireless Access,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C",PR.PT-4,https://app.xylok.io/reference/controls/control/AC-18/
+AC-19,Access Control for Mobile Devices,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (high), Privacy (low), Privacy (moderate)",PR.AC-3,https://app.xylok.io/reference/controls/control/AC-19/
+AC-20,Use of External Systems,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","ID.AM-4, PR.AC-3",https://app.xylok.io/reference/controls/control/AC-20/
+AC-21,Information Sharing,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",PR.IP-8,https://app.xylok.io/reference/controls/control/AC-21/
+AC-22,Publicly Accessible Content,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/AC-22/
+AC-23,Data Mining Protection,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C",None,https://app.xylok.io/reference/controls/control/AC-23/
+AC-24,Access Control Decisions,,,,"DAF Baseline, Int-B, Int-C",PR.AC-4,https://app.xylok.io/reference/controls/control/AC-24/
+AC-25,Reference Monitor,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline, Space Platform",None,https://app.xylok.io/reference/controls/control/AC-25/
+AT-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3",https://app.xylok.io/reference/controls/control/AT-1/
+AT-2,Literacy Training and Awareness,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",PR.AT-1,https://app.xylok.io/reference/controls/control/AT-2/
+AT-3,Role-based Training,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","PR.AT-2, PR.AT-3, PR.AT-4, PR.AT-5",https://app.xylok.io/reference/controls/control/AT-3/
+AT-4,Training Records,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/AT-4/
+AT-6,Training Feedback,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/AT-6/
+AU-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3, PR.PT-1",https://app.xylok.io/reference/controls/control/AU-1/
+AU-2,Event Logging,,,,"CMMC, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",PR.PT-1,https://app.xylok.io/reference/controls/control/AU-2/
+AU-3,Content of Audit Records,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",PR.PT-1,https://app.xylok.io/reference/controls/control/AU-3/
+AU-4,Audit Log Storage Capacity,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",PR.DS-4,https://app.xylok.io/reference/controls/control/AU-4/
+AU-5,Response to Audit Logging Process Failures,,,,"CMMC, DAF Baseline, Privacy (high), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/AU-5/
+AU-6,"Audit Record Review, Analysis, and Reporting",,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (high), Privacy (moderate)","DE.AE-2, DE.AE-3, DE.DP-4, ID.SC-4, PR.PT-1, RS.AN-1, RS.CO-2",https://app.xylok.io/reference/controls/control/AU-6/
+AU-7,Audit Record Reduction and Report Generation,,,,"CMMC, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.PT-1, RS.AN-3",https://app.xylok.io/reference/controls/control/AU-7/
+AU-8,Time Stamps,,,,"CMMC, DAF Baseline",None,https://app.xylok.io/reference/controls/control/AU-8/
+AU-9,Protection of Audit Information,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/AU-9/
+AU-10,Non-repudiation,,,,"DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/AU-10/
+AU-11,Audit Record Retention,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/AU-11/
+AU-12,Audit Record Generation,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.CM-1, DE.CM-3, DE.CM-7, PR.PT-1",https://app.xylok.io/reference/controls/control/AU-12/
+AU-13,Monitoring for Information Disclosure,,,,DAF Baseline,"DE.CM-3, PR.DS-5, PR.PT-1",https://app.xylok.io/reference/controls/control/AU-13/
+AU-14,Session Audit,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (high), Privacy (moderate)",PR.PT-1,https://app.xylok.io/reference/controls/control/AU-14/
+AU-16,Cross-organizational Audit Logging,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C",PR.PT-1,https://app.xylok.io/reference/controls/control/AU-16/
+CA-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3, RS.AN-5",https://app.xylok.io/reference/controls/control/CA-1/
+CA-2,Control Assessments,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy Control Baseline (CNSSI 1253)","DE.DP-1, DE.DP-2, DE.DP-3, DE.DP-4, DE.DP-5, ID.RA-1, ID.RA-5, ID.SC-4, PR.IP-7, RS.AN-5, RS.MI-3",https://app.xylok.io/reference/controls/control/CA-2/
+CA-3,Information Exchange,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, NC3, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","DE.AE-1, ID.AM-3",https://app.xylok.io/reference/controls/control/CA-3/
+CA-5,Plan of Action and Milestones,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","ID.RA-1, ID.RA-6",https://app.xylok.io/reference/controls/control/CA-5/
+CA-6,Authorization,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/CA-6/
+CA-7,Continuous Monitoring,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.AE-2, DE.AE-3, DE.CM-1, DE.CM-2, DE.CM-3, DE.CM-6, DE.CM-7, DE.DP-1, DE.DP-2, DE.DP-3, DE.DP-4, DE.DP-5, ID.RA-1, ID.RA-5, ID.SC-4, PR.IP-7, PR.IP-8, RS.AN-1, RS.MI-3",https://app.xylok.io/reference/controls/control/CA-7/
+CA-8,Penetration Testing,,,,"DAF Baseline, Privacy (high)","ID.RA-1, PR.IP-7",https://app.xylok.io/reference/controls/control/CA-8/
+CA-9,Internal System Connections,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",ID.AM-3,https://app.xylok.io/reference/controls/control/CA-9/
+CM-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3, PR.IP-1",https://app.xylok.io/reference/controls/control/CM-1/
+CM-2,Baseline Configuration,,,,"CMMC, DAF Baseline, Privacy (high), Privacy (moderate)","DE.AE-1, PR.DS-7, PR.IP-1",https://app.xylok.io/reference/controls/control/CM-2/
+CM-3,Configuration Change Control,,,,"CMMC, DAF Baseline, Privacy (high), Privacy (moderate)","DE.CM-1, DE.CM-7, PR.IP-1, PR.IP-3",https://app.xylok.io/reference/controls/control/CM-3/
+CM-4,Impact Analyses,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","PR.IP-1, PR.IP-3",https://app.xylok.io/reference/controls/control/CM-4/
+CM-5,Access Restrictions for Change,,,,"CMMC, DAF Baseline",PR.IP-1,https://app.xylok.io/reference/controls/control/CM-5/
+CM-6,Configuration Settings,,,,"CMMC, DAF Baseline",PR.IP-1,https://app.xylok.io/reference/controls/control/CM-6/
+CM-7,Least Functionality,,,,"CMMC, DAF Baseline","PR.IP-1, PR.PT-3",https://app.xylok.io/reference/controls/control/CM-7/
+CM-8,System Component Inventory,,,,"CMMC, DAF Baseline","DE.CM-7, ID.AM-1, ID.AM-2, PR.DS-3",https://app.xylok.io/reference/controls/control/CM-8/
+CM-9,Configuration Management Plan,,,,DAF Baseline,PR.IP-1,https://app.xylok.io/reference/controls/control/CM-9/
+CM-10,Software Usage Restrictions,,,,DAF Baseline,DE.CM-3,https://app.xylok.io/reference/controls/control/CM-10/
+CM-11,User-installed Software,,,,DAF Baseline,DE.CM-3,https://app.xylok.io/reference/controls/control/CM-11/
+CM-12,Information Location,,,,"CMMC, DAF Baseline, Int-A, Int-B, Int-C",None,https://app.xylok.io/reference/controls/control/CM-12/
+CM-13,Data Action Mapping,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/CM-13/
+CM-14,Signed Components,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/CM-14/
+CP-1,Policy and Procedures,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3, PR.IP-9",https://app.xylok.io/reference/controls/control/CP-1/
+CP-2,Contingency Plan,,,,"DAF Baseline, Privacy (high), Privacy (low), Privacy (moderate)","DE.AE-3, DE.AE-4, ID.AM-5, ID.AM-6, ID.BE-4, ID.BE-5, ID.RA-4, ID.SC-5, PR.DS-4, PR.IP-7, PR.IP-8, PR.IP-9, RC.CO-3, RC.IM-1, RC.IM-2, RS.AN-2, RS.AN-4, RS.CO-1, RS.CO-3, RS.CO-4, RS.IM-1, RS.IM-2, RS.RP-1",https://app.xylok.io/reference/controls/control/CP-2/
+CP-3,Contingency Training,,,,DAF Baseline,"PR.AT-5, RS.CO-1",https://app.xylok.io/reference/controls/control/CP-3/
+CP-4,Contingency Plan Testing,,,,DAF Baseline,"ID.SC-5, PR.IP-10, PR.IP-4, PR.IP-7",https://app.xylok.io/reference/controls/control/CP-4/
+CP-6,Alternate Storage Site,,,,DAF Baseline,PR.IP-4,https://app.xylok.io/reference/controls/control/CP-6/
+CP-7,Alternate Processing Site,,,,DAF Baseline,"PR.IP-9, PR.PT-5",https://app.xylok.io/reference/controls/control/CP-7/
+CP-8,Telecommunications Services,,,,DAF Baseline,"ID.BE-4, PR.PT-4, PR.PT-5",https://app.xylok.io/reference/controls/control/CP-8/
+CP-9,System Backup,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",PR.IP-4,https://app.xylok.io/reference/controls/control/CP-9/
+CP-10,System Recovery and Reconstitution,,,,"DAF Baseline, Privacy (high), Privacy (moderate)","PR.IP-9, RC.RP-1, RS.RP-1",https://app.xylok.io/reference/controls/control/CP-10/
+CP-11,Alternate Communications Protocols,,,,"DAF Baseline, NC3","ID.BE-5, PR.PT-5",https://app.xylok.io/reference/controls/control/CP-11/
+CP-12,Safe Mode,,,,"DAF Baseline, NC3, Space Platform",PR.PT-5,https://app.xylok.io/reference/controls/control/CP-12/
+CP-13,Alternative Security Mechanisms,,,,"DAF Baseline, NC3, Space Platform",PR.PT-5,https://app.xylok.io/reference/controls/control/CP-13/
+IA-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3, PR.AC-1, PR.AC-6, PR.AC-7",https://app.xylok.io/reference/controls/control/IA-1/
+IA-2,Identification and Authentication (Organizational Users),,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.AC-1, PR.AC-6, PR.AC-7",https://app.xylok.io/reference/controls/control/IA-2/
+IA-3,Device Identification and Authentication,,,,"CMMC, DAF Baseline","PR.AC-1, PR.AC-7",https://app.xylok.io/reference/controls/control/IA-3/
+IA-4,Identifier Management,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.AC-1, PR.AC-6",https://app.xylok.io/reference/controls/control/IA-4/
+IA-5,Authenticator Management,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.AC-1, PR.AC-6, PR.AC-7",https://app.xylok.io/reference/controls/control/IA-5/
+IA-6,Authentication Feedback,,,,"CMMC, DAF Baseline",None,https://app.xylok.io/reference/controls/control/IA-6/
+IA-7,Cryptographic Module Authentication,,,,"DAF Baseline, Privacy (high), Privacy (moderate)",PR.AC-1,https://app.xylok.io/reference/controls/control/IA-7/
+IA-8,Identification and Authentication (Non-organizational Users),,,,"DAF Baseline, Privacy (high), Privacy (low), Privacy (moderate)","PR.AC-1, PR.AC-6, PR.AC-7",https://app.xylok.io/reference/controls/control/IA-8/
+IA-9,Service Identification and Authentication,,,,DAF Baseline,"PR.AC-1, PR.AC-7",https://app.xylok.io/reference/controls/control/IA-9/
+IA-10,Adaptive Authentication,,,,DAF Baseline,"PR.AC-1, PR.AC-7",https://app.xylok.io/reference/controls/control/IA-10/
+IA-11,Re-authentication,,,,"CMMC, DAF Baseline","PR.AC-1, PR.AC-7",https://app.xylok.io/reference/controls/control/IA-11/
+IA-12,Identity Proofing,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.AC-1, PR.AC-6",https://app.xylok.io/reference/controls/control/IA-12/
+IA-13,Identity Providers and Authorization Servers,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/IA-13/
+IR-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3, PR.IP-9",https://app.xylok.io/reference/controls/control/IR-1/
+IR-2,Incident Response Training,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",PR.AT-5,https://app.xylok.io/reference/controls/control/IR-2/
+IR-3,Incident Response Testing,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","ID.SC-5, PR.IP-10, PR.IP-7, RS.CO-1",https://app.xylok.io/reference/controls/control/IR-3/
+IR-4,Incident Handling,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.AE-2, DE.AE-3, DE.AE-4, DE.AE-5, ID.SC-5, RC.CO-1, RC.CO-2, RC.CO-3, RC.IM-1, RC.IM-2, RC.RP-1, RS.AN-1, RS.AN-2, RS.AN-3, RS.AN-4, RS.CO-3, RS.CO-4, RS.IM-1, RS.IM-2, RS.MI-1, RS.MI-2, RS.RP-1",https://app.xylok.io/reference/controls/control/IR-4/
+IR-5,Incident Monitoring,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.AE-3, DE.AE-5, RS.AN-1, RS.AN-4",https://app.xylok.io/reference/controls/control/IR-5/
+IR-6,Incident Reporting,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",RS.CO-2,https://app.xylok.io/reference/controls/control/IR-6/
+IR-7,Incident Response Assistance,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",PR.IP-9,https://app.xylok.io/reference/controls/control/IR-7/
+IR-8,Incident Response Plan,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.AE-3, DE.AE-5, ID.SC-5, PR.IP-7, PR.IP-8, PR.IP-9, RC.IM-1, RC.IM-2, RC.RP-1, RS.AN-4, RS.CO-1, RS.CO-2, RS.CO-3, RS.CO-4, RS.IM-1, RS.IM-2, RS.RP-1",https://app.xylok.io/reference/controls/control/IR-8/
+IR-9,Information Spillage Response,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C","ID.SC-5, PR.IP-9",https://app.xylok.io/reference/controls/control/IR-9/
+MA-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","DE.DP-2, ID.GV-1, ID.GV-3, PR.MA-1",https://app.xylok.io/reference/controls/control/MA-1/
+MA-2,Controlled Maintenance,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",PR.MA-1,https://app.xylok.io/reference/controls/control/MA-2/
+MA-3,Maintenance Tools,,,,"CMMC, DAF Baseline",PR.MA-1,https://app.xylok.io/reference/controls/control/MA-3/
+MA-4,Nonlocal Maintenance,,,,"CMMC, DAF Baseline",PR.MA-2,https://app.xylok.io/reference/controls/control/MA-4/
+MA-5,Maintenance Personnel,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",PR.MA-1,https://app.xylok.io/reference/controls/control/MA-5/
+MA-6,Timely Maintenance,,,,DAF Baseline,PR.MA-1,https://app.xylok.io/reference/controls/control/MA-6/
+MA-7,Field Maintenance,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline",None,https://app.xylok.io/reference/controls/control/MA-7/
+MP-1,Policy and Procedures,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3, PR.PT-2",https://app.xylok.io/reference/controls/control/MP-1/
+MP-2,Media Access,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.DS-1, PR.PT-2",https://app.xylok.io/reference/controls/control/MP-2/
+MP-3,Media Marking,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.DS-1, PR.PT-2",https://app.xylok.io/reference/controls/control/MP-3/
+MP-4,Media Storage,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.DS-1, PR.PT-2",https://app.xylok.io/reference/controls/control/MP-4/
+MP-5,Media Transport,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.DS-1, PR.PT-2",https://app.xylok.io/reference/controls/control/MP-5/
+MP-6,Media Sanitization,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.DS-1, PR.DS-3, PR.IP-6",https://app.xylok.io/reference/controls/control/MP-6/
+MP-7,Media Use,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.DS-1, PR.PT-2",https://app.xylok.io/reference/controls/control/MP-7/
+MP-8,Media Downgrading,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, Classified, DAF Baseline, Int-A, Int-B, Int-C","PR.DS-1, PR.PT-2",https://app.xylok.io/reference/controls/control/MP-8/
+PE-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3, PR.AC-2, PR.IP-5",https://app.xylok.io/reference/controls/control/PE-1/
+PE-2,Physical Access Authorizations,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","PR.AC-2, PR.AC-6",https://app.xylok.io/reference/controls/control/PE-2/
+PE-3,Physical Access Control,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",PR.AC-2,https://app.xylok.io/reference/controls/control/PE-3/
+PE-4,Access Control for Transmission,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C",PR.AC-2,https://app.xylok.io/reference/controls/control/PE-4/
+PE-5,Access Control for Output Devices,,,,"CMMC, DAF Baseline, Int-A, Int-B, Int-C, Privacy (high), Privacy (moderate)",PR.AC-2,https://app.xylok.io/reference/controls/control/PE-5/
+PE-6,Monitoring Physical Access,,,,"CMMC, DAF Baseline","DE.CM-2, DE.CM-7, PR.AC-2, RS.AN-1, RS.CO-4",https://app.xylok.io/reference/controls/control/PE-6/
+PE-8,Visitor Access Records,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",PR.AC-2,https://app.xylok.io/reference/controls/control/PE-8/
+PE-9,Power Equipment and Cabling,,,,DAF Baseline,"ID.BE-4, PR.AC-2",https://app.xylok.io/reference/controls/control/PE-9/
+PE-10,Emergency Shutoff,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/PE-10/
+PE-11,Emergency Power,,,,DAF Baseline,"ID.BE-4, PR.DS-4, PR.PT-5",https://app.xylok.io/reference/controls/control/PE-11/
+PE-12,Emergency Lighting,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/PE-12/
+PE-13,Fire Protection,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/PE-13/
+PE-14,Environmental Controls,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/PE-14/
+PE-15,Water Damage Protection,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/PE-15/
+PE-16,Delivery and Removal,,,,DAF Baseline,PR.DS-3,https://app.xylok.io/reference/controls/control/PE-16/
+PE-17,Alternate Work Site,,,,"CMMC, DAF Baseline, Privacy (high), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/PE-17/
+PE-18,Location of System Components,,,,"DAF Baseline, Privacy (high)",None,https://app.xylok.io/reference/controls/control/PE-18/
+PE-19,Information Leakage,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, Classified, DAF Baseline, Int-A, Int-B, Int-C, Space Platform",PR.DS-5,https://app.xylok.io/reference/controls/control/PE-19/
+PE-20,Asset Monitoring and Tracking,,,,"DAF Baseline, Space Platform","DE.CM-2, DE.CM-7, PR.DS-3",https://app.xylok.io/reference/controls/control/PE-20/
+PE-21,Electromagnetic Pulse Protection,,,,"DAF Baseline, Space Platform",None,https://app.xylok.io/reference/controls/control/PE-21/
+PE-22,Component Marking,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C",None,https://app.xylok.io/reference/controls/control/PE-22/
+PE-23,Facility Location,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/PE-23/
+PL-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3",https://app.xylok.io/reference/controls/control/PL-1/
+PL-2,System Security and Privacy Plans,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-5, PR.IP-7",https://app.xylok.io/reference/controls/control/PL-2/
+PL-4,Rules of Behavior,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/PL-4/
+PL-7,Concept of Operations,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/PL-7/
+PL-8,Security and Privacy Architectures,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","ID.AM-3, PR.PT-5",https://app.xylok.io/reference/controls/control/PL-8/
+PL-9,Central Management,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/PL-9/
+PL-10,Baseline Selection,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/PL-10/
+PL-11,Baseline Tailoring,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/PL-11/
+PM-1,Information Security Program Plan,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253), Space Platform","DE.DP-2, ID.GV-1, ID.GV-2, ID.GV-3",https://app.xylok.io/reference/controls/control/PM-1/
+PM-2,Information Security Program Leadership Role,,,,DAF Baseline,"ID.AM-6, ID.GV-2",https://app.xylok.io/reference/controls/control/PM-2/
+PM-3,Information Security and Privacy Resources,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",ID.GV-4,https://app.xylok.io/reference/controls/control/PM-3/
+PM-4,Plan of Action and Milestones Process,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","ID.RA-1, ID.RA-6, RS.AN-5",https://app.xylok.io/reference/controls/control/PM-4/
+PM-5,System Inventory,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","ID.AM-1, ID.AM-4",https://app.xylok.io/reference/controls/control/PM-5/
+PM-6,Measures of Performance,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",PR.IP-7,https://app.xylok.io/reference/controls/control/PM-6/
+PM-7,Enterprise Architecture,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",ID.GV-4,https://app.xylok.io/reference/controls/control/PM-7/
+PM-8,Critical Infrastructure Plan,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","ID.BE-2, ID.BE-4, ID.RM-3",https://app.xylok.io/reference/controls/control/PM-8/
+PM-9,Risk Management Strategy,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","ID.GV-4, ID.RA-4, ID.RA-6, ID.RM-1, ID.RM-2, ID.RM-3, ID.SC-2",https://app.xylok.io/reference/controls/control/PM-9/
+PM-10,Authorization Process,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",ID.GV-4,https://app.xylok.io/reference/controls/control/PM-10/
+PM-11,Mission and Business Process Definition,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253), Space Platform","ID.BE-3, ID.GV-4, ID.RA-4, ID.RM-3",https://app.xylok.io/reference/controls/control/PM-11/
+PM-12,Insider Threat Program,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Space Platform",ID.RA-3,https://app.xylok.io/reference/controls/control/PM-12/
+PM-13,Security and Privacy Workforce,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","PR.AT-1, PR.AT-2, PR.AT-4, PR.AT-5",https://app.xylok.io/reference/controls/control/PM-13/
+PM-14,"Testing, Training, and Monitoring",,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253), Space Platform","DE.DP-1, DE.DP-2, DE.DP-3, DE.DP-5, PR.AT-1, PR.IP-10",https://app.xylok.io/reference/controls/control/PM-14/
+PM-15,Security and Privacy Groups and Associations,,,,DAF Baseline,"ID.RA-1, ID.RA-2, RS.AN-5, RS.CO-5",https://app.xylok.io/reference/controls/control/PM-15/
+PM-16,Threat Awareness Program,,,,"DAF Baseline, Space Platform","ID.RA-2, ID.RA-3, ID.RA-5",https://app.xylok.io/reference/controls/control/PM-16/
+PM-17,Protecting Controlled Unclassified Information on External Systems,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253), Space Platform",None,https://app.xylok.io/reference/controls/control/PM-17/
+PM-18,Privacy Program Plan,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/PM-18/
+PM-19,Privacy Program Leadership Role,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/PM-19/
+PM-20,Dissemination of Privacy Program Information,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/PM-20/
+PM-21,Accounting of Disclosures,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/PM-21/
+PM-22,Personally Identifiable Information Quality Management,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/PM-22/
+PM-23,Data Governance Body,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/PM-23/
+PM-24,Data Integrity Board,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/PM-24/
+PM-25,"Minimization of Personally Identifiable Information Used in Testing, Training, and Research",,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/PM-25/
+PM-26,Complaint Management,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/PM-26/
+PM-27,Privacy Reporting,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/PM-27/
+PM-28,Risk Framing,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","ID.GV-4, ID.RA-5, ID.RA-6, ID.RM-1",https://app.xylok.io/reference/controls/control/PM-28/
+PM-29,Risk Management Program Leadership Roles,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","ID.AM-6, ID.GV-2",https://app.xylok.io/reference/controls/control/PM-29/
+PM-30,Supply Chain Risk Management Strategy,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253), Space Platform",ID.SC-1,https://app.xylok.io/reference/controls/control/PM-30/
+PM-31,Continuous Monitoring Strategy,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253), Space Platform",None,https://app.xylok.io/reference/controls/control/PM-31/
+PM-32,Purposing,,,,"DAF Baseline, Space Platform",None,https://app.xylok.io/reference/controls/control/PM-32/
+PS-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3, PR.IP-11",https://app.xylok.io/reference/controls/control/PS-1/
+PS-2,Position Risk Designation,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",PR.IP-11,https://app.xylok.io/reference/controls/control/PS-2/
+PS-3,Personnel Screening,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.AC-6, PR.IP-11",https://app.xylok.io/reference/controls/control/PS-3/
+PS-4,Personnel Termination,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (high), Privacy (low), Privacy (moderate)",PR.IP-11,https://app.xylok.io/reference/controls/control/PS-4/
+PS-5,Personnel Transfer,,,,"CMMC, DAF Baseline, Privacy (high), Privacy (low), Privacy (moderate)",PR.IP-11,https://app.xylok.io/reference/controls/control/PS-5/
+PS-6,Access Agreements,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","PR.DS-5, PR.IP-11",https://app.xylok.io/reference/controls/control/PS-6/
+PS-7,External Personnel Security,,,,"DAF Baseline, Privacy (high), Privacy (low), Privacy (moderate)","DE.CM-6, ID.AM-6, ID.GV-2, ID.SC-4, PR.AT-3, PR.IP-11",https://app.xylok.io/reference/controls/control/PS-7/
+PS-8,Personnel Sanctions,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",PR.IP-11,https://app.xylok.io/reference/controls/control/PS-8/
+PS-9,Position Descriptions,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","ID.GV-2, PR.IP-11",https://app.xylok.io/reference/controls/control/PS-9/
+PT-1,Policy and Procedures,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3",https://app.xylok.io/reference/controls/control/PT-1/
+PT-2,Authority to Process Personally Identifiable Information,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/PT-2/
+PT-3,Personally Identifiable Information Processing Purposes,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/PT-3/
+PT-4,Consent,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/PT-4/
+PT-5,Privacy Notice,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/PT-5/
+PT-6,System of Records Notice,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/PT-6/
+PT-7,Specific Categories of Personally Identifiable Information,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/PT-7/
+PT-8,Computer Matching Requirements,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/PT-8/
+RA-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3, ID.GV-4, PR.IP-12, RS.AN-5",https://app.xylok.io/reference/controls/control/RA-1/
+RA-2,Security Categorization,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","ID.AM-5, ID.GV-4, ID.RA-4, ID.RA-5",https://app.xylok.io/reference/controls/control/RA-2/
+RA-3,Risk Assessment,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.AE-4, ID.GV-4, ID.RA-1, ID.RA-3, ID.RA-4, ID.RA-5, ID.SC-2, PR.IP-12, RS.AN-2, RS.AN-4, RS.MI-3",https://app.xylok.io/reference/controls/control/RA-3/
+RA-5,Vulnerability Monitoring and Scanning,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C","DE.AE-2, DE.CM-8, DE.DP-4, DE.DP-5, ID.RA-1, PR.IP-12, RS.AN-1, RS.MI-3",https://app.xylok.io/reference/controls/control/RA-5/
+RA-6,Technical Surveillance Countermeasures Survey,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, Classified, DAF Baseline, Int-A, Int-B, Int-C, Space Platform",None,https://app.xylok.io/reference/controls/control/RA-6/
+RA-7,Risk Response,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","ID.RA-6, RS.AN-5, RS.MI-3",https://app.xylok.io/reference/controls/control/RA-7/
+RA-8,Privacy Impact Assessments,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/RA-8/
+RA-9,Criticality Analysis,,,,DAF Baseline,"ID.AM-5, ID.BE-4, ID.BE-5, ID.RA-4, ID.RM-3",https://app.xylok.io/reference/controls/control/RA-9/
+RA-10,Threat Hunting,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C","ID.RA-2, ID.RA-3",https://app.xylok.io/reference/controls/control/RA-10/
+SA-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3",https://app.xylok.io/reference/controls/control/SA-1/
+SA-2,Allocation of Resources,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",ID.GV-4,https://app.xylok.io/reference/controls/control/SA-2/
+SA-3,System Development Life Cycle,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",PR.IP-2,https://app.xylok.io/reference/controls/control/SA-3/
+SA-4,Acquisition Process,,,,"DAF Baseline, Privacy (high), Privacy (low), Privacy (moderate)","DE.CM-6, ID.SC-3, PR.IP-2",https://app.xylok.io/reference/controls/control/SA-4/
+SA-5,System Documentation,,,,DAF Baseline,ID.RA-1,https://app.xylok.io/reference/controls/control/SA-5/
+SA-8,Security and Privacy Engineering Principles,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","ID.BE-5, PR.IP-2",https://app.xylok.io/reference/controls/control/SA-8/
+SA-9,External System Services,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.CM-6, ID.AM-4, ID.SC-1, ID.SC-3, ID.SC-4, PR.AT-3",https://app.xylok.io/reference/controls/control/SA-9/
+SA-10,Developer Configuration Management,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)","PR.DS-8, PR.IP-1, PR.IP-2, PR.IP-3",https://app.xylok.io/reference/controls/control/SA-10/
+SA-11,Developer Testing and Evaluation,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","ID.RA-1, ID.SC-4, PR.IP-2",https://app.xylok.io/reference/controls/control/SA-11/
+SA-15,"Development Process, Standards, and Tools",,,,"DAF Baseline, Privacy (high), Privacy (low), Privacy (moderate)",ID.SC-2,https://app.xylok.io/reference/controls/control/SA-15/
+SA-16,Developer-provided Training,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SA-16/
+SA-17,Developer Security and Privacy Architecture and Design,,,,"DAF Baseline, Privacy (high), Privacy (moderate)",ID.AM-3,https://app.xylok.io/reference/controls/control/SA-17/
+SA-20,Customized Development of Critical Components,,,,DAF Baseline,"ID.AM-5, ID.BE-4, ID.BE-5",https://app.xylok.io/reference/controls/control/SA-20/
+SA-21,Developer Screening,,,,"DAF Baseline, Privacy (high), Privacy (low), Privacy (moderate)",PR.IP-11,https://app.xylok.io/reference/controls/control/SA-21/
+SA-22,Unsupported System Components,,,,"CMMC, DAF Baseline",None,https://app.xylok.io/reference/controls/control/SA-22/
+SA-23,Specialization,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline",None,https://app.xylok.io/reference/controls/control/SA-23/
+SA-24,Design For Cyber Resiliency,,,,None,None,https://app.xylok.io/reference/controls/control/SA-24/
+SC-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3",https://app.xylok.io/reference/controls/control/SC-1/
+SC-2,Separation of System and User Functionality,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C",None,https://app.xylok.io/reference/controls/control/SC-2/
+SC-3,Security Function Isolation,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C",None,https://app.xylok.io/reference/controls/control/SC-3/
+SC-4,Information in Shared System Resources,,,,"CMMC, DAF Baseline, Int-A, Int-B, Int-C",None,https://app.xylok.io/reference/controls/control/SC-4/
+SC-5,Denial-of-service Protection,,,,DAF Baseline,"DE.CM-1, PR.DS-4, PR.PT-4",https://app.xylok.io/reference/controls/control/SC-5/
+SC-6,Resource Availability,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline, NC3, Space Platform","ID.AM-5, PR.PT-5",https://app.xylok.io/reference/controls/control/SC-6/
+SC-7,Boundary Protection,,,,"CMMC, DAF Baseline, Privacy (high), Privacy (low), Privacy (moderate)","DE.CM-1, PR.AC-5, PR.DS-5, PR.PT-4",https://app.xylok.io/reference/controls/control/SC-7/
+SC-8,Transmission Confidentiality and Integrity,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (high), Privacy (low), Privacy (moderate)",PR.DS-2,https://app.xylok.io/reference/controls/control/SC-8/
+SC-10,Network Disconnect,,,,"CMMC, DAF Baseline, Int-A, Int-B, Int-C","PR.AC-5, PR.PT-4",https://app.xylok.io/reference/controls/control/SC-10/
+SC-11,Trusted Path,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline","PR.DS-2, PR.PT-4",https://app.xylok.io/reference/controls/control/SC-11/
+SC-12,Cryptographic Key Establishment and Management,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/SC-12/
+SC-13,Cryptographic Protection,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/SC-13/
+SC-15,Collaborative Computing Devices and Applications,,,,"CMMC, DAF Baseline",PR.AC-3,https://app.xylok.io/reference/controls/control/SC-15/
+SC-16,Transmission of Security and Privacy Attributes,,,,"DAF Baseline, Privacy (high), Privacy (moderate)",DE.AE-1,https://app.xylok.io/reference/controls/control/SC-16/
+SC-17,Public Key Infrastructure Certificates,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SC-17/
+SC-18,Mobile Code,,,,"CMMC, DAF Baseline",DE.CM-5,https://app.xylok.io/reference/controls/control/SC-18/
+SC-20,Secure Name/Address Resolution Service (Authoritative Source),,,,DAF Baseline,"PR.AC-5, PR.PT-4",https://app.xylok.io/reference/controls/control/SC-20/
+SC-21,Secure Name/Address Resolution Service (Recursive or Caching Resolver),,,,DAF Baseline,PR.PT-4,https://app.xylok.io/reference/controls/control/SC-21/
+SC-22,Architecture and Provisioning for Name/Address Resolution Service,,,,DAF Baseline,PR.PT-4,https://app.xylok.io/reference/controls/control/SC-22/
+SC-23,Session Authenticity,,,,"CMMC, DAF Baseline",PR.PT-4,https://app.xylok.io/reference/controls/control/SC-23/
+SC-24,Fail in Known State,,,,"DAF Baseline, Int-C",None,https://app.xylok.io/reference/controls/control/SC-24/
+SC-25,Thin Nodes,,,,"DAF Baseline, NC3",None,https://app.xylok.io/reference/controls/control/SC-25/
+SC-26,Decoys,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SC-26/
+SC-27,Platform-independent Applications,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SC-27/
+SC-28,Protection of Information at Rest,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",PR.DS-1,https://app.xylok.io/reference/controls/control/SC-28/
+SC-29,Heterogeneity,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline",None,https://app.xylok.io/reference/controls/control/SC-29/
+SC-30,Concealment and Misdirection,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline, Space Platform",None,https://app.xylok.io/reference/controls/control/SC-30/
+SC-31,Covert Channel Analysis,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline, NC3",PR.PT-4,https://app.xylok.io/reference/controls/control/SC-31/
+SC-32,System Partitioning,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline, Int-C, Space Platform",None,https://app.xylok.io/reference/controls/control/SC-32/
+SC-34,Non-modifiable Executable Programs,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SC-34/
+SC-35,External Malicious Code Identification,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SC-35/
+SC-36,Distributed Processing and Storage,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SC-36/
+SC-37,Out-of-band Channels,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline, NC3",PR.PT-4,https://app.xylok.io/reference/controls/control/SC-37/
+SC-38,Operations Security,,,,DAF Baseline,PR.PT-4,https://app.xylok.io/reference/controls/control/SC-38/
+SC-39,Process Isolation,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SC-39/
+SC-40,Wireless Link Protection,,,,"DAF Baseline, NC3, Space Platform",None,https://app.xylok.io/reference/controls/control/SC-40/
+SC-41,Port and I/O Device Access,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C",None,https://app.xylok.io/reference/controls/control/SC-41/
+SC-42,Sensor Capability and Data,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C",None,https://app.xylok.io/reference/controls/control/SC-42/
+SC-43,Usage Restrictions,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline, NC3",None,https://app.xylok.io/reference/controls/control/SC-43/
+SC-44,Detonation Chambers,,,,DAF Baseline,"DE.CM-4, DE.CM-5",https://app.xylok.io/reference/controls/control/SC-44/
+SC-45,System Time Synchronization,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SC-45/
+SC-46,Cross Domain Policy Enforcement,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline",None,https://app.xylok.io/reference/controls/control/SC-46/
+SC-47,Alternate Communications Paths,,,,DAF Baseline,PR.PT-4,https://app.xylok.io/reference/controls/control/SC-47/
+SC-48,Sensor Relocation,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SC-48/
+SC-49,Hardware-enforced Separation and Policy Enforcement,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline, NC3",None,https://app.xylok.io/reference/controls/control/SC-49/
+SC-50,Software-enforced Separation and Policy Enforcement,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline",None,https://app.xylok.io/reference/controls/control/SC-50/
+SC-51,Hardware-based Protection,,,,"DAF Baseline, Space Platform",None,https://app.xylok.io/reference/controls/control/SC-51/
+SI-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.GV-1, ID.GV-3",https://app.xylok.io/reference/controls/control/SI-1/
+SI-2,Flaw Remediation,,,,"CMMC, DAF Baseline","ID.RA-1, PR.IP-12",https://app.xylok.io/reference/controls/control/SI-2/
+SI-3,Malicious Code Protection,,,,"CMMC, DAF Baseline, Int-A, Int-B, Int-C","DE.CM-4, DE.DP-3",https://app.xylok.io/reference/controls/control/SI-3/
+SI-4,System Monitoring,,,,"CMMC, DAF Baseline, NC3, Privacy (high), Privacy (low), Privacy (moderate)","DE.AE-1, DE.AE-2, DE.AE-3, DE.AE-4, DE.CM-1, DE.CM-4, DE.CM-5, DE.CM-6, DE.CM-7, DE.DP-2, DE.DP-3, DE.DP-4, DE.DP-5, ID.RA-1, PR.DS-5, PR.IP-8, RS.AN-1",https://app.xylok.io/reference/controls/control/SI-4/
+SI-5,"Security Alerts, Advisories, and Directives",,,,"CMMC, DAF Baseline, NC3","ID.RA-1, ID.RA-2, ID.RA-3, RS.AN-5, RS.CO-5",https://app.xylok.io/reference/controls/control/SI-5/
+SI-6,Security and Privacy Function Verification,,,,"DAF Baseline, NC3",None,https://app.xylok.io/reference/controls/control/SI-6/
+SI-7,"Software, Firmware, and Information Integrity",,,,"DAF Baseline, Int-A, Int-B, Int-C, Privacy (high), Privacy (moderate)",PR.DS-6,https://app.xylok.io/reference/controls/control/SI-7/
+SI-8,Spam Protection,,,,DAF Baseline,DE.CM-4,https://app.xylok.io/reference/controls/control/SI-8/
+SI-10,Information Input Validation,,,,"DAF Baseline, Privacy (high), Privacy (moderate)",PR.DS-6,https://app.xylok.io/reference/controls/control/SI-10/
+SI-11,Error Handling,,,,"DAF Baseline, Privacy (high), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/SI-11/
+SI-12,Information Management and Retention,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)",None,https://app.xylok.io/reference/controls/control/SI-12/
+SI-13,Predictable Failure Prevention,,,,"DAF Baseline, Space Platform",None,https://app.xylok.io/reference/controls/control/SI-13/
+SI-14,Non-persistence,,,,"DAF Baseline, Space Platform",None,https://app.xylok.io/reference/controls/control/SI-14/
+SI-15,Information Output Filtering,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SI-15/
+SI-16,Memory Protection,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SI-16/
+SI-17,Fail-safe Procedures,,,,"CDS - Access, CDS - Multilevel, CDS - Transfer, DAF Baseline, Space Platform",None,https://app.xylok.io/reference/controls/control/SI-17/
+SI-18,Personally Identifiable Information Quality Operations,,,,"DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/SI-18/
+SI-19,De-identification,,,,"DAF Baseline, Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/SI-19/
+SI-20,Tainting,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SI-20/
+SI-21,Information Refresh,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SI-21/
+SI-22,Information Diversity,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SI-22/
+SI-23,Information Fragmentation,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SI-23/
+SR-1,Policy and Procedures,,,,"CMMC, DAF Baseline, Privacy (accountability), Privacy (high), Privacy (low), Privacy (moderate), Privacy Control Baseline (CNSSI 1253)","DE.DP-2, ID.BE-1, ID.GV-1, ID.GV-3, ID.SC-1",https://app.xylok.io/reference/controls/control/SR-1/
+SR-2,Supply Chain Risk Management Plan,,,,"CMMC, DAF Baseline","ID.BE-4, ID.SC-1, ID.SC-2, ID.SC-3",https://app.xylok.io/reference/controls/control/SR-2/
+SR-3,Supply Chain Controls and Processes,,,,"CMMC, Classified, DAF Baseline, Int-A, Int-B, Int-C","ID.BE-1, ID.SC-1, ID.SC-2, ID.SC-3",https://app.xylok.io/reference/controls/control/SR-3/
+SR-4,Provenance,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C, Privacy (high), Privacy (low), Privacy (moderate)",None,https://app.xylok.io/reference/controls/control/SR-4/
+SR-5,"Acquisition Strategies, Tools, and Methods",,,,"CMMC, DAF Baseline","ID.SC-1, ID.SC-2, ID.SC-3",https://app.xylok.io/reference/controls/control/SR-5/
+SR-6,Supplier Assessments and Reviews,,,,"CMMC, DAF Baseline","ID.SC-2, RS.AN-5",https://app.xylok.io/reference/controls/control/SR-6/
+SR-7,Supply Chain Operations Security,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C",None,https://app.xylok.io/reference/controls/control/SR-7/
+SR-8,Notification Agreements,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SR-8/
+SR-9,Tamper Resistance and Detection,,,,DAF Baseline,DE.DP-2,https://app.xylok.io/reference/controls/control/SR-9/
+SR-10,Inspection of Systems or Components,,,,DAF Baseline,DE.DP-2,https://app.xylok.io/reference/controls/control/SR-10/
+SR-11,Component Authenticity,,,,DAF Baseline,None,https://app.xylok.io/reference/controls/control/SR-11/
+SR-12,Component Disposal,,,,"Classified, DAF Baseline, Int-A, Int-B, Int-C",PR.IP-6,https://app.xylok.io/reference/controls/control/SR-12/

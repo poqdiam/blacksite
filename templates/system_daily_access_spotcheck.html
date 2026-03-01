@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Access Spot-Check: {{ system.name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:20px">
+  <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">
+    <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a> /
+    <a href="/systems/{{ system.id }}/daily" style="color:var(--muted)">Daily Ops</a> / Access Spot-Check
+  </div>
+  <h1 style="font-size:1.3em;margin:0">Access Spot-Check (HIPAA) — {{ today }}</h1>
+</div>
+
+{% if existing %}
+<div style="padding:10px 14px;background:rgba(0,188,212,0.1);border:1px solid rgba(0,188,212,0.3);border-radius:6px;margin-bottom:16px;font-size:0.85em">
+  Record already submitted for today.
+</div>
+<div class="card" style="padding:20px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div><span style="color:var(--muted);font-size:0.75em">Records Sampled</span><br>{{ existing.records_sampled }}</div>
+    <div><span style="color:var(--muted);font-size:0.75em">Anomaly Found</span><br>{{ '⚠️ Yes' if existing.anomaly_found else '✅ No' }}</div>
+    <div><span style="color:var(--muted);font-size:0.75em">Terminated User Found</span><br>{{ '🚨 Yes' if existing.terminated_user_found else '✅ No' }}</div>
+    <div></div>
+    {% if existing.anomaly_description %}
+    <div style="grid-column:span 2"><span style="color:var(--muted);font-size:0.75em">Anomaly Description</span><br>{{ existing.anomaly_description }}</div>
+    {% endif %}
+    <div style="grid-column:span 2"><span style="color:var(--muted);font-size:0.75em">Notes</span><br>{{ existing.notes or '—' }}</div>
+  </div>
+</div>
+<a href="/systems/{{ system.id }}/daily" class="btn btn-ghost btn-sm" style="margin-top:12px">← Back to Daily Hub</a>
+{% else %}
+<div class="card" style="padding:20px">
+  <form method="post" action="/systems/{{ system.id }}/daily/access-spotcheck">
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:0.75em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">
+        Records / Accounts Sampled
+      </label>
+      <input type="number" name="records_sampled" value="0" min="0"
+             style="width:200px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px;color:var(--text);font-size:0.88em">
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" name="anomaly_found" id="anomaly_found"
+               style="width:18px;height:18px;accent-color:var(--yellow)"
+               onchange="document.getElementById('anomaly_row').style.display=this.checked?'block':'none'">
+        <span style="font-size:0.9em">Access anomaly detected (unusual access pattern, off-hours access, excess privilege)</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" name="terminated_user_found" style="width:18px;height:18px;accent-color:var(--red)">
+        <span style="font-size:0.9em">Terminated user account found with active access</span>
+      </label>
+    </div>
+    <div id="anomaly_row" style="margin-bottom:16px;display:none">
+      <label style="display:block;font-size:0.75em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">
+        Anomaly Description
+      </label>
+      <textarea name="anomaly_description" rows="2"
+                style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px;color:var(--text);font-size:0.88em;resize:vertical"></textarea>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="display:block;font-size:0.75em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Notes</label>
+      <textarea name="notes" rows="3" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px;color:var(--text);font-size:0.88em;resize:vertical"></textarea>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button type="submit" class="btn btn-primary">Submit Check</button>
+      <a href="/systems/{{ system.id }}/daily" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

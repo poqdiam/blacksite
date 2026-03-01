@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}System Management{% endblock %}
+
+{% block content %}
+<div class="page-header" style="margin-bottom:28px">
+  <h1 style="margin:0;font-size:1.4em;letter-spacing:1px">SYSTEM MANAGEMENT</h1>
+  <p style="margin:4px 0 0;color:var(--muted);font-size:0.85em">
+    Site-wide configuration — admin only.
+  </p>
+</div>
+
+{% if request.query_params.get('saved') %}
+<div style="background:rgba(0,200,83,0.1);border-left:3px solid var(--green);
+            border-radius:6px;padding:12px 16px;margin-bottom:20px;font-size:0.85em">
+  <strong style="color:var(--green)">✓ Settings saved.</strong>
+</div>
+{% endif %}
+
+<form method="post" action="/admin/system-settings">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
+
+  {# ── Chat Settings ──────────────────────────────────────────────────────── #}
+  <div class="card" style="padding:24px">
+    <h3 style="margin:0 0 18px;color:var(--cyan);font-size:0.9em;letter-spacing:1px">
+      CHAT SETTINGS
+    </h3>
+
+    <div class="form-group" style="margin-bottom:20px">
+      <label style="display:flex;align-items:center;gap:12px;cursor:pointer">
+        <div style="position:relative;width:44px;height:24px;flex-shrink:0">
+          <input type="checkbox" name="_chat_enabled_cb" id="chat_enabled_cb"
+                 {% if settings.chat_enabled != 'false' %}checked{% endif %}
+                 style="opacity:0;position:absolute;inset:0;cursor:pointer;z-index:2"
+                 onchange="document.getElementById('chat_enabled_val').value = this.checked ? 'true' : 'false'">
+          <div class="toggle-track" style="
+            position:absolute;inset:0;border-radius:12px;
+            background:{% if settings.chat_enabled != 'false' %}var(--green){% else %}var(--border){% endif %};
+            transition:background 0.2s;pointer-events:none
+          " id="chat_toggle_track"></div>
+          <div style="
+            position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;
+            background:white;transition:left 0.2s;pointer-events:none
+          " id="chat_toggle_knob"></div>
+        </div>
+        <input type="hidden" name="chat_enabled" id="chat_enabled_val"
+               value="{{ settings.chat_enabled }}">
+        <div>
+          <div style="font-weight:600;font-size:0.9em">Enable Admin Chat</div>
+          <div style="color:var(--muted);font-size:0.77em">
+            When disabled, chat icon is hidden and WebSocket connections are rejected.
+            GREENSITE always has chat disabled.
+          </div>
+        </div>
+      </label>
+    </div>
+
+    <div class="form-group" style="margin-bottom:20px">
+      <label style="display:block;font-size:0.8em;color:var(--muted);margin-bottom:6px;letter-spacing:1px">
+        VISIBLE USERS IN SIDEBAR (default 5, max 20)
+      </label>
+      <input type="number" name="chat_visible_count" min="1" max="20" step="1"
+             value="{{ settings.chat_visible_count }}"
+             style="width:120px;background:var(--surface);border:1px solid var(--border);
+                    border-radius:6px;padding:8px 12px;color:var(--text);font-size:0.9em">
+      <div style="color:var(--muted);font-size:0.75em;margin-top:4px">
+        Users beyond this count appear under a "More (N)" expander.
+        Always shows a minimum of 5 regardless of setting.
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:12px;cursor:pointer">
+        <div style="position:relative;width:44px;height:24px;flex-shrink:0">
+          <input type="checkbox" id="chat_show_away_cb"
+                 {% if settings.chat_show_away_msg != 'false' %}checked{% endif %}
+                 style="opacity:0;position:absolute;inset:0;cursor:pointer;z-index:2"
+                 onchange="document.getElementById('chat_show_away_val').value = this.checked ? 'true' : 'false'">
+          <div class="toggle-track" style="
+            position:absolute;inset:0;border-radius:12px;
+            background:{% if settings.chat_show_away_msg != 'false' %}var(--green){% else %}var(--border){% endif %};
+            transition:background 0.2s;pointer-events:none"></div>
+          <div style="
+            position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;
+            background:white;transition:left 0.2s;pointer-events:none"></div>
+          <input type="hidden" name="chat_show_away_msg" id="chat_show_away_val"
+                 value="{{ settings.chat_show_away_msg }}">
+        </div>
+        <div>
+          <div style="font-weight:600;font-size:0.9em">Show Away Messages</div>
+          <div style="color:var(--muted);font-size:0.77em">
+            Display away message text under usernames in the chat sidebar.
+          </div>
+        </div>
+      </label>
+    </div>
+  </div>
+
+  {# ── Session Settings ────────────────────────────────────────────────────── #}
+  <div class="card" style="padding:24px">
+    <h3 style="margin:0 0 18px;color:var(--cyan);font-size:0.9em;letter-spacing:1px">
+      SESSION SETTINGS
+    </h3>
+
+    <div class="form-group" style="margin-bottom:20px">
+      <label style="display:block;font-size:0.8em;color:var(--muted);margin-bottom:6px;letter-spacing:1px">
+        IDLE SESSION TIMEOUT (minutes)
+      </label>
+      <input type="number" name="session_timeout_min" min="5" max="480" step="5"
+             value="{{ settings.session_timeout_min }}"
+             style="width:120px;background:var(--surface);border:1px solid var(--border);
+                    border-radius:6px;padding:8px 12px;color:var(--text);font-size:0.9em">
+      <div style="color:var(--muted);font-size:0.75em;margin-top:4px">
+        Non-exempt users (everyone except admins) are automatically logged out after
+        this many minutes of inactivity. Takes effect immediately on save.
+      </div>
+    </div>
+
+    <div style="padding:12px 14px;background:rgba(255,179,0,0.06);
+                border-left:3px solid rgba(255,179,0,0.4);border-radius:0 6px 6px 0;
+                font-size:0.8em;color:var(--muted)">
+      <strong style="color:var(--yellow)">Admin accounts</strong> (in admin_users config)
+      are always exempt from session timeout regardless of this setting.
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:24px;display:flex;gap:12px">
+  <button type="submit" class="btn btn-primary" style="padding:10px 28px">
+    Save Settings
+  </button>
+  <a href="/admin" class="btn btn-ghost" style="padding:10px 28px">Cancel</a>
+</div>
+</form>
+
+{# ── Config-Managed Admin Users (read-only, moved from user management) ── #}
+{% if admin_users_cfg %}
+<div class="card" style="margin-top:28px;padding:24px;background:rgba(255,215,0,0.04);border-color:rgba(255,215,0,0.2)">
+  <h3 style="margin:0 0 12px;color:var(--gold);font-size:0.9em;letter-spacing:1px">
+    CONFIG-MANAGED ADMIN USERS
+  </h3>
+  <p style="font-size:0.84em;color:var(--muted);margin:0 0 14px">
+    These users are defined in <code>config.yaml → app.admin_users</code> and have permanent
+    admin access regardless of their UserProfile role. Their admin status cannot be changed from
+    the User Management UI — only by editing <code>config.yaml</code> and restarting the service.
+  </p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    {% for admin_u in admin_users_cfg %}
+    <span class="role-badge role-admin">{{ admin_u }}</span>
+    {% endfor %}
+  </div>
+  <div style="margin-top:12px;font-size:0.78em;color:var(--muted)">
+    To grant temporary override on a removed user reservation:
+    <a href="/admin/users/reservations" style="color:var(--cyan)">View Reservations →</a>
+  </div>
+</div>
+{% endif %}
+
+<script>
+// Animate toggle switches
+document.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+  cb.addEventListener('change', function() {
+    const track = this.parentElement.querySelector('.toggle-track');
+    const knob  = this.parentElement.querySelector('div:last-child');
+    if (track) track.style.background = this.checked ? 'var(--green)' : 'var(--border)';
+    if (knob)  knob.style.left = this.checked ? 'calc(100% - 21px)' : '3px';
+  });
+  // Set initial knob position
+  const knob = cb.parentElement.querySelector('div:last-child');
+  if (knob && cb.checked) knob.style.left = 'calc(100% - 21px)';
+});
+</script>
+{% endblock %}

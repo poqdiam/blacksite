@@ -1,0 +1,36 @@
+{% macro paginate(page, total_pages, per_page, base_url, extra_params="") %}
+{% if total_pages > 1 or per_page != 10 %}
+<div style="display:flex;align-items:center;justify-content:space-between;
+            padding:12px 4px;flex-wrap:wrap;gap:8px;font-size:0.82em">
+  <span style="color:var(--muted)">
+    Rows per page:
+    {% for n in [10, 25, 50] %}
+    <a href="{{ base_url }}?page=1&per_page={{ n }}{% if extra_params %}&{{ extra_params }}{% endif %}"
+       style="padding:2px 6px;{% if per_page==n %}color:var(--cyan);font-weight:700{% else %}color:var(--muted){% endif %}">{{ n }}</a>
+    {% endfor %}
+  </span>
+  {% if total_pages > 1 %}
+  <div style="display:flex;gap:4px;align-items:center">
+    {% if page > 1 %}
+    <a href="{{ base_url }}?page={{ page-1 }}&per_page={{ per_page }}{% if extra_params %}&{{ extra_params }}{% endif %}"
+       class="btn btn-sm btn-ghost">‹</a>
+    {% endif %}
+    {% for p in range(1, total_pages+1) %}
+      {% if p == page %}
+        <span class="btn btn-sm" style="background:rgba(0,255,204,.15);color:var(--cyan);min-width:32px;text-align:center">{{ p }}</span>
+      {% elif p <= 2 or p >= total_pages-1 or (page-2 <= p <= page+2) %}
+        <a href="{{ base_url }}?page={{ p }}&per_page={{ per_page }}{% if extra_params %}&{{ extra_params }}{% endif %}"
+           class="btn btn-sm btn-ghost" style="min-width:32px">{{ p }}</a>
+      {% elif p == 3 or p == total_pages-2 %}
+        <span style="color:var(--muted);padding:0 4px">…</span>
+      {% endif %}
+    {% endfor %}
+    {% if page < total_pages %}
+    <a href="{{ base_url }}?page={{ page+1 }}&per_page={{ per_page }}{% if extra_params %}&{{ extra_params }}{% endif %}"
+       class="btn btn-sm btn-ghost">›</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+{% endmacro %}

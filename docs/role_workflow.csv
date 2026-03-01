@@ -1,0 +1,253 @@
+Role,Section,Page/Route,Permission Level,Data Scope,Actions Allowed,Actions Denied,Notes
+admin,Dashboard,/admin,Full,All systems and assessments globally,View all assessments; view analytics (score bins/weekly counts/weak families); view POA&M and risk KPIs; view recent audit entries; view submission pipeline counts,None,"Redirected from / when bsv_mode=admin; admins can toggle to employee view via /switch-view"
+admin,Dashboard,/dashboard (via /switch-view),Full (employee shell),Own submitted assessments only,View own quiz activity/streak; view assigned systems; take daily quiz,Cannot access /admin panel while in employee view,Admin uses bsv_mode cookie to simulate employee UX
+admin,Systems,/systems,Full,All systems,List all systems with auth status; search/filter,None,No system scope filter applied for admins
+admin,Systems,/systems/new,Full,N/A,Create new system (name/type/environment/impact levels/auth status),None,Any auth_status value allowed
+admin,Systems,/systems/{id},Full,Any system,View full system detail: assessments/POA&Ms/risks/audit history/assignments/RMF steps/inventory/connections/artifacts/observations counts,None,Full admin access to all sub-sections
+admin,Systems,/systems/{id}/edit,Full,Any system,Edit all system fields,None,GET+POST both restricted to admin only
+admin,Systems,/systems/{id}/delete,Full,Any system,Delete system record,None,Logged to audit_log with DELETE action
+admin,Systems,/systems/{id}/assign,Full,Any system,Assign any user to system; validates against employees config or UserProfile table,None,Returns 400 if unknown user
+admin,Systems,/systems/{id}/unassign,Full,Any system,Remove user assignment,None,Logged to audit_log
+admin,Systems,/systems/{id}/assignments,Full,Any system,List all assignments as JSON,None,JSON API endpoint
+admin,Controls,/controls,Full,NIST 800-53r5 catalog (all 1196 controls),Browse/filter/paginate control catalog; filter by family or keyword,None,In-memory CATALOG dict; no DB required
+admin,Controls,/controls/{ctrl_id},Full,Single NIST control,View control detail (statement/family/title),None,Returns 404 if ctrl_id not in catalog
+admin,Controls,/systems/{id}/controls,Full,System control plan,View per-system control implementation status; update status/narrative/responsible role/inheritance,None,Logs VIEW to audit_log
+admin,Controls,/systems/{id}/controls/{ctrl_id},Full,Single system control,Update status/narrative/implementation_type/inherited_from,None,POST creates or upserts SystemControl record
+admin,Controls,/systems/{id}/import-controls,Full,Latest assessment controls,Bulk-import control status from most recent linked assessment,None,Auto-maps ai_grade to SystemControl.status
+admin,POA&M,/poam,Full,All POA&M items globally,List/filter by status/severity/system; paginate; export,None,status_filter defaults to 'open'
+admin,POA&M,/poam/new,Full,N/A,Create new POA&M item (all fields),None,DHS Attachment H lifecycle: draft→open→in_progress→blocked→ready_for_review→closed_verified|deferred_waiver|accepted_risk|false_positive
+admin,POA&M,/poam/{id},Full,Any POA&M item,View/edit POA&M detail: status/severity/remediation_plan/root_cause/closure_evidence/waiver_id,None,Supports all DHS-H status values
+admin,POA&M,/poam/{id}/update,Full,Any POA&M item,Update any field including root_cause/closure_evidence/risk_accept_review,None,POST endpoint
+admin,POA&M,/poam/auto/{assessment_id},Full,Assessment control results,Auto-create POA&M items from failing controls (NOT_FOUND/INSUFFICIENT),None,Bulk operation
+admin,POA&M,/poam/import,Full,N/A,Bulk-import POA&M from CSV,None,CSV parsing with preview step
+admin,POA&M,/poam/export,Full,All POA&M items,Printable HTML table for PDF export,None,GET request; renders poam_export.html
+admin,Risks,/risks,Full,All risks globally,List/filter by level/status/system; paginate,None,Risk register view
+admin,Risks,/risks/new,Full,N/A,Create risk (name/description/threat/likelihood/impact/treatment),None,risk_score = likelihood x impact
+admin,Risks,/risks/{id},Full,Any risk,View/edit risk detail; update treatment plan/residual scores/review date,None,risk_level auto-derived from score
+admin,Risks,/risks/export,Full,All risks,Printable HTML table,None,GET; renders risks_export.html
+admin,Observations,/observations,Full,All observations globally,List/filter by system/severity/source/status; paginate,None,Phase 12; OBS_ROLES = issm|isso|sca|auditor|system_owner|admin
+admin,Observations,/observations/new,Full,N/A,Create observation (title/source/obs_type/severity/description/control_ids/scope_tags/assigned_to/due_date),None,Logged to audit_log with CREATE action
+admin,Observations,/observations/{id},Full,Any observation,View/edit observation detail; promote to POA&M,None,Promote creates PoamItem and sets obs.status=promoted
+admin,ATO Documents,/ato,Full,All systems' ATO packages,Matrix view of all systems x 52 doc types; summary counts per system,None,52 ATO_DOC_TYPES across 4 categories: core/authorization/preparation/conmon
+admin,ATO Documents,/ato/{system_id},Full,Single system ATO package,View all 52 doc types with status; see finalized percentage; grouped by category in 4 accordions,None,FedRAMP alignment added in Phase 12
+admin,ATO Documents,/ato/{system_id}/{doc_type},Full,Single ATO document,Edit (if draft); submit for review; approve; reject; finalize; revise,None,can_finalize requires admin AND doc.status=approved
+admin,ATO Documents,/ato/{system_id}/{doc_type}/save,Full,Single ATO document,Save draft content (creates document if not exists),None,_ato_can_edit check; owner_roles from ATO_DOC_TYPES
+admin,ATO Documents,/ato/{system_id}/{doc_type}/action,Full,Single ATO document,Execute workflow transitions: submit/approve/reject/finalize/revise,None,Records AtoWorkflowEvent + AtoDocumentVersion on each transition
+admin,Submissions,/submissions,Full,All submissions globally,List all ATO submissions; filter by status,None,Phase 5; submission_type: initial|reauthorization|significant_change|annual_review
+admin,Submissions,/submissions/{id},Full,Any submission,View submission detail with control snapshot counts,None,Phase 12 adds authorization_type/term_months/term_expires_at/extension_used
+admin,Submissions,/submissions/{id}/update,Full,Any submission,Update status/decision/ato_expiry/reviewer; set systems auth_status,None,POST endpoint; decision: authorized|denied|withdrawn
+admin,Reports,/reports,Full,All systems,View aggregated report center with KPI cards (total systems/POA&Ms/risks/RMF progress/submissions),None,Scoped to user's systems for non-admins
+admin,Reports,/systems/{id}/report,Full,Any system,Printable compliance report (PDF-ready): control coverage/POA&M breakdown by severity/risk breakdown/auth expiry,None,Renders system_report.html
+admin,Reports,/ssp/{assessment_id},Full,Any assessment,Generated SSP HTML document; print-to-PDF,None,Renders ssp_export.html
+admin,Reports,/ssp/{assessment_id}/oscal,Full,Any assessment,OSCAL-format JSON export,None,Returns JSONResponse
+admin,SIEM,/admin/siem,Full,All security events,View all SecurityEvent records (24h stats: total/failed_auth/high_crit/unique_IPs); filter by severity/event_type; paginate,None,SIEM middleware logs: http|login|failed_auth|access_denied|frozen_access|anomaly
+admin,Admin Panel,/admin,Full,All assessments,View assessment list with candidate names; download/forward/link actions,None,Only accessible to admin (checked via _is_admin); includes analytics charts
+admin,Admin Panel,/admin/download/{id}/json,Full,Any assessment,Download assessment as JSON,None,Logs EXPORT to audit_log
+admin,Admin Panel,/admin/download/{id}/original,Full,Any assessment,Download original uploaded SSP file,None,Returns 404 if file not on disk
+admin,Admin Panel,/admin/download/{id}/print,Full,Any assessment,Printable HTML report,None,Renders print_report.html
+admin,Admin Panel,/admin/forward/{id},Full,Any assessment,Forward assessment to employee via email; sets email_sent=True,None,POST; requires employee_username in employees config with email
+admin,Admin Panel,/admin/view-as/{username},Full,Any user's data,View employee dashboard as any user (quiz activity/streak/entries),None,Renders dashboard.html with view_as_mode=True
+admin,Admin Panel,/switch-view,Full,N/A,Toggle between admin/employee view (sets bsv_mode cookie),None,Only admins can use this; mode=admin|employee
+admin,Admin Panel,/switch-role-view,Full,N/A,Shell into any non-admin role (sets bsv_role_shell cookie),None,Admin can shell into all 13 non-admin roles; ROLE_CAN_VIEW_DOWN[admin] = all valid shell roles
+admin,Admin Panel,/exit-shell,Full,N/A,Exit role shell and return to referrer,None,Deletes bsv_role_shell cookie
+admin,Admin Panel,/upload,Full,N/A,Upload SSP file (docx/pdf/txt/xlsx/csv); creates Assessment+Candidate records,None,Restricted to admin + sca only
+admin,User Management,/admin/users,Full,All user profiles,View all UserProfile records; see role counts/assignment counts,None,Also accessible to issm (read-only view; no provisioned_token shown)
+admin,User Management,/admin/users/add,Full,N/A,Add or update user: username/display_name/email/role,None,Valid roles: employee|auditor|bcdr|system_owner|isso|issm|sca|ao|ciso|pen_tester|data_owner|pmo|incident_responder
+admin,User Management,/admin/users/provision,Full,N/A,Full user onboarding: generate argon2id password hash via Authelia container; write users_database.yml; update config.yaml; create UserProfile; send welcome email,None,One-time password shown via provisioned_token (5-min TTL)
+admin,User Management,/admin/users/{username}/role,Full,Single user,Change role for a specific user,None,POST; valid roles same as /users/add
+admin,User Management,/admin/users/bulk-role,Full,Multiple users,Bulk-set role for list of users,None,POST JSON body with usernames+role arrays
+admin,User Management,/admin/users/bulk-freeze,Full,Multiple users,Bulk-freeze user accounts,None,POST JSON body with usernames array
+admin,User Management,/admin/users/{username}/freeze,Full,Single user,Freeze user account (status=frozen); frozen users get 403 on all main routes,None,POST; Logs UPDATE to audit_log
+admin,User Management,/admin/users/{username}/unfreeze,Full,Single user,Restore frozen account to active,None,POST
+admin,User Management,/admin/users/{username}/remove,Full,Single user,Mark user as removed (status=removed); soft delete with removed_at timestamp,None,GET shows confirm page; POST /remove/confirm executes
+admin,User Management,/admin/users/{username}/restore,Full,Single user,Restore removed user to active (from shadow list),None,POST; redirects to /admin/users/shadow
+admin,User Management,/admin/users/shadow,Full,Removed users,View all removed/soft-deleted users,None,Auto-purge runs on startup for users removed > 1 year ago
+admin,User Management,/admin/users/{username}/max-packages,Full,Single ISSO profile,Update max_packages limit for an ISSO (1-50),None,POST; affects ISSM productivity score calculation
+admin,Audit Log,/admin/audit,Full,Audit log (AuditLog table),View/filter audit log (days/hide_view/page/per_page); paginate with page size 10-100,None,Also accessible to issm and auditor roles
+admin,Audit Log,/admin/audit/export,Full,Audit log,Export audit log as CSV or JSON (up to 90 days default); logs EXPORT action,None,Logs EXPORT action to audit_log itself
+admin,Role Shell,/switch-role-view?role={role},Full,N/A,Shell into any of 13 non-admin roles to experience their restricted view,None,Sets bsv_role_shell cookie; all higher-level permissions dropped during shell
+ao,Dashboard,/dashboard,Role-scoped,Assigned systems only,View quiz activity/streak; view assigned systems,Cannot access /admin; cannot upload SSPs,AO role uses employee dashboard; specialized view at /ao/decisions
+ao,Systems,/systems,Role-scoped,Assigned systems only,List assigned systems; view system detail,Cannot edit/delete systems; cannot manage assignments,Non-admins see only systems in their SystemAssignment records
+ao,Systems,/systems/{id},Role-scoped,Assigned systems only,View system detail/POA&Ms/risks/audit history,Cannot edit system fields or delete,Access check via _can_access_system
+ao,Systems,/systems/{id}/controls,Role-scoped,Assigned system's control plan,View control implementation status; update status/narrative,Cannot edit or delete system catalog entry,Any assigned user can update SystemControl records
+ao,Controls,/controls,Read,All NIST controls,Browse control catalog; filter by family/keyword,Cannot edit controls,Read-only access to in-memory CATALOG
+ao,POA&M,/poam,Role-scoped,POA&M items for assigned systems,View/filter POA&M items; create new items; update status,Cannot delete POA&M items,scope restricted by _user_system_ids
+ao,POA&M,/poam/new,Write,N/A,Create new POA&M item for assigned system,Cannot create POA&M for unassigned system,Requires authenticated user
+ao,Risks,/risks,Role-scoped,Risks for assigned systems,View risk register; create/update risks,Cannot delete risks,risk_level derived from likelihood x impact score
+ao,Observations,/observations,Role-scoped,Observations for assigned systems,View/create/update/promote observations,Cannot approve artifacts,_OBS_ROLES includes ao? No - _OBS_ROLES = issm|isso|sca|auditor|system_owner|admin only; AO cannot access observations directly
+ao,ATO Documents,/ato,Role-scoped,Assigned systems' ATO packages,View ATO matrix for assigned systems,Cannot finalize documents (admin-only),AO role not in any ATO_DOC_TYPES owner_roles or reviewer_roles by default
+ao,Submissions,/submissions,Role-scoped,All submissions (global view),View submission list and detail,Cannot update submission status directly (admin-only update),AO uses /ao/decisions for their workflow
+ao,ATO Decisions,/ao/decisions,Full (AO-specific),All systems in_progress + decided + expiring,View systems pending ATO decision; view expiring ATOs (within 90 days); record approve/deny decisions; set auth_status,Cannot access if role is not ao or admin,Requires role=ao or admin; excludes EIS-designated systems from pending queue
+ao,Reports,/reports,Role-scoped,Assigned systems,View aggregated reporting center; download system compliance reports,Cannot export audit log,Scope filtered by _user_system_ids
+ao,SIEM,N/A,None,N/A,No access,Cannot access /admin/siem,SIEM is admin-only
+ao,Admin Panel,N/A,None,N/A,Cannot access /admin,No admin panel access,Would get 403
+ao,User Management,N/A,None,N/A,Cannot access /admin/users,No user management access,AO can view ISSM dashboard at /issm/dashboard
+ao,Audit Log,/admin/audit,Read,Audit log (via _chk_role check),View audit log entries (same access as issm),Cannot export audit log (admin-only export endpoint),_chk_role check: admin or issm; AO does NOT have this access based on code check
+ao,Role Shell,/switch-role-view,Downward,Can shell into ciso|issm|isso|sca + lower roles,Shell into lower roles to see their view,Cannot shell up to admin,ROLE_CAN_VIEW_DOWN[ao] = ciso + issm + isso + sca + all _LOWER_THAN_ISSO roles
+ao,ISSM Dashboard,/issm/dashboard,Allowed,All ISSOs,View ISSO workload: package counts/open POA&Ms/overdue POA&Ms/productivity scores/quiz metrics for each ISSO,Cannot modify ISSO data from this view,_require_role check: admin|ao|issm
+ciso,Dashboard,/dashboard,Role-scoped,Assigned systems only,View quiz activity/streak; view assigned systems,Cannot access /admin,CISO is a non-admin role
+ciso,Systems,/systems,Role-scoped,Assigned systems only,List/view assigned systems,Cannot edit/delete systems,Same _can_access_system check as all non-admins
+ciso,Controls,/controls,Read,All NIST controls,Browse control catalog,Cannot update system controls unless assigned to system,Catalog is global/public within platform
+ciso,POA&M,/poam,Role-scoped,Assigned systems' POA&Ms,View/create/update POA&M items,Cannot delete,Standard non-admin POA&M access
+ciso,Risks,/risks,Role-scoped,Assigned systems' risks,View/create/update risks,Cannot delete,Standard non-admin risk access
+ciso,Observations,/observations,None,N/A,Cannot access observations,403 returned,CISO not in _OBS_ROLES; _OBS_ROLES = issm|isso|sca|auditor|system_owner|admin
+ciso,ATO Documents,/ato,Role-scoped,Assigned systems,View ATO package dashboard; view per-system ATO docs,Can only edit docs where ciso is in owner_roles (none by default),CISO not listed in any ATO_DOC_TYPES owner_roles
+ciso,Reports,/reports,Role-scoped,Assigned systems,View aggregated reports; generate system compliance reports,Cannot export audit log,Scoped by _user_system_ids
+ciso,Admin Panel,N/A,None,N/A,No access,403,CISO is non-admin
+ciso,User Management,N/A,None,N/A,No access,403,CISO cannot manage users
+ciso,Audit Log,N/A,None,N/A,No access to /admin/audit,403,CISO is not in the allowed list (admin|issm|auditor)
+ciso,ISSM Dashboard,/issm/dashboard,None,N/A,Cannot access,403 (_require_role check),_require_role allows admin|ao|issm only; CISO not included
+ciso,Role Shell,/switch-role-view,Downward,Can shell into issm|isso|sca + lower roles,Shell into lower-tier roles,Cannot shell to ao or admin,ROLE_CAN_VIEW_DOWN[ciso] = issm + isso + sca + all _LOWER_THAN_ISSO
+issm,Dashboard,/dashboard,Role-scoped,Assigned systems only,View quiz activity/streak; view assigned systems; view assigned system POA&M/risk counts,Cannot access /admin,ISSM has specialized dashboard at /issm/dashboard
+issm,Systems,/systems,Role-scoped,Assigned systems only,View system detail; update system controls; view POA&Ms/risks/RMF,Cannot edit/delete system record; cannot manage assignments,_can_access_system check applies
+issm,Controls,/controls,Read,All NIST controls,Browse/filter control catalog,Cannot modify catalog,In-memory read
+issm,POA&M,/poam,Role-scoped,Assigned systems' POA&Ms,Full POA&M CRUD: create/view/edit/update status; auto-create from assessment; import CSV; export; manage root_cause/closure_evidence,Cannot delete POA&M items,DHS-H aligned status lifecycle
+issm,Risks,/risks,Role-scoped,Assigned systems' risks,Full risk register CRUD,Cannot delete risks,residual scores tracked
+issm,Observations,/observations,Role-scoped,All observations (unfiltered),View/create/update observations; promote to POA&M,Cannot approve artifacts independently,_OBS_ROLES includes issm
+issm,ATO Documents,/ato,Role-scoped,Assigned systems' ATO docs,View ATO matrix and per-system docs; edit docs where issm is in owner_roles (none by default in ATO_DOC_TYPES); approve/review docs where issm is in reviewer_roles (none by default),Cannot finalize (admin-only),ISSM not explicitly listed in ATO_DOC_TYPES owner_roles or reviewer_roles; access limited to view
+issm,Submissions,/submissions,Read,All submissions,View submission list and detail,Cannot update submission status,Same as other non-admin roles
+issm,ISSM Dashboard,/issm/dashboard,Full (ISSM-specific),All ISSO profiles,View ISSO workload dashboard: package counts/open POA&Ms/overdue POA&Ms/productivity scores (0-100)/quiz metrics; per-ISSO system breakdown,Cannot modify ISSO profiles from this view,Productivity score formula: starts at 100; -25 overload penalty; -35 POA&M ratio penalty; -40 overdue penalty
+issm,User Management,/admin/users,Read,All user profiles,View all users/roles/assignment counts (read-only),Cannot add/provision/freeze/remove users; no provisioned_token shown,_chk_role check: admin or issm allowed; issm gets read-only view
+issm,Audit Log,/admin/audit,Read,Audit log,View audit log entries; filter by days/action type; paginate,Cannot export audit log,_chk_role check: admin|issm|auditor; issm has read access
+issm,Teams,/systems/{id}/teams,Write,Assigned systems,Create teams and add/remove members for assigned systems,Cannot create teams for unassigned systems,role check: admin|system_owner|issm
+issm,EIS Assessment,/systems/{id}/eis-assessment,Write,Assigned systems,Submit EIS self-assessment; marks system as is_eis=True; creates monitor RMF record,Cannot access if role not isso|issm|admin,Role check: issm or isso
+issm,Artifact Approval,/systems/{id}/artifacts/{art_id}/approve,Write,Assigned systems' artifacts,Approve or reject evidence artifacts (sets approval_status/approved_by/approved_at),Cannot approve artifacts for unassigned systems,role check: admin|issm|auditor
+issm,Role Shell,/switch-role-view,Downward,Can shell into isso|sca + lower roles,Shell into isso/sca/system_owner/auditor/bcdr/pen_tester/data_owner/pmo/incident_responder/employee,Cannot shell to ao or ciso,ROLE_CAN_VIEW_DOWN[issm] = isso + sca + all _LOWER_THAN_ISSO
+isso,Dashboard,/dashboard,Role-scoped,Assigned systems only,View quiz activity/streak; view assigned systems; see POA&M/risk counts per system,Cannot access /admin,Primary workflow is system detail and POA&M management
+isso,Systems,/systems,Role-scoped,Assigned systems only,View system detail; update system controls; view POA&Ms/risks/audit history,Cannot edit system record fields (admin-only edit form),_can_access_system check
+isso,Controls,/controls,Read,All NIST controls,Browse control catalog,Cannot modify system control records for unassigned systems,Read access global
+isso,Controls,/systems/{id}/controls,Write,Assigned systems' controls,Update control status/narrative/responsible_role/implementation_type/inheritance for assigned systems,Cannot update controls for unassigned systems,Creates/upserts SystemControl record
+isso,POA&M,/poam,Role-scoped,Assigned systems' POA&Ms,Full POA&M CRUD; DHS-H lifecycle management; import CSV; export; auto-create from assessment,Cannot manage POA&Ms for unassigned systems,max_packages field limits how many systems ISSO can hold
+isso,Risks,/risks,Role-scoped,Assigned systems' risks,Full risk register CRUD,Cannot delete risks,Standard non-admin risk access
+isso,Observations,/observations,Role-scoped,All observations,View/create/update observations; promote observations to POA&M,Cannot approve artifacts independently,_OBS_ROLES includes isso
+isso,ATO Documents,/ato,Role-scoped,Assigned systems' ATO docs,View ATO package; cannot edit most doc types (isso not in owner_roles by default),Cannot finalize/approve ATO docs,ISSO not in ATO_DOC_TYPES owner_roles or reviewer_roles for most types
+isso,Submissions,Read,/submissions,All submissions,View submission list; create ATO submission for assigned system via /systems/{id}/submit,Cannot update submission status,submission_type: initial|reauthorization|significant_change|annual_review
+isso,Reports,/reports,Role-scoped,Assigned systems,View reports center; generate system compliance reports,Cannot export audit log,Scoped by _user_system_ids
+isso,EIS Assessment,/systems/{id}/eis-assessment,Write,Assigned systems,Submit EIS self-assessment,Cannot access for unassigned systems,Role check: isso|issm
+isso,User Management,N/A,None,N/A,No access,403,ISSO cannot manage users
+isso,Audit Log,N/A,None,N/A,No access to /admin/audit,403,ISSO not in allowed role list for audit
+isso,Role Shell,/switch-role-view,Downward only,Can shell into system_owner|auditor|bcdr|pen_tester|data_owner|pmo|incident_responder|employee,Shell into lower-tier roles,Cannot shell to issm/ao/ciso,ROLE_CAN_VIEW_DOWN[isso] = _LOWER_THAN_ISSO list
+sca,Dashboard,/dashboard,Role-scoped,Assigned systems only,View quiz activity/streak; view assigned systems,Cannot access /admin,SCA has specialized workspace at /sca/workspace
+sca,Upload,/upload,Write,N/A,Upload SSP files (docx/pdf/txt/xlsx/csv) for assessment against NIST catalog,Cannot upload for unassigned systems (SSP is linked post-upload),SCA + admin are the ONLY roles permitted to upload SSPs; check: _is_admin or role == sca
+sca,SCA Workspace,/sca/workspace,Full (SCA-specific),Assigned systems + all ControlEdit records,View assigned systems; view recent control edits (own edits only); view pending uploads for assigned systems,Cannot access if not admin or sca,GET /sca/workspace; role check: admin or sca
+sca,Controls,/controls,Read,All NIST controls,Browse control catalog,Cannot modify catalog,In-memory read
+sca,Controls,/results/{id}/controls/{ctrl}/edit,Write,Assessments where SCA is submitter or assigned to linked system,Edit control fields: narrative_excerpt/responsible_role/implementation_status/proctor_assessment,Cannot edit controls for assessments they are not authorized on,Access check: admin OR asmt.submitted_by == user OR _can_access_system
+sca,Systems,/systems,Role-scoped,Assigned systems only,View system detail; view control plan,Cannot edit/delete system record,Standard non-admin system access
+sca,POA&M,/poam,Role-scoped,Assigned systems' POA&Ms,View/create/update POA&M items,Cannot delete,Standard non-admin POA&M access
+sca,Risks,/risks,Role-scoped,Assigned systems' risks,View/create/update risks,Cannot delete,Standard non-admin risk access
+sca,Observations,/observations,Role-scoped,All observations,View/create/update observations; promote to POA&M,Cannot approve artifacts independently,_OBS_ROLES includes sca
+sca,Reports,/reports,Role-scoped,Assigned systems,View reports,Cannot export audit log,Scoped by _user_system_ids
+sca,Admin Panel,N/A,None,N/A,No access,403,SCA is non-admin
+sca,User Management,N/A,None,N/A,No access,403,SCA cannot manage users
+sca,Audit Log,N/A,None,N/A,No access,403,Not in allowed role list
+sca,Role Shell,/switch-role-view,Downward,Can shell into employee only,Shell into employee role to verify limited access,Cannot shell to any other role,ROLE_CAN_VIEW_DOWN[sca] = ['employee']
+auditor,Dashboard,/dashboard,Role-scoped,Assigned systems only,View quiz activity/streak; view assigned systems,Cannot access /admin,Auditor focuses on assessment and audit trail review
+auditor,Systems,/systems,Role-scoped,Assigned systems only,View system detail; view control plan,Cannot edit/delete system records or manage assignments,Read-only access to system data
+auditor,Controls,/controls,Read,All NIST controls,Browse control catalog,Cannot update system controls,In-memory read
+auditor,POA&M,/poam,Role-scoped,Assigned systems' POA&Ms,View POA&M items; create new items; update status,Cannot delete POA&M items,Standard non-admin access
+auditor,Risks,/risks,Role-scoped,Assigned systems' risks,View risk register; create/update risks,Cannot delete,Standard non-admin risk access
+auditor,Observations,/observations,Role-scoped,All observations,View/create/update observations; promote to POA&M,Cannot approve artifacts independently (auditor CAN approve via /artifacts/approve),_OBS_ROLES includes auditor; artifact approve: admin|issm|auditor
+auditor,ATO Documents,/ato,Role-scoped,Assigned systems' ATO docs,View ATO package; can edit SAP/SAR/3PAO-related doc types (auditor in owner_roles); can review/approve SSP-type docs (auditor in reviewer_roles for SSP),Cannot finalize documents (admin-only),ATO_DOC_TYPES: owner_roles for SAP/SAR/RAR_HIGH/RAR_MOD/TIMELINESS/3PAO_PERF/3PAO_RAR_GUIDE/SAR_APP_A/SAR_APP_B_HIGH/SAR_APP_B_MOD/SAR_APP_B_LOW/ANNUAL_CTRL_SEL/PENTEST_GUIDE/VULN_CONTAINERS = [auditor|admin]
+auditor,Audit Log,/admin/audit,Read,Audit log,View/filter audit log entries; paginate (page size 10-100),Cannot export audit log (admin-only),_chk_role check: admin|issm|auditor — auditor has READ access
+auditor,Reports,/reports,Role-scoped,Assigned systems,View reports center; generate system compliance reports,Cannot export audit log as file,Scoped by _user_system_ids
+auditor,Artifact Approval,/systems/{id}/artifacts/{art_id}/approve,Write,Assigned systems' artifacts,Approve or reject evidence artifacts,Cannot approve artifacts for unassigned systems,role check: admin|issm|auditor
+auditor,Admin Panel,N/A,None,N/A,No access,403,Auditor is non-admin
+auditor,User Management,N/A,None,N/A,No access,403,Cannot manage users
+auditor,SIEM,N/A,None,N/A,No access to /admin/siem,403,SIEM is admin-only
+auditor,Role Shell,N/A,None,N/A,Cannot shell; no entries in ROLE_CAN_VIEW_DOWN for auditor,N/A,auditor not in ROLE_CAN_VIEW_DOWN dict
+bcdr,Dashboard,/dashboard,Role-scoped,Assigned systems only,View quiz activity/streak; view assigned systems,Cannot access /admin,BCDR has specialized dashboard at /bcdr/dashboard
+bcdr,BCDR Dashboard,/bcdr/dashboard,Full (BCDR-specific),All open BCDR events + assigned systems,View pending sign-offs for current user; view open BCDR events with sign-off progress; trigger new BCDR events (drill/incident/recovery/test) via modal,Cannot access if role not bcdr|system_owner|admin,Pending sign-offs filtered to current user; open_events limited to 30; auto-creates BcdrSignoff rows for team members
+bcdr,BCDR Events,/bcdr/events,Write,N/A,Create BCDR events; set system/team/event_type/title/target_rto/target_rpo,Cannot create events for unassigned systems indirectly,POST; auto-creates BcdrSignoff records for team members
+bcdr,BCDR Sign-off,/bcdr/events/{id}/signoff,Write,Own pending sign-offs only,Sign off on BCDR event as the current user with notes,Cannot sign off as another user,POST; requires pending BcdrSignoff record for this user
+bcdr,Systems,/systems,Role-scoped,Assigned systems only,View system detail,Cannot edit/delete system records,Standard non-admin system access
+bcdr,Controls,/controls,Read,All NIST controls,Browse control catalog,Cannot update system controls,In-memory read
+bcdr,POA&M,/poam,Role-scoped,Assigned systems' POA&Ms,View/create/update POA&M items,Cannot delete,Standard non-admin access
+bcdr,Teams,/systems/{id}/teams,Read,Assigned systems' teams,View team membership (needed for BCDR operations),Cannot create teams (system_owner|issm|admin only),GET /systems/{id}/teams returns JSON
+bcdr,Reports,/reports,Role-scoped,Assigned systems,View reports center,Cannot export audit log,Scoped by _user_system_ids
+bcdr,Admin Panel,N/A,None,N/A,No access,403,BCDR is non-admin
+bcdr,User Management,N/A,None,N/A,No access,403,Cannot manage users
+bcdr,Audit Log,N/A,None,N/A,No access,403,Not in allowed role list
+bcdr,Role Shell,N/A,None,N/A,Cannot shell; no entries in ROLE_CAN_VIEW_DOWN for bcdr,N/A,bcdr not in ROLE_CAN_VIEW_DOWN dict
+system_owner,Dashboard,/dashboard,Role-scoped,Assigned systems only,View quiz activity/streak; view assigned systems,Cannot access /admin,System Owner has specialized dashboard at /system-owner/dashboard
+system_owner,System Owner Dashboard,/system-owner/dashboard,Full (SO-specific),Assigned systems only,View owned systems with POA&M/risk/team counts; manage ATO document packages; manage teams; initiate submissions,Cannot access if role not system_owner|admin,Renders system_owner_dashboard.html
+system_owner,Systems,/systems,Role-scoped,Assigned systems only,View system detail; update system controls; view POA&Ms/risks/RMF,Cannot edit system record (admin-only edit form); cannot delete,Standard non-admin access plus control plan edit
+system_owner,Controls,/systems/{id}/controls,Write,Assigned systems' controls,Update control status/narrative/implementation for assigned systems,Cannot update for unassigned systems,Creates/upserts SystemControl records
+system_owner,POA&M,/poam,Role-scoped,Assigned systems' POA&Ms,Full POA&M CRUD; CSV import; export; auto-create from assessment,Cannot manage POA&Ms for unassigned systems,DHS-H lifecycle
+system_owner,Risks,/risks,Role-scoped,Assigned systems' risks,Full risk register CRUD,Cannot delete risks,Standard non-admin risk access
+system_owner,Observations,/observations,Role-scoped,All observations,View/create/update observations; promote to POA&M,Cannot approve artifacts independently,_OBS_ROLES includes system_owner
+system_owner,ATO Documents,/ato,Role-scoped,Assigned systems' ATO docs,View ATO matrix; edit most core doc types where system_owner is in owner_roles; submit for review,Cannot finalize/approve ATO docs,system_owner is in owner_roles for: FIPS199/SSP/ABD/NET_DIAGRAM/HW_INV/SW_INV/IRP/CP/CPT/CMP/CONMON/PTA/PIA/ROB/ISA/POAM + many FedRAMP appendices
+system_owner,Teams,/systems/{id}/teams,Write,Assigned systems,Create/manage teams; add/remove team members,Cannot manage teams for unassigned systems,role check: admin|system_owner|issm
+system_owner,BCDR,/bcdr/dashboard,Write,All BCDR events + assigned systems,View and trigger BCDR events; sign off events,Cannot access if not bcdr|system_owner|admin,system_owner has same BCDR access as bcdr role
+system_owner,Reports,/reports,Role-scoped,Assigned systems,View reports; generate system compliance reports,Cannot export audit log,Scoped by _user_system_ids
+system_owner,Submissions,/systems/{id}/submit,Write,Assigned systems,Create ATO submission package (initial/reauth/significant_change/annual_review); set authorization_type/term_months,Cannot update submission status (admin-only),submission creates Submission record with control snapshot
+system_owner,EIS Assessment,/systems/{id}/eis-assessment,None,N/A,Cannot access; restricted to isso|issm roles,403 returned,role check: isso|issm only
+system_owner,Admin Panel,N/A,None,N/A,No access,403,system_owner is non-admin
+system_owner,User Management,N/A,None,N/A,No access,403,Cannot manage users
+system_owner,Audit Log,N/A,None,N/A,No access,403,Not in allowed role list
+system_owner,Role Shell,N/A,None,N/A,Cannot shell; not in ROLE_CAN_VIEW_DOWN,N/A,system_owner not in ROLE_CAN_VIEW_DOWN dict
+pen_tester,Dashboard,/dashboard,Role-scoped,Assigned systems only,View quiz activity/streak; view assigned systems,Cannot access /admin,pen_tester is in _LOWER_THAN_ISSO and _VALID_SHELL_ROLES
+pen_tester,Systems,/systems,Role-scoped,Assigned systems only,View system detail,Cannot edit/delete system records; cannot manage controls,Read-only system access
+pen_tester,Controls,/controls,Read,All NIST controls,Browse control catalog,Cannot update system controls,In-memory read
+pen_tester,POA&M,/poam,Role-scoped,Assigned systems' POA&Ms,View/create/update POA&M items (pen_tester may create POA&Ms from findings),Cannot delete,Standard non-admin access; detection_source can be 'pentest'
+pen_tester,Risks,/risks,Role-scoped,Assigned systems' risks,View/create/update risks (pen_tester can log risks from findings),Cannot delete,Standard non-admin risk access
+pen_tester,Observations,/observations,None,N/A,Cannot access observations,403,pen_tester NOT in _OBS_ROLES
+pen_tester,ATO Documents,/ato,Role-scoped,Assigned systems,View ATO package only; cannot edit any doc type,Cannot edit/approve/finalize any documents,pen_tester not in any ATO_DOC_TYPES owner_roles or reviewer_roles
+pen_tester,Reports,/reports,Role-scoped,Assigned systems,View reports center,Cannot export audit log,Scoped by _user_system_ids
+pen_tester,Admin Panel,N/A,None,N/A,No access,403,pen_tester is non-admin
+pen_tester,User Management,N/A,None,N/A,No access,403,Cannot manage users
+pen_tester,Audit Log,N/A,None,N/A,No access,403,Not in allowed role list
+pen_tester,Role Shell,N/A,None,N/A,Cannot shell; not in ROLE_CAN_VIEW_DOWN,N/A,pen_tester not in ROLE_CAN_VIEW_DOWN dict; can be shelled INTO by isso/issm/ao/ciso/admin
+incident_responder,Dashboard,/dashboard,Role-scoped,Assigned systems only,View quiz activity/streak; view assigned systems,Cannot access /admin,incident_responder is in _LOWER_THAN_ISSO
+incident_responder,Systems,/systems,Role-scoped,Assigned systems only,View system detail,Cannot edit/delete system records,Read-only system access
+incident_responder,Controls,/controls,Read,All NIST controls,Browse control catalog,Cannot update system controls,In-memory read
+incident_responder,POA&M,/poam,Role-scoped,Assigned systems' POA&Ms,View/create/update POA&M items,Cannot delete,Standard non-admin access
+incident_responder,Risks,/risks,Role-scoped,Assigned systems' risks,View/create/update risks,Cannot delete,Standard non-admin risk access
+incident_responder,Observations,/observations,None,N/A,Cannot access observations,403,incident_responder NOT in _OBS_ROLES
+incident_responder,ATO Documents,/ato,Role-scoped,Assigned systems,View ATO package only,Cannot edit/approve/finalize any documents,incident_responder not in any ATO_DOC_TYPES roles
+incident_responder,Reports,/reports,Role-scoped,Assigned systems,View reports center,Cannot export audit log,Scoped by _user_system_ids
+incident_responder,Admin Panel,N/A,None,N/A,No access,403,Non-admin role
+incident_responder,User Management,N/A,None,N/A,No access,403,Cannot manage users
+incident_responder,Audit Log,N/A,None,N/A,No access,403,Not in allowed role list
+incident_responder,Role Shell,N/A,None,N/A,Cannot shell,N/A,incident_responder not in ROLE_CAN_VIEW_DOWN; can be shelled INTO
+data_owner,Dashboard,/dashboard,Role-scoped,Assigned systems only,View quiz activity/streak; view assigned systems,Cannot access /admin,data_owner is in _LOWER_THAN_ISSO
+data_owner,Systems,/systems,Role-scoped,Assigned systems only,View system detail,Cannot edit/delete system records,Read-only system access
+data_owner,Controls,/controls,Read,All NIST controls,Browse control catalog,Cannot update system controls,In-memory read
+data_owner,POA&M,/poam,Role-scoped,Assigned systems' POA&Ms,View/create/update POA&M items,Cannot delete,Standard non-admin access
+data_owner,Risks,/risks,Role-scoped,Assigned systems' risks,View/create/update risks,Cannot delete,Standard non-admin risk access
+data_owner,Observations,/observations,None,N/A,Cannot access observations,403,data_owner NOT in _OBS_ROLES
+data_owner,ATO Documents,/ato,Role-scoped,Assigned systems,View ATO package only,Cannot edit/approve/finalize,data_owner not in any ATO_DOC_TYPES roles
+data_owner,Reports,/reports,Role-scoped,Assigned systems,View reports center,Cannot export audit log,Scoped by _user_system_ids
+data_owner,Admin Panel,N/A,None,N/A,No access,403,Non-admin role
+data_owner,User Management,N/A,None,N/A,No access,403,Cannot manage users
+data_owner,Audit Log,N/A,None,N/A,No access,403,Not in allowed role list
+data_owner,Role Shell,N/A,None,N/A,Cannot shell,N/A,data_owner not in ROLE_CAN_VIEW_DOWN; can be shelled INTO
+pmo,Dashboard,/dashboard,Role-scoped,Assigned systems only,View quiz activity/streak; view assigned systems,Cannot access /admin,pmo is in _LOWER_THAN_ISSO
+pmo,Systems,/systems,Role-scoped,Assigned systems only,View system detail,Cannot edit/delete system records,Read-only system access
+pmo,Controls,/controls,Read,All NIST controls,Browse control catalog,Cannot update system controls,In-memory read
+pmo,POA&M,/poam,Role-scoped,Assigned systems' POA&Ms,View/create/update POA&M items,Cannot delete,Standard non-admin access
+pmo,Risks,/risks,Role-scoped,Assigned systems' risks,View/create/update risks,Cannot delete,Standard non-admin risk access
+pmo,Observations,/observations,None,N/A,Cannot access observations,403,pmo NOT in _OBS_ROLES
+pmo,ATO Documents,/ato,Role-scoped,Assigned systems,View ATO package only,Cannot edit/approve/finalize,pmo not in any ATO_DOC_TYPES roles
+pmo,Submissions,/submissions,Read,All submissions (global),View submission list and detail for all systems,Cannot update/create submissions directly (must be assigned and use /systems/{id}/submit),Global submission list is not scoped for non-admins in submissions list view
+pmo,Reports,/reports,Role-scoped,Assigned systems,View reports center; generate system compliance reports,Cannot export audit log,Scoped by _user_system_ids
+pmo,Admin Panel,N/A,None,N/A,No access,403,Non-admin role
+pmo,User Management,N/A,None,N/A,No access,403,Cannot manage users
+pmo,Audit Log,N/A,None,N/A,No access,403,Not in allowed role list
+pmo,Role Shell,N/A,None,N/A,Cannot shell,N/A,pmo not in ROLE_CAN_VIEW_DOWN; can be shelled INTO
+employee,Dashboard,/dashboard,Self-scoped,Own quiz activity + assigned systems only,View own daily quiz (streak/score/week calendar); view assigned systems; take daily quiz at /dashboard/quiz; submit quiz at /dashboard/quiz/submit,Cannot access /admin; cannot view other users' data,Primary entry point for all non-specialized users; quiz pass threshold from config.yaml (default 75%)
+employee,Dashboard Quiz,/dashboard/quiz,Self-scoped,Own quiz for today,Take today's 15-question (configurable) daily quiz; quiz domains optionally filtered per profile,Cannot retake quiz same day (once per day limit),Renders daily_quiz.html
+employee,Dashboard Quiz,/dashboard/quiz/submit,Self-scoped,Own quiz result,Submit quiz answers; score recorded in DailyQuizActivity; updates streak,Cannot submit on behalf of another user,DailyQuizActivity records remote_user/quiz_date/score/passed
+employee,Profile,/profile,Self-scoped,Own UserProfile,View/edit own profile: display_name/email/department/notifications_email/notifications_quiz/quiz_domains,Cannot change own role,GET+POST; max_packages shown but editable only by admin
+employee,Systems,/systems,Role-scoped,Assigned systems only,View system detail; view control status,Cannot create/edit/delete systems; cannot manage assignments,_can_access_system check; unassigned systems return 403
+employee,Controls,/controls,Read,All NIST controls,Browse control catalog,Cannot update any system controls (requires assignment),In-memory read; no DB write possible
+employee,POA&M,/poam,Role-scoped,Assigned systems' POA&Ms,View POA&M items for assigned systems; create/update POA&M items,Cannot delete POA&M items,Non-admin is_adm=False so system scope applied
+employee,Risks,/risks,Role-scoped,Assigned systems' risks,View/create/update risks for assigned systems,Cannot delete risks,Standard non-admin access
+employee,Observations,/observations,None,N/A,Cannot access observations,403 returned,employee NOT in _OBS_ROLES
+employee,ATO Documents,/ato,Role-scoped,Assigned systems' ATO packages,View ATO package matrix/per-system page; view document detail,Cannot edit/approve/finalize any document (employee not in any owner_roles or reviewer_roles),employee is in _LOWER_THAN_ISSO but has no special ATO permissions
+employee,Reports,/reports,Role-scoped,Assigned systems,View aggregated reports center; generate system compliance reports,Cannot export audit log; cannot view global SIEM,Scoped by _user_system_ids
+employee,SIEM,N/A,None,N/A,No access to /admin/siem,403,SIEM is admin-only
+employee,Admin Panel,N/A,None,N/A,No access to /admin,403,employee is non-admin
+employee,User Management,N/A,None,N/A,No access to /admin/users,403,Cannot manage users
+employee,Audit Log,N/A,None,N/A,No access to /admin/audit,403,employee not in allowed role list
+employee,Global Search,/search,Role-scoped,Assigned systems' data,Search systems/POA&Ms/risks/controls; NIST control keyword search,Cannot see systems or items not in their scope,Results scoped by _user_system_ids for non-admins
+employee,Role Shell,N/A,None,N/A,Cannot shell into any other role,N/A,employee not in ROLE_CAN_VIEW_DOWN; is the lowest shell target

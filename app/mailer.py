@@ -15,7 +15,7 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Tuple
 
 log = logging.getLogger("blacksite.mailer")
 
@@ -361,5 +361,160 @@ def forward_assessment(
     msg["From"]    = from_addr
     msg["To"]      = employee_email
     msg.attach(MIMEText(html_body, "html"))
+
+    return _smtp_send(config, msg)
+
+
+def send_welcome_email(
+    config: dict,
+    username: str,
+    display_name: str,
+    temp_password: str,
+    role: str,
+    recipient_email: str,
+) -> bool:
+    """
+    Send a new-user welcome email with temporary credentials.
+    Called during admin provisioning flow.
+    """
+    email_cfg = config.get("email", {})
+    if not email_cfg.get("enabled", False):
+        log.info("Email disabled — skipping welcome email for %s.", username)
+        return False
+    if not recipient_email:
+        log.warning("send_welcome_email: no email address for %s — skipping.", username)
+        return False
+
+    from_addr = email_cfg.get("from_address", "BLACKSITE <daniel@thekramerica.com>")
+    base_url  = config.get("app", {}).get("base_url", "https://blacksite.borisov.network")
+    app_name  = config.get("app", {}).get("name", "BLACKSITE")
+
+    role_label = {
+        "employee": "Employee", "isso": "ISSO", "issm": "ISSM",
+        "sca": "SCA", "ao": "Authorizing Official", "auditor": "Auditor",
+        "system_owner": "System Owner", "bcdr": "BCDR",
+    }.get(role, role.title())
+
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/></head>
+<body style="background:#0a0a0f;color:#e0e0e0;font-family:Inter,Roboto,sans-serif;
+             padding:24px;max-width:640px;margin:auto">
+  <div style="border-bottom:2px solid #00ffcc;padding-bottom:12px;margin-bottom:24px">
+    <span style="font-size:1.4em;font-weight:900;letter-spacing:2px;color:#fff">{app_name}</span>
+    <span style="margin-left:12px;color:#888;font-size:0.9em">Account Created</span>
+  </div>
+
+  <p>Hi {display_name or username},</p>
+  <p>Your <strong>{app_name}</strong> account has been created. Use the credentials below to log in.</p>
+
+  <div style="background:#111122;border:1px solid #00ffcc33;border-radius:6px;
+              padding:20px 24px;margin:20px 0;font-family:monospace">
+    <div style="margin-bottom:10px">
+      <span style="color:#888;font-size:0.8em;letter-spacing:1px;text-transform:uppercase">Login URL</span><br/>
+      <span style="color:#00ffcc">{base_url}</span>
+    </div>
+    <div style="margin-bottom:10px">
+      <span style="color:#888;font-size:0.8em;letter-spacing:1px;text-transform:uppercase">Username</span><br/>
+      <span style="color:#fff;font-size:1.1em">{username}</span>
+    </div>
+    <div>
+      <span style="color:#888;font-size:0.8em;letter-spacing:1px;text-transform:uppercase">Temporary Password</span><br/>
+      <span style="color:#ffd700;font-size:1.1em">{temp_password}</span>
+    </div>
+  </div>
+
+  <div style="background:rgba(244,67,54,0.08);border-left:3px solid #f44336;
+              border-radius:0 4px 4px 0;padding:10px 14px;margin:16px 0;font-size:0.85em">
+    <strong style="color:#f44336">Security:</strong> This is a temporary password.
+    Change it immediately after your first login via your profile settings.
+    Do not share this email.
+  </div>
+
+  <p style="color:#aaa;font-size:0.9em">
+    Your role is <strong style="color:#00ffcc">{role_label}</strong>.
+    Contact your administrator if you need access adjustments.
+  </p>
+
+  <p style="margin-top:28px;font-size:0.72em;color:#444">
+    {app_name} — This is an automated message. Do not reply.
+  </p>
+</body>
+</html>"""
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"[{app_name}] Your account has been created"
+    msg["From"]    = from_addr
+    msg["To"]      = recipient_email
+    msg.attach(MIMEText(html_body, "html"))
+
+    return _smtp_send(config, msg)
+
+
+def send_bundle(
+    config: dict,
+    zip_path: "Path",
+    recipient_email: str,
+    recipient_name: str,
+    date_label: str,
+    file_count: int,
+) -> bool:
+    """
+    Email the daily work-product bundle zip to the requesting user.
+    zip_path:        Path to the .zip file
+    recipient_email: Email address of the requesting user
+    date_label:      Human-readable date e.g. "03-01-2026"
+    file_count:      Number of items in the bundle
+    """
+    email_cfg = config.get("email", {})
+    if not email_cfg.get("enabled", False):
+        log.info("Email disabled — skipping bundle send.")
+        return False
+    if not recipient_email:
+        log.warning("send_bundle: no recipient email — skipping.")
+        return False
+
+    from_addr = email_cfg.get("from_address", "BLACKSITE <daniel@thekramerica.com>")
+    app_name  = config.get("app", {}).get("name", "BLACKSITE")
+    zip_name  = zip_path.name
+
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/></head>
+<body style="background:#0a0a0f;color:#e0e0e0;font-family:Inter,Roboto,sans-serif;
+             padding:24px;max-width:640px;margin:auto">
+  <div style="border-bottom:2px solid #00ffcc;padding-bottom:12px;margin-bottom:20px">
+    <span style="font-size:1.4em;font-weight:900;letter-spacing:2px;color:#fff">{app_name}</span>
+    <span style="margin-left:12px;color:#888;font-size:0.9em">Daily Work Bundle</span>
+  </div>
+  <p>Hi {recipient_name},</p>
+  <p>Your daily work-product bundle for <strong>{date_label}</strong> is attached.</p>
+  <p style="color:#aaa;font-size:0.85em">
+    Items in bundle: <strong style="color:#00ffcc">{file_count}</strong><br/>
+    Zip file: <code style="color:#ffd700">{zip_name}</code>
+  </p>
+  <p style="color:#888;font-size:0.75em">
+    The bundle includes an <code>INDEX.md</code> file listing each item with its
+    purpose, generation timestamp, and speed-up suggestions.
+  </p>
+  <p style="margin-top:28px;font-size:0.7em;color:#444">
+    {app_name} — Automated daily bundle. Do not reply.
+  </p>
+</body>
+</html>"""
+
+    msg = MIMEMultipart("mixed")
+    msg["Subject"] = f"[{app_name}] Daily Work Bundle — {date_label} ({file_count} items)"
+    msg["From"]    = from_addr
+    msg["To"]      = recipient_email
+    msg.attach(MIMEText(html_body, "html"))
+
+    if zip_path.exists():
+        with open(zip_path, "rb") as f:
+            part = MIMEBase("application", "zip")
+            part.set_payload(f.read())
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", f'attachment; filename="{zip_name}"')
+        msg.attach(part)
 
     return _smtp_send(config, msg)

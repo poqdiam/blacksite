@@ -1,0 +1,135 @@
+ERROR_500_ROOT_CAUSE_SSP_ANALYZER.txt
+BLACKSITE — SSP Analyzer PDF Download Root Cause Analysis
+Generated: 2026-03-01
+=============================================================
+
+SYMPTOM
+-------
+GET /admin/ssp/review/{id}/pdf → HTTP 500 for all SSP review IDs.
+User sees generic BLACKSITE 500 error page with no event reference.
+No PDF is served.
+
+
+ROOT CAUSE — LAYER 1 (Primary Failure)
+---------------------------------------
+Python version incompatibility with reportlab 4.4.3.
+
+The server runs Python 3.8 (Ubuntu 20.04 FIPS kernel, confirmed):
+  python3 --version → Python 3.8.10
+
+reportlab 4.4.3 (installed) introduced a call to:
+  hashlib.md5(data, usedforsecurity=False)
+
+The `usedforsecurity` keyword argument was added in Python 3.9 (PEP 644).
+On Python 3.8 this raises:
+  TypeError: 'usedforsecurity' is an invalid keyword argument for md5()
+
+This exception is raised inside reportlab's internal canvas initialisation,
+which is called from _generate_ssp_pdf() before any content is written.
+The exception propagates up to the route handler.
+
+Stack trace (from journalctl -u blacksite, session 2026-03-01):
+  File ".venv/lib/python3.8/site-packages/reportlab/lib/utils.py", line 217, in md5
+    return hashlib.md5(data, usedforsecurity=False)
+  TypeError: 'usedforsecurity' is an invalid keyword argument for md5()
+
+Evidence captured in log:
+  Route: GET /admin/ssp/review/1/pdf
+  User: dan
+  System: BLACKSITE (BSV)
+  findings count: 24
+  analysis_json_bytes: ~8200
+
+
+ROOT CAUSE — LAYER 2 (Secondary Failure, masked primary)
+----------------------------------------------------------
+The route's except block attempted to render "error_pdf.html", which did not
+exist in the templates/ directory.  This raised a secondary exception:
+  jinja2.exceptions.TemplateNotFound: error_pdf.html
+
+Because this secondary exception was unhandled inside the except block, it
+propagated to the global Starlette exception handler, which returned a bare
+HTTP 500 with no event reference, no user-facing context, and no retry path.
+
+The net effect: both the primary TypeError and the secondary TemplateNotFound
+were swallowed — logs showed the TypeError only on first inspection because
+the TemplateNotFound was raised in the except handler itself.
+
+
+DATA INPUTS AT TIME OF FAILURE
+--------------------------------
+Review ID:    1
+System:       BLACKSITE (abbreviation: BSV)
+Uploaded at:  2026-03-01 (non-None — not a null date issue)
+Analysis JSON: present and valid (~8.2 KB)
+findings:     24 items (list of dicts, all well-formed)
+reportlab:    4.4.3
+Python:       3.8.10
+
+
+FIX APPLIED
+-----------
+1. Downgraded reportlab to 3.6.12 (last version fully compatible with Python 3.8):
+     pip install "reportlab==3.6.12"
+   Pinned in requirements.txt.
+   Confirmed 3.6.12 does NOT use the usedforsecurity kwarg.
+
+2. Created templates/error_pdf.html:
+   - Themed BLACKSITE dark-terminal aesthetic (extends base.html)
+   - Displays: "PDF GENERATION FAILED — Event Ref: SSP-{req_id}"
+   - Shows truncated error message (max 200 chars, no stack trace)
+   - Buttons: Retry Download, Back to Review, SSP Analyzer
+   - Diagnostic block: route, timestamp, event ref
+
+3. Updated admin_ssp_pdf route (app/main.py):
+   - Wrapped pdf_bytes = _generate_ssp_pdf(rev, findings) in try/except Exception
+   - On exception:
+       req_id = str(uuid.uuid4())[:8]
+       log.exception("SSP PDF [%s] FAILED | review_id=%s | user=%s | system=%r | "
+                     "findings=%d | analysis_json_bytes=%d | exc=%s",
+                     req_id, review_id, user, rev.system_name, len(findings),
+                     len(rev.analysis_json or ""), _pdf_exc)
+       return TemplateResponse("error_pdf.html", {
+           **_tpl_ctx(request), "request": request,
+           "now": datetime.now(timezone.utc),
+           "req_id": req_id, "error": str(_pdf_exc),
+       }, status_code=500)
+
+4. Added hx-boost="false" to PDF download link in admin_ssp_review.html
+   so HTMX does not intercept the binary file download response.
+
+5. Added error state display in admin_ssp_review.html when rev.status == "error".
+
+
+VERIFICATION
+------------
+After fix, confirmed with:
+
+  # Direct download test
+  curl -s -o /tmp/test.pdf -w "%{http_code} %{size_download}" \
+    -H "Remote-User: dan" \
+    http://127.0.0.1:8100/admin/ssp/review/1/pdf
+
+  Result:  200  76652
+  file /tmp/test.pdf: PDF document, version 1.4
+
+  # Service log — no TypeError or TemplateNotFound after restart
+  journalctl -u blacksite -n 30 --no-pager
+  → No reportlab errors present ✓
+
+  # Admin UI
+  GET /admin/ssp/review/1 → Download Report button shows, hx-boost=false confirmed ✓
+
+
+REGRESSION RISK
+---------------
+reportlab 3.6.12 vs 4.4.3:
+  - API surface used in _generate_ssp_pdf is stable across 3.x → 4.x
+    (SimpleDocTemplate, Paragraph, Spacer, Table, colors, styles)
+  - No known regressions in existing PDF content
+  - Pin in requirements.txt prevents accidental future upgrade
+
+
+OPEN ITEMS
+----------
+None. PDF generation fully operational post-fix.

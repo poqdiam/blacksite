@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — EIS Assessment — {{ system.name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/systems">Systems</a>
+  <span class="sep">/</span>
+  <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+  <span class="sep">/</span>
+  <span>EIS Assessment</span>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:24px;flex-wrap:wrap">
+  <h1 style="margin:0">EIS Annual Self-Assessment</h1>
+  <span class="text-muted" style="font-size:.85em">{{ system.name }}</span>
+</div>
+
+<div style="max-width:600px">
+  <div class="card" style="padding:20px;margin-bottom:20px;border-color:rgba(0,255,204,.2)">
+    <div class="card-title">External IT System Designation</div>
+    <p style="font-size:.88em;color:var(--muted);line-height:1.7">
+      An External IT System (EIS) operates outside the authorization boundary and is not subject
+      to an AO authorization decision. The ISSO completes this annual self-assessment to document
+      the system's status and any security considerations.
+    </p>
+  </div>
+
+  <div class="card" style="padding:24px">
+    <div class="section-header">EIS Self-Assessment</div>
+    <form method="post" action="/systems/{{ system.id }}/eis-assessment">
+      <div style="display:grid;gap:16px">
+        <div style="background:rgba(255,255,255,.02);border-radius:6px;padding:14px;font-size:.82em;color:var(--muted)">
+          <strong style="color:var(--text)">Submitting this assessment will:</strong>
+          <ul style="margin:8px 0 0 18px;line-height:1.8">
+            <li>Designate <strong style="color:var(--cyan)">{{ system.name }}</strong> as an EIS</li>
+            <li>Exclude this system from AO decision queue</li>
+            <li>Create an RMF Monitor step record</li>
+            <li>Log the assessment in the audit trail</li>
+          </ul>
+        </div>
+
+        <div>
+          <label class="form-label">Assessment Notes / Justification</label>
+          <textarea name="notes" class="form-control" style="min-height:120px;resize:vertical"
+                    placeholder="Describe why this system is classified as EIS and any relevant security considerations…"></textarea>
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button type="submit" class="btn btn-primary"
+                  onclick="return confirm('Mark {{ system.name }} as EIS and submit assessment?')">
+            Submit EIS Assessment →
+          </button>
+          <a href="/systems/{{ system.id }}" class="btn btn-ghost">Cancel</a>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

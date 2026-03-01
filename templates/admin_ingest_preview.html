@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Import Preview — {{ job.ingest_type | title }}{% endblock %}
+
+{% block content %}
+<div class="page-header" style="margin-bottom:8px">
+  <div style="display:flex;align-items:center;gap:14px">
+    <a href="/admin/ingest" class="btn btn-ghost btn-sm" style="font-size:0.78em">← Back</a>
+    <h1 style="margin:0;font-size:1.4em;letter-spacing:1px">
+      IMPORT PREVIEW — {{ job.ingest_type | upper }}
+    </h1>
+  </div>
+  <p style="margin:4px 0 0;color:var(--muted);font-size:0.85em">
+    File: <strong style="color:var(--text)">{{ job.filename }}</strong> ·
+    {{ rows | length }} rows ready ·
+    {% if job.error_count %}
+    <span style="color:var(--red)">{{ job.error_count }} skipped (missing required field)</span> ·
+    {% endif %}
+    No changes have been made yet. Review and confirm below.
+  </p>
+</div>
+
+{# ── Unknown fields warning ───────────────────────────────────────────────── #}
+{% if unknown_fields %}
+<div style="background:rgba(255,179,0,0.07);border-left:3px solid rgba(255,179,0,0.5);
+            border-radius:6px;padding:12px 16px;margin-bottom:18px;font-size:0.83em">
+  <strong style="color:var(--yellow)">⚠ Unrecognized columns — ignored</strong><br>
+  <span style="color:var(--muted)">
+    The following column headers were not recognized and will <em>not</em> be imported.
+    Data in these columns is discarded:
+  </span>
+  <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">
+    {% for f in unknown_fields %}
+    <code style="background:rgba(255,179,0,0.1);color:var(--yellow);
+                 padding:2px 8px;border-radius:4px;font-size:0.85em">{{ f }}</code>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ── System import notice ─────────────────────────────────────────────────── #}
+{% if job.ingest_type == 'systems' %}
+<div style="background:rgba(0,255,204,0.05);border-left:3px solid rgba(0,255,204,0.3);
+            border-radius:6px;padding:12px 16px;margin-bottom:18px;font-size:0.83em">
+  <strong style="color:var(--cyan)">ℹ System import rules</strong><br>
+  <span style="color:var(--muted)">
+    All systems will be created with <code>auth_status = not_authorized</code>.
+    Role assignments (ISSO, System Owner, etc.) must be made separately.
+    Duplicate <code>inventory_number</code> values may cause constraint errors on commit.
+  </span>
+</div>
+{% endif %}
+
+{# ── Value warnings (enums that didn't map cleanly) ───────────────────────── #}
+{% set warn_rows = rows | selectattr('__keys__', 'defined') | list %}
+{# Jinja can't introspect dict keys like Python; use JS to surface _warn_ fields instead #}
+
+{# ── Data table ───────────────────────────────────────────────────────────── #}
+{% if rows %}
+{% set all_keys = [] %}
+{% for row in rows %}
+  {% for k in row.keys() %}
+    {% if not k.startswith('_') and k not in all_keys %}
+      {% set _ = all_keys.append(k) %}
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+
+<div style="overflow-x:auto;margin-bottom:20px">
+<table style="width:100%;border-collapse:collapse;font-size:0.8em;min-width:600px">
+  <thead>
+    <tr style="background:rgba(0,0,0,0.3)">
+      <th style="padding:8px 10px;text-align:left;color:var(--muted);
+                 border-bottom:1px solid var(--border);white-space:nowrap">#</th>
+      {% for key in all_keys %}
+      <th style="padding:8px 10px;text-align:left;color:var(--muted);
+                 border-bottom:1px solid var(--border);white-space:nowrap">
+        {{ key }}
+      </th>
+      {% endfor %}
+      <th style="padding:8px 10px;text-align:left;color:var(--muted);
+                 border-bottom:1px solid var(--border)">Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in rows %}
+  <tr style="border-bottom:1px solid rgba(255,255,255,0.04);
+             {% if loop.index is odd %}background:rgba(0,0,0,0.12){% endif %}">
+    <td style="padding:6px 10px;color:var(--muted)">{{ loop.index }}</td>
+    {% for key in all_keys %}
+    <td style="padding:6px 10px;max-width:200px;overflow:hidden;
+               text-overflow:ellipsis;white-space:nowrap"
+        title="{{ row.get(key, '') }}">
+      {{ row.get(key, '') or '—' }}
+    </td>
+    {% endfor %}
+    <td style="padding:6px 10px;font-size:0.78em">
+      {# Surface any _warn_ fields #}
+      {% set warn_notes = [] %}
+      {% for k, v in row.items() %}
+        {% if k.startswith('_warn_') %}
+          {% set fn = k[6:] %}
+          {% set _ = warn_notes.append(fn ~ '=' ~ v ~ ' (invalid, will use default)') %}
+        {% endif %}
+      {% endfor %}
+      {% if warn_notes %}
+      <span style="color:var(--yellow)" title="{{ warn_notes | join(' | ') }}">
+        ⚠ {{ warn_notes | length }} warn{{ 's' if warn_notes | length > 1 else '' }}
+      </span>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{# ── Confirm / Cancel ─────────────────────────────────────────────────────── #}
+<div style="display:flex;gap:12px;align-items:center;padding:16px 0;
+            border-top:1px solid var(--border)">
+  <form method="post" action="/admin/ingest/commit/{{ job.id }}"
+        onsubmit="this.querySelector('button').disabled=true;
+                  this.querySelector('button').textContent='Committing…'">
+    <button type="submit" class="btn btn-primary" style="padding:10px 28px">
+      ✓ Commit {{ rows | length }} {{ 'Users' if job.ingest_type == 'users' else 'Systems' }}
+    </button>
+  </form>
+  <a href="/admin/ingest" class="btn btn-ghost" style="padding:10px 20px">
+    Cancel
+  </a>
+  <span style="color:var(--muted);font-size:0.8em;margin-left:auto">
+    {% if job.error_count %}{{ job.error_count }} row(s) skipped — missing required field.{% endif %}
+  </span>
+</div>
+
+{% else %}
+<div class="card" style="padding:32px;text-align:center;color:var(--muted)">
+  No valid rows were parsed from the uploaded file.
+  <a href="/admin/ingest" style="color:var(--cyan);display:block;margin-top:12px">← Try again</a>
+</div>
+{% endif %}
+
+{% endblock %}

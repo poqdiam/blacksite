@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Restore Tests: {{ system.name }}{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+  <div>
+    <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">
+      <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a> / Restore Tests
+    </div>
+    <h1 style="font-size:1.3em;margin:0">Backup Restore Test Records</h1>
+  </div>
+  <button class="btn btn-primary btn-sm" onclick="document.getElementById('add-form').style.display='block';this.style.display='none'">
+    + Log Restore Test
+  </button>
+</div>
+
+<div id="add-form" style="display:none" class="card" style="padding:20px;margin-bottom:16px">
+  <form method="post" action="/systems/{{ system.id }}/restore-tests">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div>
+        <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Test Date *</label>
+        <input type="date" name="test_date" value="{{ today }}" required style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Result</label>
+        <select name="result" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em">
+          <option value="pass">Pass</option>
+          <option value="partial">Partial</option>
+          <option value="fail">Fail</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Time to Restore (min)</label>
+        <input type="number" name="time_to_restore_min" min="0" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em">
+      </div>
+      <div>
+        <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Validated By</label>
+        <input type="text" name="validated_by" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em">
+      </div>
+    </div>
+    <div style="margin-bottom:10px">
+      <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Scope</label>
+      <textarea name="scope" rows="2" placeholder="What was restored..." style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em;resize:vertical"></textarea>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:0.72em;color:var(--muted);margin-bottom:3px">Notes</label>
+      <textarea name="notes" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px;color:var(--text);font-size:0.88em;resize:vertical"></textarea>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button type="submit" class="btn btn-primary">Save Record</button>
+      <button type="button" class="btn btn-ghost" onclick="document.getElementById('add-form').style.display='none'">Cancel</button>
+    </div>
+  </form>
+</div>
+
+{% if records %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table>
+    <thead>
+      <tr><th>Date</th><th>Scope</th><th>Result</th><th>RTO (min)</th><th>Validated By</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      {% for r in records %}
+      <tr>
+        <td class="mono" style="font-size:0.85em;white-space:nowrap">{{ r.test_date }}</td>
+        <td style="font-size:0.85em;color:var(--muted);max-width:200px">{{ r.scope or '—' }}</td>
+        <td>
+          <span style="font-weight:700;font-size:0.85em;color:{% if r.result == 'pass' %}var(--green){% elif r.result == 'partial' %}var(--yellow){% else %}var(--red){% endif %}">
+            {{ r.result | upper }}
+          </span>
+        </td>
+        <td style="text-align:center;font-size:0.85em">{{ r.time_to_restore_min or '—' }}</td>
+        <td style="font-size:0.82em;color:var(--muted)">{{ r.validated_by or '—' }}</td>
+        <td style="font-size:0.8em;color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.notes or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="padding:48px;text-align:center">
+  <div style="color:var(--muted);font-size:0.9em">No restore test records. Log a test to demonstrate BCDR readiness.</div>
+</div>
+{% endif %}
+{% endblock %}

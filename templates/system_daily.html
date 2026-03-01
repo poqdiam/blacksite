@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Daily Ops: {{ system.name }}{% endblock %}
+
+{% block head %}
+<style>
+  .task-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; margin-bottom:24px; }
+  .task-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    padding:16px; display:flex; flex-direction:column; gap:8px;
+    transition:border-color 0.15s;
+  }
+  .task-card.done { border-color:var(--green); }
+  .task-card.done .task-num { color:var(--green); }
+  .task-num { font-size:0.6em; font-weight:700; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+  .task-label { font-size:0.9em; font-weight:600; }
+  .task-check { margin-left:auto; }
+  .task-check input[type=checkbox] { width:20px; height:20px; accent-color:var(--green); cursor:pointer; }
+  .task-action { font-size:0.78em; color:var(--cyan); text-decoration:none; }
+  .task-action:hover { text-decoration:underline; }
+  .metric-strip { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:24px; }
+  @media(max-width:640px){ .metric-strip{grid-template-columns:repeat(2,1fr);} }
+  .metric-tile {
+    background:var(--surface); border:1px solid var(--border); border-radius:6px;
+    padding:12px; text-align:center;
+  }
+  .metric-val { font-size:1.5em; font-weight:900; }
+  .metric-lbl { font-size:0.6em; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-top:2px; }
+  .rot-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:20px;
+  }
+  .progress-bar-bg { background:var(--bg); border-radius:4px; height:6px; margin-top:8px; }
+  .progress-bar-fill { background:var(--cyan); border-radius:4px; height:6px; }
+  .holiday-badge {
+    display:inline-block; background:rgba(244,67,54,0.1); color:var(--red);
+    border:1px solid rgba(244,67,54,0.3); border-radius:4px;
+    padding:2px 8px; font-size:0.72em; font-weight:700; letter-spacing:1px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+  <div>
+    <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">
+      <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a> / Daily Operations
+    </div>
+    <h1 style="font-size:1.3em;margin:0">Daily Ops Hub
+      <span style="font-size:0.6em;color:{% if completed_today == task_nums|length %}var(--green){% else %}var(--cyan){% endif %};margin-left:8px">
+        {{ completed_today }}/{{ task_nums|length }} tasks
+      </span>
+    </h1>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <span style="font-size:0.8em;color:var(--muted)">{{ today }}</span>
+    {% if is_holiday %}<span class="holiday-badge">FEDERAL HOLIDAY</span>{% endif %}
+    <a href="/systems/{{ system.id }}/daily/history" class="btn btn-ghost btn-sm">History</a>
+    <a href="/systems/{{ system.id }}/rotation" class="btn btn-ghost btn-sm">Rotation</a>
+  </div>
+</div>
+
+{# ── Metric Strip ─────────────────────────────────────────────────────────── #}
+<div class="metric-strip">
+  <div class="metric-tile">
+    <div class="metric-val" style="color:{% if snap_open_poams > 0 %}var(--yellow){% else %}var(--green){% endif %}">{{ snap_open_poams }}</div>
+    <div class="metric-lbl">Open POA&Ms</div>
+  </div>
+  <div class="metric-tile">
+    <div class="metric-val" style="color:{% if snap_overdue_poams > 0 %}var(--red){% else %}var(--green){% endif %}">{{ snap_overdue_poams }}</div>
+    <div class="metric-lbl">Overdue POA&Ms</div>
+  </div>
+  <div class="metric-tile">
+    <div class="metric-val" style="color:{% if snap_open_risks > 0 %}var(--yellow){% else %}var(--green){% endif %}">{{ snap_open_risks }}</div>
+    <div class="metric-lbl">Open Risks</div>
+  </div>
+  <div class="metric-tile">
+    <div class="metric-val" style="color:{% if snap_open_obs > 0 %}var(--yellow){% else %}var(--green){% endif %}">{{ snap_open_obs }}</div>
+    <div class="metric-lbl">Open Observations</div>
+  </div>
+  <div class="metric-tile">
+    <div class="metric-val" style="color:{% if snap_open_incidents > 0 %}var(--red){% else %}var(--green){% endif %}">{{ snap_open_incidents }}</div>
+    <div class="metric-lbl">Open Incidents</div>
+  </div>
+</div>
+
+{# ── Task Cards ────────────────────────────────────────────────────────────── #}
+<form method="post" action="/systems/{{ system.id }}/daily/save" id="daily-form">
+<div class="task-grid">
+  {% for t in task_nums %}
+  {% set done = task_flags.get(t|string, false) %}
+  <div class="task-card{% if done %} done{% endif %}" id="card-{{ t }}">
+    <div style="display:flex;align-items:flex-start;gap:8px">
+      <div style="flex:1">
+        <div class="task-num">Task {{ t }}</div>
+        <div class="task-label">{{ task_labels[t] }}</div>
+      </div>
+      <div class="task-check">
+        <input type="checkbox" name="task_{{ t }}" id="task_{{ t }}"
+               {% if done %}checked{% endif %}
+               onchange="toggleCard({{ t }}, this.checked)">
+      </div>
+    </div>
+    {% if t == 2 %}
+    <a href="/systems/{{ system.id }}/daily/change-review" class="task-action">→ Change review form</a>
+    {% elif t == 4 %}
+    <a href="/systems/{{ system.id }}/daily/backup-check" class="task-action">→ Backup check form</a>
+    {% elif t == 5 %}
+    <a href="/systems/{{ system.id }}/daily/access-spotcheck" class="task-action">→ Access spot-check form</a>
+    {% elif t == 7 %}
+    <a href="/systems/{{ system.id }}/vendors" class="task-action">→ Vendor / BAA registry</a>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card" style="padding:16px;margin-bottom:16px">
+  <label style="display:block;font-size:0.75em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">
+    Daily Notes
+  </label>
+  <textarea name="notes" rows="3" style="width:100%;resize:vertical;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:8px;color:var(--text);font-size:0.88em">{{ logbook.notes if logbook else '' }}</textarea>
+</div>
+
+<div style="display:flex;gap:10px;align-items:center">
+  <button type="submit" class="btn btn-primary">Save Logbook</button>
+  <span style="font-size:0.8em;color:var(--muted)">Saved automatically on submit. Metrics snapshot captured.</span>
+</div>
+</form>
+
+{# ── Rotation Widget ───────────────────────────────────────────────────────── #}
+<div style="margin-top:28px">
+  <h2 style="font-size:1em;margin-bottom:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">
+    Deep Work Rotation
+  </h2>
+  <div class="rot-card">
+    {% if rotation.paused %}
+    <div style="color:var(--yellow);font-size:0.85em;margin-bottom:10px">
+      ⏸ Rotation paused — <a href="/systems/{{ system.id }}/rotation/resume" style="color:var(--cyan)" onclick="return confirm('Resume rotation?')">resume</a>
+    </div>
+    {% endif %}
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase">Day {{ rotation.current_day }} of 25</div>
+        <div style="font-weight:700;font-size:1em;margin-top:2px">{{ today_rot.get('title', 'Not started') }}</div>
+        <div style="font-size:0.78em;color:var(--muted);margin-top:2px">{{ today_rot.get('duration_min', 90) }} min deep work</div>
+      </div>
+      <a href="/systems/{{ system.id }}/rotation" class="btn btn-ghost btn-sm">Open Rotation →</a>
+    </div>
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" style="width:{{ ((rotation.current_day - 1) / 25 * 100)|round }}%"></div>
+    </div>
+    {% if rotation.last_work_date %}
+    <div style="font-size:0.72em;color:var(--muted);margin-top:6px">Last completed: {{ rotation.last_work_date }}</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function toggleCard(num, checked) {
+  const card = document.getElementById('card-' + num);
+  if (checked) card.classList.add('done');
+  else card.classList.remove('done');
+}
+</script>
+{% endblock %}
