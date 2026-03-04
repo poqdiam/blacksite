@@ -21,12 +21,79 @@
 {% block content %}
 {% if view_as_mode %}
 <div style="background:rgba(255,215,0,0.08);border-left:3px solid var(--gold);
-            border-radius:4px;padding:10px 16px;margin-bottom:20px;
+            border-radius:4px;padding:10px 16px;margin-bottom:12px;
             display:flex;align-items:center;justify-content:space-between;gap:12px;
             font-size:0.88em;flex-wrap:wrap">
   <span>👁 Admin view — Viewing as: <strong style="color:var(--gold)">{{ viewing_as }}</strong></span>
   <a href="/admin" style="color:var(--muted);font-size:0.9em">← Exit to Admin</a>
 </div>
+
+{# ── Admin: role + tier editor ───────────────────────────────────────────── #}
+<div style="background:rgba(255,215,0,0.04);border:1px solid rgba(255,215,0,0.2);
+            border-radius:4px;padding:12px 16px;margin-bottom:20px;font-size:0.85em">
+  <div style="font-size:0.68em;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+              color:var(--gold);margin-bottom:10px">User Settings</div>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+
+    {# Role #}
+    <form id="roleForm" onsubmit="setUserRole(event)"
+          style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <label style="color:var(--muted);white-space:nowrap">Platform role</label>
+      <select id="roleSelect" name="role"
+              style="background:#0d0d1a;border:1px solid var(--border);border-radius:4px;
+                     color:var(--fg);padding:4px 8px;font-size:0.92em">
+        {% for r in ["employee","isso","issm","sca","ao","ciso","system_owner","pmo",
+                     "pen_tester","auditor","incident_responder","bcdr_coordinator","data_owner"] %}
+        <option value="{{ r }}"{% if r == viewing_as_role %} selected{% endif %}>{{ r }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm"
+              style="padding:4px 12px;font-size:0.88em">Set Role</button>
+    </form>
+
+    <span style="color:var(--border)">|</span>
+
+    {# Company tier #}
+    <form id="tierForm" onsubmit="setUserTier(event)"
+          style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <label style="color:var(--muted);white-space:nowrap">Platform tier</label>
+      <select id="tierSelect" name="tier"
+              style="background:#0d0d1a;border:1px solid var(--border);border-radius:4px;
+                     color:var(--fg);padding:4px 8px;font-size:0.92em">
+        {% for t in ["analyst","manager","executive","principal"] %}
+        <option value="{{ t }}"{% if t == viewing_as_tier %} selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm"
+              style="padding:4px 12px;font-size:0.88em">Set Tier</button>
+    </form>
+
+    <span id="roleMsg" style="color:var(--green);font-size:0.88em;display:none"></span>
+  </div>
+</div>
+
+<script>
+async function setUserRole(e) {
+  e.preventDefault();
+  const role = document.getElementById('roleSelect').value;
+  const fd   = new FormData(); fd.append('role', role);
+  const r    = await fetch('/admin/users/{{ viewing_as }}/role', {method:'POST', body: fd});
+  const msg  = document.getElementById('roleMsg');
+  if (r.ok) { msg.textContent = '✓ Role updated to ' + role; msg.style.color = 'var(--green)'; }
+  else       { msg.textContent = '✗ Failed'; msg.style.color = 'var(--red)'; }
+  msg.style.display = 'inline'; setTimeout(() => msg.style.display = 'none', 3000);
+}
+async function setUserTier(e) {
+  e.preventDefault();
+  const tier = document.getElementById('tierSelect').value;
+  const r    = await fetch('/admin/users/{{ viewing_as }}/tier', {method:'POST',
+                headers:{'Content-Type':'application/json'}, body: JSON.stringify({tier})});
+  const msg  = document.getElementById('roleMsg');
+  if (r.ok) { msg.textContent = '✓ Tier updated to ' + tier; msg.style.color = 'var(--green)'; }
+  else       { msg.textContent = '✗ Failed'; msg.style.color = 'var(--red)'; }
+  msg.style.display = 'inline'; setTimeout(() => msg.style.display = 'none', 3000);
+}
+</script>
 {% endif %}
 
 <div style="margin-bottom:20px">
@@ -166,7 +233,8 @@
 {# ── Quick GRC Actions (if has systems) ─────────────────────────────────── #}
 {% if assigned_systems %}
 <div class="section-header">Quick Actions</div>
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:24px">
+{% set _qa_count = [assigned_systems[:4]|length, 1]|max %}
+<div style="display:grid;grid-template-columns:repeat({{ _qa_count }},1fr);gap:10px;margin-bottom:24px">
   {% for item in assigned_systems[:4] %}
   {% set s = item.system %}
   <div class="card" style="padding:14px;margin-bottom:0">

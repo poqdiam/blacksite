@@ -50,21 +50,16 @@ def _load_system_email_creds() -> tuple:
 
 
 def _smtp_send(config: dict, msg: MIMEMultipart) -> bool:
-    """Send a pre-built MIME message. Returns True on success."""
-    gmail_user, gmail_pass = _load_system_email_creds()
-    if not gmail_user or not gmail_pass:
-        log.warning(
-            "Email credentials not found in %s — skipping. "
-            "Run: sudo bash /home/graycat/scripts/setup-blacksite-email.sh",
-            _SYSTEM_EMAIL_CONF,
-        )
+    """Send a pre-built MIME message via local Postfix relay (localhost:25).
+    Postfix routes via smtp-tls-proxy → smtp-relay.gmail.com:465 (FIPS-safe).
+    No credentials needed here — relay uses IP-based auth at Google's end.
+    """
+    if not msg.get("From"):
+        log.warning("Email: no From address — skipping.")
         return False
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        with smtplib.SMTP("localhost", 25) as server:
             server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(gmail_user, gmail_pass)
             server.sendmail(str(msg["From"]), [str(msg["To"])], msg.as_string())
         log.info("Email sent to %s — subject: %s", msg["To"], msg["Subject"])
         return True

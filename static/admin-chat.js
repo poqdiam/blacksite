@@ -157,6 +157,13 @@ const AdminChat = (() => {
     return row;
   }
 
+  function _makeSectionHdr(label) {
+    const h = document.createElement("div");
+    h.className = "sb-section-hdr";
+    h.textContent = label;
+    return h;
+  }
+
   function renderSidebar() {
     const container = document.getElementById("sbChatUsers");
     if (!container) return;
@@ -174,36 +181,35 @@ const AdminChat = (() => {
         away_msg:     (presence[u.username] || {}).away_msg || ""
       }));
 
-    // Sort: recently contacted first, then alphabetical
-    users.sort((a, b) => {
-      const ra = recentMap.hasOwnProperty(a.username) ? recentMap[a.username] : 9999;
-      const rb = recentMap.hasOwnProperty(b.username) ? recentMap[b.username] : 9999;
-      if (ra !== rb) return ra - rb;
-      return a.username.localeCompare(b.username);
-    });
+    const statusRank = {online: 0, away: 1, offline: 2};
 
-    const visible = users.slice(0, SIDEBAR_VISIBLE);
-    const rest    = users.slice(SIDEBAR_VISIBLE);
+    // Recent: up to 5 admins with actual DM history, sorted by most recent
+    const recentUsers = users
+      .filter(u => recentMap.hasOwnProperty(u.username))
+      .sort((a, b) => recentMap[a.username] - recentMap[b.username])
+      .slice(0, 5);
+    const recentSet = new Set(recentUsers.map(u => u.username));
 
-    visible.forEach(u => container.appendChild(_makeUserRow(u)));
-
-    if (rest.length > 0) {
-      const moreList = document.createElement("div");
-      moreList.style.display = "none";
-      rest.forEach(u => moreList.appendChild(_makeUserRow(u)));
-
-      let expanded = false;
-      const moreBtn = document.createElement("div");
-      moreBtn.className = "sb-chat-more";
-      moreBtn.textContent = `More (${rest.length})`;
-      moreBtn.addEventListener("click", () => {
-        expanded = !expanded;
-        moreList.style.display = expanded ? "" : "none";
-        moreBtn.textContent = expanded ? "Less ▲" : `More (${rest.length})`;
+    // All admins: everyone else, sorted online > away > offline > alpha
+    const otherUsers = users
+      .filter(u => !recentSet.has(u.username))
+      .sort((a, b) => {
+        const sa = statusRank[a.status] ?? 2;
+        const sb = statusRank[b.status] ?? 2;
+        if (sa !== sb) return sa - sb;
+        return a.username.localeCompare(b.username);
       });
 
-      container.appendChild(moreBtn);
-      container.appendChild(moreList);
+    // Render Recent section
+    if (recentUsers.length > 0) {
+      container.appendChild(_makeSectionHdr("Recent"));
+      recentUsers.forEach(u => container.appendChild(_makeUserRow(u)));
+    }
+
+    // Render All Admins section
+    if (otherUsers.length > 0) {
+      container.appendChild(_makeSectionHdr("All Admins"));
+      otherUsers.forEach(u => container.appendChild(_makeUserRow(u)));
     }
 
     // Update status dots in open DM windows
@@ -333,7 +339,7 @@ const AdminChat = (() => {
     win.querySelector(".chat-popout").addEventListener("click", e => {
       e.stopPropagation();
       window.open(
-        "/chat/popup/" + encodeURIComponent(room),
+        "/chat/popup?room=" + encodeURIComponent(room),
         "bsv-chat-" + room,
         "width=380,height=560,resizable=yes,menubar=no,toolbar=no,location=no,status=no"
       );
@@ -608,22 +614,29 @@ const AdminChat = (() => {
     const groupBtn = document.getElementById("sbGroupChatBtn");
     if (groupBtn) groupBtn.addEventListener("click", () => openRoom("@group", "# group"));
 
-    const statusToggle = document.getElementById("sbStatusToggle");
-    const awayMsgRow   = document.getElementById("sbAwayMsgRow");
-    const awayMsgInput = document.getElementById("sbAwayMsg");
+    // Footer name: left-click toggles online/away; right-click opens away-message context menu
+    const nameEl = document.getElementById("sb-name-status");
+    const awayCtx = document.getElementById("sb-away-ctx");
 
-    if (statusToggle) {
-      statusToggle.addEventListener("change", () => {
-        const st = statusToggle.value;
-        if (awayMsgRow) awayMsgRow.style.display = st === "away" ? "" : "none";
-        setMyStatus(st, st === "away" && awayMsgInput ? awayMsgInput.value : "");
+    if (nameEl) {
+      nameEl.addEventListener("click", () => {
+        const newSt = myStatus === "online" ? "away" : "online";
+        setMyStatus(newSt, "");
+        nameEl.title = newSt === "online"
+          ? "Online — Click to toggle Away · Right-click for away message"
+          : "Away — Click to go Online · Right-click to set away message";
       });
-    }
-    if (awayMsgInput) {
-      let awayInputTimer = null;
-      awayMsgInput.addEventListener("input", () => {
-        clearTimeout(awayInputTimer);
-        awayInputTimer = setTimeout(() => setMyStatus("away", awayMsgInput.value), 500);
+
+      nameEl.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        if (!awayCtx) return;
+        const x = Math.min(e.clientX, window.innerWidth  - 240);
+        const y = Math.max(10, e.clientY - awayCtx.offsetHeight - 8);
+        awayCtx.style.left    = x + "px";
+        awayCtx.style.top     = y + "px";
+        awayCtx.style.display = "block";
+        const input = document.getElementById("sb-away-ctx-input");
+        if (input) { input.value = ""; setTimeout(() => input.focus(), 50); }
       });
     }
   }
@@ -647,5 +660,5 @@ const AdminChat = (() => {
     connect();         // connect WS (will push live presence updates)
   }
 
-  return { init };
+  return { init, setMyStatus };
 })();

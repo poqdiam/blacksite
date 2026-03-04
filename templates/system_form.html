@@ -284,13 +284,57 @@
           <p class="field-help">Full name of the person accountable for this system. This person signs off on security decisions.</p>
         </div>
 
-        <div class="form-group" style="margin-bottom:0">
+        <div class="form-group">
           <label for="owner_email">System Owner Email
             <span class="tip-icon" data-tip="Official work email address for the System Owner. Used for compliance notifications and audit correspondence.">?</span></label>
           <input type="email" id="owner_email" name="owner_email"
                  placeholder="owner@agency.gov"
                  value="{{ system.owner_email or '' if system else '' }}"/>
           <p class="field-help">Official work email address. Used for compliance notifications and audit correspondence.</p>
+        </div>
+      </div>
+
+      {# Key Personnel: AO, ISSM, ISSO #}
+      <div class="form-row" style="margin-top:10px">
+        <div class="form-group">
+          <label for="ao_name">Authorizing Official (AO) Name</label>
+          <input type="text" id="ao_name" name="ao_name"
+                 placeholder="e.g. Alex Rivera"
+                 value="{{ system.ao_name or '' if system else '' }}"/>
+        </div>
+        <div class="form-group">
+          <label for="ao_email">AO Email</label>
+          <input type="email" id="ao_email" name="ao_email"
+                 placeholder="ao@agency.gov"
+                 value="{{ system.ao_email or '' if system else '' }}"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="issm_name">ISSM Name</label>
+          <input type="text" id="issm_name" name="issm_name"
+                 placeholder="e.g. Morgan Lee"
+                 value="{{ system.issm_name or '' if system else '' }}"/>
+        </div>
+        <div class="form-group">
+          <label for="issm_email">ISSM Email</label>
+          <input type="email" id="issm_email" name="issm_email"
+                 placeholder="issm@agency.gov"
+                 value="{{ system.issm_email or '' if system else '' }}"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="isso_name">ISSO Name</label>
+          <input type="text" id="isso_name" name="isso_name"
+                 placeholder="e.g. Taylor Kim"
+                 value="{{ system.isso_name or '' if system else '' }}"/>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label for="isso_email">ISSO Email</label>
+          <input type="email" id="isso_email" name="isso_email"
+                 placeholder="isso@agency.gov"
+                 value="{{ system.isso_email or '' if system else '' }}"/>
         </div>
       </div>
     </div>

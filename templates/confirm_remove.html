@@ -49,14 +49,21 @@
         <label class="form-label" style="color:var(--muted);font-size:0.78em;text-transform:uppercase;letter-spacing:1px">
           Removal Reason <span style="color:var(--red)">*</span>
         </label>
-        <select name="removal_reason" class="form-control" required
+        <select name="removal_reason" id="removal_reason" class="form-control" required
+                onchange="document.getElementById('other_reason_wrap').style.display=this.value==='Other'?'block':'none';if(this.value!=='Other')document.getElementById('removal_reason_other').value='';"
                 style="background:rgba(0,0,0,0.3);border-color:rgba(244,67,54,0.3);color:var(--text)">
           <option value="Termination">Termination — Employment ended</option>
           <option value="Role Elimination">Role Elimination — Position no longer exists</option>
           <option value="Security Violation">Security Violation — Policy or security breach</option>
           <option value="Contractor Offboarding">Contractor Offboarding — Contract concluded</option>
           <option value="Account Compromise">Account Compromise — Credentials believed compromised</option>
+          <option value="Other">Other — Enter custom reason</option>
         </select>
+        <div id="other_reason_wrap" style="display:none;margin-top:8px">
+          <input type="text" id="removal_reason_other" name="removal_reason_other"
+                 class="form-control" maxlength="200" placeholder="Describe the reason…"
+                 style="background:rgba(0,0,0,0.3);border-color:rgba(244,67,54,0.3);color:var(--text)">
+        </div>
         <p style="font-size:0.75em;color:var(--muted);margin-top:6px">
           This reason will be recorded in the audit log and shadow archive.
         </p>

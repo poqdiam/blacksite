@@ -89,11 +89,18 @@
   }
   .step-form-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(4, 1fr);
     gap: 12px;
     margin-bottom: 12px;
+    align-items: start;
   }
-  .step-form label { font-size: 0.68em; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; display: block; }
+  @media (max-width: 700px) {
+    .step-form-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 420px) {
+    .step-form-grid { grid-template-columns: 1fr; }
+  }
+  .step-form label { font-size: 0.68em; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; display: block; min-height: 2.4em; }
   .step-form input, .step-form select, .step-form textarea {
     width: 100%;
     background: var(--card);

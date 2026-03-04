@@ -112,6 +112,17 @@
   </div>
 </div>
 
+{# ── Search bar ── #}
+<div style="margin-bottom:16px">
+  <input type="text" id="atoSearch" placeholder="Search packages by system name…"
+         oninput="filterAtoCards(this.value)"
+         style="width:100%;background:var(--surface);border:1px solid var(--border);
+                color:var(--text);border-radius:6px;padding:8px 12px;font-size:0.88em;box-sizing:border-box">
+</div>
+<div id="atoNoResults" style="display:none;text-align:center;padding:32px;color:var(--muted);font-size:0.88em">
+  No packages match your search.
+</div>
+
 {# ── Per-system cards ── #}
 {% set ato_categories = [
     ('core',          'Core RMF Documents'),
@@ -123,7 +134,7 @@
 {% for sys in systems %}
 {% set s = sys_summary[sys.id] %}
 
-<div class="card" style="padding:20px;margin-bottom:20px">
+<div class="card ato-sys-card" data-name="{{ sys.name | lower }}" style="padding:20px;margin-bottom:20px">
   {# System header row #}
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
     <div style="display:flex;align-items:baseline;gap:10px">
@@ -343,6 +354,17 @@ function handleAtoDrop(e) {
 document.getElementById('ato-upload-modal').addEventListener('click', function(e) {
   if (e.target === this) closeAtoUpload();
 });
+function filterAtoCards(q) {
+  var term = q.trim().toLowerCase();
+  var cards = document.querySelectorAll('.ato-sys-card');
+  var visible = 0;
+  cards.forEach(function(card) {
+    var match = !term || card.dataset.name.indexOf(term) !== -1;
+    card.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+  document.getElementById('atoNoResults').style.display = (visible === 0 && term) ? '' : 'none';
+}
 // Expand/collapse icon rotation for quick actions
 document.addEventListener('toggle', function(e) {
   if (e.target && e.target.tagName === 'DETAILS') {

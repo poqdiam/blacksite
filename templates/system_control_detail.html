@@ -138,6 +138,79 @@
   .inherited-section { display: none; }
   .inherited-section.active { display: block; }
 
+  /* ODP param rendering (matches control_detail.html) */
+  .ctrl-param          { display: inline; }
+  .ctrl-param-bracket  { color: var(--muted); font-size: 0.85em; }
+  .ctrl-param-inner    { color: var(--yellow); font-style: italic; }
+  .ctrl-param-inline   { font-style: italic; color: var(--cyan); opacity: 0.85; cursor: help;
+                          border-bottom: 1px dashed rgba(0,255,204,0.35); }
+  .ctrl-ref            { color: var(--gold); text-decoration: none; font-weight: 600;
+                          border-bottom: 1px dashed rgba(255,215,0,0.45); transition: color 0.15s; }
+  .ctrl-ref:hover      { color: #ffe55c; border-color: #ffe55c; }
+
+  /* ODP reference bar (below control statement) */
+  .odp-ref-bar {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .odp-ref-label {
+    font-size: 0.66em;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    flex-shrink: 0;
+    padding-top: 3px;
+  }
+  .odp-chip {
+    display: inline-block;
+    font-size: 0.75em;
+    padding: 2px 9px;
+    border-radius: 3px;
+    background: rgba(255,179,0,0.06);
+    border: 1px solid rgba(255,179,0,0.2);
+    color: var(--yellow);
+    font-style: italic;
+    cursor: default;
+  }
+
+  /* Narrative preview (formatted, ODP-highlighted view) */
+  .narrative-preview {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 0.84em;
+    line-height: 1.65;
+    min-height: 56px;
+    color: var(--text);
+    font-family: var(--mono);
+    margin-top: 6px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  mark.odp-val {
+    background: rgba(0,255,204,0.14);
+    color: var(--cyan);
+    border-radius: 3px;
+    padding: 0 3px;
+    font-style: normal;
+    font-weight: 600;
+  }
+  mark.odp-unfilled {
+    background: rgba(255,179,0,0.14);
+    color: var(--yellow);
+    border-radius: 3px;
+    padding: 0 3px;
+    font-style: italic;
+    border-bottom: 1px dashed rgba(255,179,0,0.5);
+  }
+
   /* Save banner */
   .save-banner {
     display: flex;
@@ -197,7 +270,23 @@
   </div>
 
   {# Control statement #}
-  <div class="ctrl-statement">{{ cat_ctrl.text or 'No statement available in catalog.' }}</div>
+  <div class="ctrl-statement">
+    {% if cat_ctrl.statement %}
+      {{ cat_ctrl.statement | fmt_ctrl_inline(cat_ctrl.parameters | default([])) | safe }}
+    {% else %}
+      No statement available in catalog.
+    {% endif %}
+  </div>
+
+  {# ODP reference chips — parameters this control requires the org to define #}
+  {% if cat_ctrl.parameters %}
+  <div class="odp-ref-bar">
+    <span class="odp-ref-label">Org-Defined&nbsp;Params:</span>
+    {% for p in cat_ctrl.parameters %}
+    <span class="odp-chip" title="{{ p.id }}">{{ p.label }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   {# Related controls + catalog link #}
   <div style="display:flex;gap:16px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);flex-wrap:wrap;align-items:center">
@@ -278,10 +367,27 @@
                 {% if not can_edit %}readonly{% endif %}>{{ sc.inherited_narrative if sc else '' }}</textarea>
     </div>
 
-    <label class="impl-label">Implementation Narrative</label>
-    <textarea name="narrative"
+    <label class="impl-label">
+      Implementation Narrative
+      {% if cat_ctrl.parameters %}
+      <span style="font-size:0.8em;font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted);margin-left:8px">
+        — wrap org-defined values in <code style="font-size:0.9em;color:var(--cyan);font-style:normal">[[double brackets]]</code> to highlight them
+      </span>
+      {% endif %}
+    </label>
+    <textarea name="narrative" id="ws-narrative"
               placeholder="Describe how this control is implemented within {{ system.name }}…"
               {% if not can_edit %}readonly{% endif %}>{{ sc.narrative if sc else '' }}</textarea>
+
+    {# Narrative preview — live formatted view with ODP highlighting #}
+    <div style="font-size:0.66em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-top:14px;margin-bottom:4px">
+      Narrative Preview
+      <span style="font-size:0.85em;font-weight:400;letter-spacing:0;text-transform:none;color:rgba(136,136,136,0.6);margin-left:6px">
+        <mark class="odp-val" style="font-size:0.95em">[[value]]</mark> = org-defined value &nbsp;·&nbsp;
+        <mark class="odp-unfilled" style="font-size:0.95em">organization-defined text</mark> = unfilled placeholder
+      </span>
+    </div>
+    <div class="narrative-preview" id="narrative-preview"></div>
 
     {% if can_edit %}
     <div style="display:flex;align-items:center;gap:14px;margin-top:16px">
@@ -331,6 +437,60 @@
   }
   statusEl.addEventListener('change', update);
   update();
+})();
+
+// Narrative preview — ODP token highlighting
+(function() {
+  var textarea = document.getElementById('ws-narrative');
+  var preview  = document.getElementById('narrative-preview');
+  if (!textarea || !preview) return;
+
+  // Collect ODP labels from rendered chips in the control statement card
+  var odpLabels = Array.from(document.querySelectorAll('.odp-chip'))
+    .map(function(el) { return el.textContent.trim(); })
+    .filter(function(s) { return s.length > 3; });
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function buildPreview(text) {
+    if (!text || !text.trim()) {
+      return '<em style="color:rgba(136,136,136,0.45);font-size:0.92em">No narrative entered yet.</em>';
+    }
+
+    var html = escHtml(text);
+
+    // 1. Highlight [[org-defined value]] markers (cyan — explicitly marked)
+    html = html.replace(/\[\[([^\]]+)\]\]/g,
+      '<mark class="odp-val">$1</mark>');
+
+    // 2. Highlight verbatim ODP label text (amber — not yet replaced by org-specific value)
+    odpLabels.forEach(function(label) {
+      // Only match multi-word ODP labels (avoid single generic words)
+      if (label.split(' ').length < 2) return;
+      var esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      try {
+        var re = new RegExp('(?<![<\\w])(' + esc + ')(?![\\w>])', 'gi');
+        html = html.replace(re, '<mark class="odp-unfilled">$1</mark>');
+      } catch(e) {
+        // Fallback if lookbehind unsupported (Safari < 16.4)
+        var re2 = new RegExp('(' + esc + ')', 'gi');
+        html = html.replace(re2, '<mark class="odp-unfilled">$1</mark>');
+      }
+    });
+
+    // Convert newlines to <br> for display
+    html = html.replace(/\n/g, '<br>');
+    return html;
+  }
+
+  function updatePreview() {
+    preview.innerHTML = buildPreview(textarea.value);
+  }
+
+  textarea.addEventListener('input', updatePreview);
+  updatePreview();
 })();
 </script>
 {% endblock %}

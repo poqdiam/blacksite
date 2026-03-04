@@ -165,7 +165,8 @@ body.has-role-banner .info-drawer {
 </div>
 
 {# ── Stat row — each card opens a detail drawer ──────────────────────────── #}
-<div class="stats" style="margin-bottom:28px">
+{# 12 boxes — fixed 4 columns at all widths for clean 3-row layout #}
+<div class="stats" style="margin-bottom:28px;grid-template-columns:repeat(4,1fr)">
 
   <div class="stat stat-click" onclick="openDrawer('pending')" title="Click to see pending assessments">
     <div class="stat-value" style="color:var(--yellow)">{{ pending|length }}</div>
@@ -202,9 +203,19 @@ body.has-role-banner .info-drawer {
     <div class="stat-label">Systems ↗</div>
   </div>
 
+  <div class="stat stat-click" onclick="window.location.href='/systems'" title="Authorized systems">
+    <div class="stat-value" style="color:var(--green)">{{ systems_auth_count }}</div>
+    <div class="stat-label">Authorized ↗</div>
+  </div>
+
   <div class="stat stat-click" onclick="window.location.href='/poam'" title="Go to POA&amp;M Tracker" style="cursor:pointer">
     <div class="stat-value" style="color:{% if poam_open_count > 0 %}var(--yellow){% else %}var(--green){% endif %}">{{ poam_open_count }}</div>
     <div class="stat-label">Open POA&Ms ↗</div>
+  </div>
+
+  <div class="stat stat-click" onclick="window.location.href='/poam'" title="POA&amp;M items due within 7 days">
+    <div class="stat-value" style="color:{% if poam_due_soon > 0 %}var(--orange, #ff9800){% else %}var(--green){% endif %}">{{ poam_due_soon }}</div>
+    <div class="stat-label">Due This Week ↗</div>
   </div>
 
   <div class="stat stat-click" onclick="window.location.href='/risks'" title="Go to Risk Register" style="cursor:pointer">
@@ -212,12 +223,17 @@ body.has-role-banner .info-drawer {
     <div class="stat-label">Open Risks ↗</div>
   </div>
 
+  <div class="stat stat-click" onclick="window.location.href='/observations'" title="Open observations">
+    <div class="stat-value" style="color:{% if obs_open_count > 0 %}var(--yellow){% else %}var(--green){% endif %}">{{ obs_open_count }}</div>
+    <div class="stat-label">Open Obs ↗</div>
+  </div>
+
 </div>
 
 {# ── GRC Workflow Command Center — full card click ─────────────────────────── #}
 <div style="margin-bottom:28px">
   <div class="section-header">GRC Workflow</div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px">
 
     {# System Catalog #}
     <div class="card grc-click" style="padding:16px;margin-bottom:0" onclick="window.location.href='/systems'">
@@ -284,7 +300,7 @@ body.has-role-banner .info-drawer {
 </div>
 
 {# ── Analytics tiles ─────────────────────────────────────────────────────── #}
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:28px">
+<div data-orphan-fix style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:28px">
   <div class="card" style="padding:20px;margin-bottom:0">
     <div class="card-title">Score Distribution</div>
     <canvas id="chartScoreDist" style="max-height:180px"></canvas>
@@ -349,7 +365,7 @@ body.has-role-banner .info-drawer {
 </div>
 
 {# ── Recent Audit Activity ─────────────────────────────────────────────────── #}
-{% if recent_audit %}
+{% if recent_audit_display %}
 <div style="margin-bottom:28px">
   <div class="section-header">Recent Activity</div>
   <div class="card" style="padding:0;overflow:hidden">
@@ -358,30 +374,30 @@ body.has-role-banner .info-drawer {
         <tr><th>Time</th><th>User</th><th>Action</th><th>Resource</th><th>Details</th></tr>
       </thead>
       <tbody>
-        {% for entry in recent_audit %}
+        {% for e in recent_audit_display %}
         <tr>
           <td class="mono text-muted" style="font-size:0.75em;white-space:nowrap">
-            {{ entry.timestamp.strftime('%m-%d %H:%M') if entry.timestamp else '—' }}
+            {{ e.timestamp.strftime('%m-%d %H:%M') if e.timestamp else '—' }}
           </td>
-          <td style="font-size:0.82em">{{ entry.remote_user or '—' }}</td>
+          <td style="font-size:0.82em">{{ e.remote_user or '—' }}</td>
           <td>
-            <span style="font-size:0.7em;font-weight:700;letter-spacing:1px;text-transform:uppercase;
-                         padding:2px 6px;border-radius:3px;
-                         {% if entry.action == 'CREATE' %}background:rgba(0,200,83,0.15);color:var(--green)
-                         {% elif entry.action == 'DELETE' %}background:rgba(244,67,54,0.15);color:var(--red)
-                         {% elif entry.action == 'EXPORT' %}background:rgba(0,255,204,0.1);color:var(--cyan)
+            <span style="font-size:0.7em;font-weight:700;letter-spacing:0.5px;
+                         padding:2px 8px;border-radius:3px;
+                         {% if e.action == 'CREATE' %}background:rgba(0,200,83,0.15);color:var(--green)
+                         {% elif e.action == 'DELETE' %}background:rgba(244,67,54,0.15);color:var(--red)
+                         {% elif e.action == 'EXPORT' %}background:rgba(0,255,204,0.1);color:var(--cyan)
                          {% else %}background:rgba(255,255,255,0.05);color:var(--muted){% endif %}">
-              {{ entry.action }}
+              {{ e.action_display }}
             </span>
           </td>
           <td class="text-muted" style="font-size:0.82em">
-            {{ entry.resource_type or '' }}
-            {% if entry.resource_id %}
-            <span class="mono" style="font-size:0.85em;color:#444">{{ entry.resource_id[:8] }}</span>
+            {{ e.resource_display }}
+            {% if e.resource_id and e.resource_type != 'role_shell' %}
+            <span class="mono" style="font-size:0.82em;color:#444"> {{ e.resource_id[:8] }}</span>
             {% endif %}
           </td>
-          <td class="text-muted mono" style="font-size:0.72em;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-            {{ entry.details or '' }}
+          <td class="text-muted" style="font-size:0.76em;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            {{ e.details_display }}
           </td>
         </tr>
         {% endfor %}

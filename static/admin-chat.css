@@ -14,6 +14,17 @@
   --chat-h:         400px;
 }
 
+/* ── Sidebar section headers ────────────────────────────────────────────────── */
+.sb-section-hdr {
+  font-size: 0.65em;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 12px 3px;
+  opacity: 0.7;
+}
+
 /* ── Sidebar user rows ─────────────────────────────────────────────────────── */
 .sb-chat-user {
   display: flex;

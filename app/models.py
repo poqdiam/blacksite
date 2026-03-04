@@ -155,6 +155,13 @@ class System(Base):
     ato_notes               = Column(Text, nullable=True)      # AO decision rationale
     ato_signed_by           = Column(String, nullable=True)    # AO username
     ato_signed_at           = Column(DateTime, nullable=True)  # timestamp of AO signature
+    # Phase 28 — Key personnel fields (free-text for external contacts + system contacts)
+    ao_name                 = Column(String, nullable=True)    # Authorizing Official name
+    ao_email                = Column(String, nullable=True)    # AO email
+    issm_name               = Column(String, nullable=True)    # ISSM name
+    issm_email              = Column(String, nullable=True)    # ISSM email
+    isso_name               = Column(String, nullable=True)    # ISSO name
+    isso_email              = Column(String, nullable=True)    # ISSO email
 
 
 class PoamItem(Base):
@@ -369,6 +376,8 @@ class AuditLog(Base):
     resource_type = Column(String, nullable=True)     # assessment|system|poam|risk|profile
     resource_id   = Column(String, nullable=True)
     details       = Column(Text, nullable=True)       # JSON summary
+    remote_ip     = Column(String, nullable=True)     # operator IP from reverse proxy
+    outcome       = Column(String, nullable=True, default="ok")  # ok|denied|error
 
 
 class SecurityEvent(Base):
@@ -779,6 +788,7 @@ async def _migrate_db(engine):
         ("systems",         "categorization_approved_by", "TEXT DEFAULT NULL"),
         ("systems",         "categorization_note",        "TEXT DEFAULT NULL"),
         # Phase 6 — H6: UI preference columns on UserProfile
+        ("user_profiles",   "avatar_url",                  "TEXT DEFAULT NULL"),
         ("user_profiles",   "pref_font_size",              "TEXT DEFAULT '14px'"),
         ("user_profiles",   "pref_density",                "TEXT DEFAULT 'comfortable'"),
         ("user_profiles",   "pref_rows_per_page",          "INTEGER DEFAULT 25"),
@@ -788,9 +798,19 @@ async def _migrate_db(engine):
         ("systems",         "ato_notes",                  "TEXT DEFAULT NULL"),
         ("systems",         "ato_signed_by",              "TEXT DEFAULT NULL"),
         ("systems",         "ato_signed_at",              "DATETIME DEFAULT NULL"),
+        # Phase 28 — Key personnel fields
+        ("systems",         "ao_name",                    "TEXT DEFAULT NULL"),
+        ("systems",         "ao_email",                   "TEXT DEFAULT NULL"),
+        ("systems",         "issm_name",                  "TEXT DEFAULT NULL"),
+        ("systems",         "issm_email",                 "TEXT DEFAULT NULL"),
+        ("systems",         "isso_name",                  "TEXT DEFAULT NULL"),
+        ("systems",         "isso_email",                 "TEXT DEFAULT NULL"),
         ("ato_documents",   "file_path",                  "TEXT DEFAULT NULL"),
         ("ato_documents",   "file_size",                  "INTEGER DEFAULT NULL"),
         ("ato_documents",   "source_type",                "TEXT DEFAULT NULL"),
+        # Phase 26 audit log enrichment
+        ("audit_log",       "remote_ip",                  "TEXT DEFAULT NULL"),
+        ("audit_log",       "outcome",                    "TEXT DEFAULT 'ok'"),
     ]
     # Performance indexes — CREATE INDEX IF NOT EXISTS is idempotent
     index_migrations = [
@@ -826,6 +846,10 @@ async def _migrate_db(engine):
         # Unique constraints backfilled for existing DBs (safe on new installs — IF NOT EXISTS)
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_dw_completion_day_date ON deep_work_completions (rotation_id, rotation_day, completed_date)",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_change_review_user_sys_date ON change_review_records (remote_user, system_id, review_date)",
+        # Phase 26 audit log filter indexes
+        "CREATE INDEX IF NOT EXISTS ix_audit_log_action        ON audit_log (action)",
+        "CREATE INDEX IF NOT EXISTS ix_audit_log_resource_type ON audit_log (resource_type)",
+        "CREATE INDEX IF NOT EXISTS ix_audit_log_outcome       ON audit_log (outcome)",
     ]
     # Phase 10: new tables (CREATE TABLE IF NOT EXISTS is idempotent)
     new_tables = [
@@ -1679,6 +1703,97 @@ class GeneratedReport(Base):
     error_msg    = Column(Text, nullable=True)
     generated_at = Column(DateTime, nullable=True)
     created_at   = Column(DateTime, default=_now)
+
+
+class EvidenceFile(Base):
+    """Phase 29 — Per-system evidence locker: uploaded files with control tags."""
+    __tablename__ = "evidence_files"
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    system_id     = Column(String, ForeignKey("systems.id"), nullable=False, index=True)
+    filename      = Column(String, nullable=False)          # stored filename (uuid-based)
+    original_name = Column(String, nullable=False)          # original upload filename
+    file_path     = Column(String, nullable=False)          # relative path under data/evidence/
+    file_size     = Column(Integer, nullable=True)
+    mime_type     = Column(String, nullable=True)
+    description   = Column(Text, nullable=True)
+    control_ids   = Column(Text, nullable=True)             # JSON array of control IDs
+    tags          = Column(String, nullable=True)           # comma-separated
+    uploaded_by   = Column(String, nullable=False)
+    uploaded_at   = Column(DateTime, default=_now)
+    is_locked     = Column(Boolean, default=False)          # locked = cannot delete
+
+
+# ---------------------------------------------------------------------------
+# Compliance Framework Crosswalk  (Phase 30)
+# ---------------------------------------------------------------------------
+
+class ComplianceFramework(Base):
+    """Catalog of compliance/regulatory frameworks that can be mapped to NIST 800-53r5."""
+    __tablename__ = "compliance_frameworks"
+
+    id           = Column(String,  primary_key=True, default=lambda: str(uuid.uuid4()))
+    name         = Column(String,  nullable=False, unique=True)   # e.g. "NIST CSF 2.0"
+    short_name   = Column(String,  nullable=False, unique=True)   # e.g. "csf2"
+    version      = Column(String,  nullable=True)                 # e.g. "2.0"
+    category     = Column(String,  nullable=False)                # federal|industry|privacy|emerging
+    published_by = Column(String,  nullable=True)                 # e.g. "NIST", "CIS", "ISO"
+    description  = Column(Text,    nullable=True)
+    source_url   = Column(String,  nullable=True)
+    is_active    = Column(Boolean, default=True)
+    created_at   = Column(DateTime, default=_now)
+
+
+class FrameworkControl(Base):
+    """Individual control or requirement within a compliance framework."""
+    __tablename__ = "framework_controls"
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    framework_id  = Column(String,  ForeignKey("compliance_frameworks.id"), nullable=False, index=True)
+    control_id    = Column(String,  nullable=False)   # e.g. "PR.AC-1", "AC.L1-3.1.1", "A.8.1"
+    title         = Column(String,  nullable=True)
+    description   = Column(Text,    nullable=True)
+    domain        = Column(String,  nullable=True)    # e.g. "PROTECT", "Access Control", "Annex A"
+    level         = Column(String,  nullable=True)    # e.g. "L1"/"L2"/"L3", "LOW"/"MOD"/"HIGH"
+    created_at    = Column(DateTime, default=_now)
+
+    __table_args__ = (
+        UniqueConstraint("framework_id", "control_id", name="uq_framework_ctrl"),
+    )
+
+
+class ControlCrosswalk(Base):
+    """Maps a framework control to one or more NIST SP 800-53r5 control IDs."""
+    __tablename__ = "control_crosswalks"
+
+    id                   = Column(Integer, primary_key=True, autoincrement=True)
+    framework_control_id = Column(Integer, ForeignKey("framework_controls.id"), nullable=False, index=True)
+    nist_control_id      = Column(String,  nullable=False, index=True)   # e.g. "ac-2"
+    mapping_type         = Column(String,  default="direct")             # direct|partial|inferred
+    confidence           = Column(String,  default="high")               # high|medium|low
+    source               = Column(String,  default="nist_official")      # nist_official|cis|community
+    notes                = Column(Text,    nullable=True)
+    created_at           = Column(DateTime, default=_now)
+
+    __table_args__ = (
+        UniqueConstraint("framework_control_id", "nist_control_id", name="uq_crosswalk"),
+    )
+
+
+class SystemFramework(Base):
+    """Marks which compliance frameworks apply to a given system."""
+    __tablename__ = "system_frameworks"
+
+    id                      = Column(Integer, primary_key=True, autoincrement=True)
+    system_id               = Column(String,  ForeignKey("systems.id"), nullable=False, index=True)
+    framework_id            = Column(String,  ForeignKey("compliance_frameworks.id"), nullable=False)
+    applicability_rationale = Column(Text,    nullable=True)
+    added_by                = Column(String,  nullable=True)
+    added_at                = Column(DateTime, default=_now)
+
+    __table_args__ = (
+        UniqueConstraint("system_id", "framework_id", name="uq_sys_framework"),
+    )
 
 
 async def init_db(engine):

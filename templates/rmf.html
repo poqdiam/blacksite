@@ -111,6 +111,92 @@
   .legend-item { display: flex; align-items: center; gap: 6px; color: var(--muted); }
 
   .rmf-step-cols th:first-child { text-align: left; min-width: 200px; }
+
+  /* ── Search ── */
+  .rmf-search-wrap {
+    position: relative;
+    margin-bottom: 14px;
+  }
+  .rmf-search-wrap input {
+    width: 100%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 8px 12px 8px 34px;
+    font-size: 0.82em;
+    font-family: var(--mono);
+    transition: border-color 0.2s;
+  }
+  .rmf-search-wrap input:focus {
+    outline: none;
+    border-color: rgba(0,255,204,0.35);
+  }
+  .rmf-search-wrap .search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 0.9em;
+    pointer-events: none;
+  }
+
+  /* ── Filter cards ── */
+  .rmf-filter-cards {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .rmf-filter-card {
+    cursor: pointer;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.75em;
+    background: var(--card);
+    transition: border-color 0.15s, background 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    user-select: none;
+  }
+  .rmf-filter-card:hover { border-color: rgba(0,255,204,0.3); }
+  .rmf-filter-card.active {
+    background: rgba(0,255,204,0.08);
+    border-color: rgba(0,255,204,0.45);
+    color: var(--cyan);
+  }
+  .rmf-filter-card .fc-label { font-weight: 700; letter-spacing: 0.5px; }
+  .rmf-filter-card .fc-count {
+    background: rgba(255,255,255,0.07);
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-family: var(--mono);
+    font-size: 0.9em;
+    color: var(--muted);
+  }
+  .rmf-filter-card.active .fc-count { background: rgba(0,255,204,0.15); color: var(--cyan); }
+
+  /* ── Sortable columns ── */
+  .rmf-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+  }
+  .rmf-table th.sortable:hover { color: var(--text); }
+  .sort-arrow {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 0.75em;
+    opacity: 0.35;
+    transition: opacity 0.15s;
+  }
+  .rmf-table th.sort-asc  .sort-arrow,
+  .rmf-table th.sort-desc .sort-arrow { opacity: 1; color: var(--cyan); }
+  .sort-none::after  { content: "⇅"; }
+  .sort-asc::after   { content: "↑"; }
+  .sort-desc::after  { content: "↓"; }
 </style>
 {% endblock %}
 
@@ -148,6 +234,35 @@
 </div>
 
 {% if systems %}
+
+{# ── Search ── #}
+<div class="rmf-search-wrap">
+  <span class="search-icon">⌕</span>
+  <input type="text" id="rmfSearch" placeholder="Filter systems…" autocomplete="off">
+</div>
+
+{# ── Phase filter cards ── #}
+<div class="rmf-filter-cards">
+  <div class="rmf-filter-card active" data-filter="all">
+    <span class="fc-label">All</span>
+    <span class="fc-count">{{ systems|length }}</span>
+  </div>
+  {% for step in rmf_steps %}
+  {# Count systems with at least in_progress status for this step #}
+  {% set step_ct = namespace(n=0) %}
+  {% for sys in systems %}
+    {% set rec = rmf_rows.get(sys.id, {}).get(step.key) %}
+    {% if rec and rec.status in ('in_progress', 'complete', 'waived') %}
+      {% set step_ct.n = step_ct.n + 1 %}
+    {% endif %}
+  {% endfor %}
+  <div class="rmf-filter-card" data-filter="{{ step.key }}">
+    <span class="fc-label">{{ step.title }}</span>
+    <span class="fc-count">{{ step_ct.n }}</span>
+  </div>
+  {% endfor %}
+</div>
+
 {% if not show_all and total_systems > rmf_default_cap %}
 <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;
             padding:8px 14px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.15);
@@ -160,19 +275,24 @@
 {% endif %}
 <div class="card" style="padding:0;overflow:hidden">
   <div class="rmf-grid">
-    <table class="rmf-table rmf-step-cols">
+    <table class="rmf-table rmf-step-cols" id="rmfTable">
       <thead>
         <tr>
-          <th style="text-align:left">System</th>
+          <th class="sortable" data-col="name" data-type="text" style="text-align:left">
+            System <span class="sort-arrow sort-none"></span>
+          </th>
           {% for step in rmf_steps %}
-          <th>
+          <th class="sortable" data-col="{{ step.key }}" data-type="status">
             <div class="step-header">
               <span class="step-num">{{ step.num }}</span>
               <span>{{ step.title }}</span>
             </div>
+            <span class="sort-arrow sort-none"></span>
           </th>
           {% endfor %}
-          <th>Progress</th>
+          <th class="sortable" data-col="progress" data-type="number">
+            Progress <span class="sort-arrow sort-none"></span>
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -180,7 +300,14 @@
         {% set sys_records = rmf_rows.get(sys.id, {}) %}
         {% set complete_ct = namespace(n=0) %}
         {% for sk in step_keys %}{% if sys_records.get(sk) and sys_records[sk].status == 'complete' %}{% set complete_ct.n = complete_ct.n + 1 %}{% endif %}{% endfor %}
-        <tr>
+        {# Build data-steps attr: comma-sep list of step_key=status pairs for JS filtering/sorting #}
+        {% set steps_data = namespace(parts=[]) %}
+        {% for sk in step_keys %}
+          {% set rec = sys_records.get(sk) %}
+          {% set steps_data.parts = steps_data.parts + [sk + '=' + (rec.status if rec else 'not_started')] %}
+        {% endfor %}
+        <tr data-name="{{ sys.name|lower }}" data-progress="{{ complete_ct.n }}"
+            data-steps="{{ steps_data.parts|join(',') }}">
           <td class="sys-name-cell">
             <a href="/rmf/{{ sys.id }}">{{ sys.name }}</a>
             {% if sys.overall_impact %}
@@ -242,4 +369,96 @@
     {% endfor %}
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var STATUS_ORDER = {complete:0, in_progress:1, waived:2, not_started:3};
+  var activeFilter = "all";
+  var sortCol = null;
+  var sortDir = 1;
+
+  var table    = document.getElementById("rmfTable");
+  var searchEl = document.getElementById("rmfSearch");
+  if (!table) return;
+  var tbody = table.querySelector("tbody");
+
+  function getRows() { return Array.from(tbody.querySelectorAll("tr")); }
+
+  function stepStatus(row, stepKey) {
+    var steps = row.dataset.steps || "";
+    var parts = steps.split(",");
+    for (var i = 0; i < parts.length; i++) {
+      var kv = parts[i].split("=");
+      if (kv[0] === stepKey) return kv[1] || "not_started";
+    }
+    return "not_started";
+  }
+
+  function applyFilter() {
+    var q = searchEl ? searchEl.value.toLowerCase().trim() : "";
+    getRows().forEach(function(row) {
+      var nameMatch = !q || (row.dataset.name || "").includes(q);
+      var filterMatch = true;
+      if (activeFilter !== "all") {
+        var st = stepStatus(row, activeFilter);
+        filterMatch = st === "in_progress" || st === "complete" || st === "waived";
+      }
+      row.style.display = (nameMatch && filterMatch) ? "" : "none";
+    });
+  }
+
+  function applySort() {
+    if (!sortCol) return;
+    var rows = getRows();
+    rows.sort(function(a, b) {
+      var va, vb;
+      if (sortCol === "name") {
+        va = a.dataset.name || ""; vb = b.dataset.name || "";
+        return sortDir * va.localeCompare(vb);
+      }
+      if (sortCol === "progress") {
+        va = parseInt(a.dataset.progress || "0");
+        vb = parseInt(b.dataset.progress || "0");
+        return sortDir * (va - vb);
+      }
+      va = STATUS_ORDER[stepStatus(a, sortCol)]; if (va === undefined) va = 9;
+      vb = STATUS_ORDER[stepStatus(b, sortCol)]; if (vb === undefined) vb = 9;
+      return sortDir * (va - vb);
+    });
+    rows.forEach(function(r) { tbody.appendChild(r); });
+  }
+
+  if (searchEl) {
+    searchEl.addEventListener("input", applyFilter);
+  }
+
+  document.querySelectorAll(".rmf-filter-card").forEach(function(card) {
+    card.addEventListener("click", function() {
+      document.querySelectorAll(".rmf-filter-card").forEach(function(c) { c.classList.remove("active"); });
+      card.classList.add("active");
+      activeFilter = card.dataset.filter;
+      applyFilter();
+    });
+  });
+
+  table.querySelectorAll("th.sortable").forEach(function(th) {
+    th.addEventListener("click", function() {
+      var col = th.dataset.col;
+      if (sortCol === col) { sortDir = -sortDir; }
+      else { sortCol = col; sortDir = 1; }
+      table.querySelectorAll("th.sortable").forEach(function(h) {
+        h.classList.remove("sort-asc", "sort-desc");
+        var arrow = h.querySelector(".sort-arrow");
+        if (arrow) arrow.className = "sort-arrow sort-none";
+      });
+      th.classList.add(sortDir === 1 ? "sort-asc" : "sort-desc");
+      var arrow = th.querySelector(".sort-arrow");
+      if (arrow) arrow.className = "sort-arrow " + (sortDir === 1 ? "sort-asc" : "sort-desc");
+      applySort();
+    });
+  });
+})();
+</script>
 {% endblock %}

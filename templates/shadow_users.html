@@ -25,7 +25,8 @@
       <tr>
         <th>Username</th>
         <th>Display Name</th>
-        <th>Role</th>
+        <th>Platform Role</th>
+        <th>Prior System Assignments</th>
         <th>Removed At</th>
         <th>Removed By</th>
         <th>Actions</th>
@@ -33,6 +34,7 @@
     </thead>
     <tbody>
       {% for p in profiles %}
+      {% set prior = pra_map.get(p.remote_user, []) %}
       <tr style="opacity:0.8">
         <td>
           <span class="mono" style="font-size:0.88em">{{ p.remote_user }}</span>
@@ -42,6 +44,19 @@
         </td>
         <td style="color:var(--muted)">{{ p.display_name or '—' }}</td>
         <td><span class="role-badge role-{{ p.role or 'employee' }}">{{ p.role or 'employee' }}</span></td>
+        <td style="font-size:0.78em;color:var(--muted);max-width:220px">
+          {% if prior %}
+            {% for pra in prior %}
+              <span style="display:inline-block;margin:1px 2px 1px 0;padding:1px 6px;
+                           border-radius:3px;background:rgba(255,255,255,0.05);border:1px solid var(--border);
+                           white-space:nowrap">
+                {{ pra.program_role }}{% if pra.system_id %}<span style="color:#444"> ·{{ pra.system_id[:6] }}</span>{% endif %}
+              </span>
+            {% endfor %}
+          {% else %}
+            <span style="color:#333">—</span>
+          {% endif %}
+        </td>
         <td style="font-size:0.82em;color:var(--muted)">
           {{ p.removed_at.strftime('%Y-%m-%d %H:%M') if p.removed_at else '—' }}
         </td>

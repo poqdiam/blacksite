@@ -102,7 +102,7 @@ from fastapi import (
     Request, UploadFile, WebSocket, WebSocketDisconnect
 )
 from fastapi.responses import (
-    FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+    FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -126,6 +126,9 @@ from app.models import (
     ChangeReviewRecord, BackupCheckRecord, AccessSpotCheck,
     Vendor, InterconnectionRecord, DataFlowRecord,
     PrivacyAssessment, RestoreTestRecord, GeneratedReport,
+    EvidenceFile,
+    # Phase 30 — Compliance Framework Crosswalk
+    ComplianceFramework, FrameworkControl, ControlCrosswalk, SystemFramework,
     init_db, make_engine, make_session_factory
 )
 from app.updater    import load_catalog, update_if_needed
@@ -135,6 +138,7 @@ from app.quiz       import QUESTIONS, grade_quiz, grade_daily_quiz
 from app.mailer     import send_report, forward_assessment, send_welcome_email, send_bundle
 from app.remediation import get_remediation
 from app.scorer     import analyze_assessment, compute_risk_level, compute_overall_impact
+from app.llm        import get_engine as _get_llm_engine
 
 logging.basicConfig(
     level=logging.INFO,
@@ -887,8 +891,72 @@ async def _get_candidate(candidate_id: str, session) -> Candidate:
     return result.scalar_one_or_none()
 
 
+_AUDIT_ACTION_LABELS = {
+    "CREATE": "Created",    "DELETE": "Deleted",   "UPDATE": "Updated",
+    "EXPORT": "Exported",   "VIEW":   "Viewed",    "LOGIN":  "Login",
+}
+_AUDIT_RESOURCE_LABELS = {
+    "role_shell": "Role View",    "assessment": "Assessment",   "system": "System",
+    "profile": "Profile",         "control": "Control",         "poam": "POA&M",
+    "poam_item": "POA&M",         "risk": "Risk",               "observation": "Observation",
+    "user": "User",               "notification": "Notification",
+}
+_AUDIT_ROLE_LABELS = {
+    "ao": "AO", "ciso": "CISO", "issm": "ISSM", "isso": "ISSO",
+    "sca": "SCA", "system_owner": "System Owner", "auditor": "Auditor",
+    "bcdr_coordinator": "BCDR Coordinator", "pen_tester": "Pen Tester",
+    "data_owner": "Data Owner", "pmo": "PMO", "incident_responder": "IR",
+    "employee": "Employee", "reset": "Default",
+}
+
+def _format_audit_entry(entry) -> dict:
+    """Translate raw AuditLog row into display-ready dict for the admin feed."""
+    try:
+        d = json.loads(entry.details or "{}")
+    except Exception:
+        d = {}
+    action = entry.action or ""
+    rtype  = entry.resource_type or ""
+
+    if rtype == "role_shell" and d.get("action") == "set_shell":
+        role_raw   = d.get("target_role", "")
+        role_label = _AUDIT_ROLE_LABELS.get(role_raw, role_raw.replace("_", " ").title() if role_raw else "—")
+        action_display   = f"Activated role view: {role_label}"
+        resource_display = "Role View"
+        details_display  = ""
+    else:
+        action_display   = _AUDIT_ACTION_LABELS.get(action, action)
+        resource_display = _AUDIT_RESOURCE_LABELS.get(rtype, rtype.replace("_", " ").title())
+        skip_keys = {"action", "_real_role"}
+        parts = []
+        for k, v in d.items():
+            if k in skip_keys:
+                continue
+            val_str = str(v)[:60] if v else ""
+            if not val_str:
+                continue
+            if k == "target_role":
+                val_str = _AUDIT_ROLE_LABELS.get(val_str, val_str.replace("_", " ").title())
+            key_label = k.replace("_", " ").title()
+            parts.append(f"{key_label}: {val_str}")
+        details_display = " · ".join(parts[:3])
+
+    return {
+        "timestamp":        entry.timestamp,
+        "remote_user":      entry.remote_user,
+        "action":           action,
+        "action_display":   action_display,
+        "resource_type":    rtype,
+        "resource_display": resource_display,
+        "resource_id":      entry.resource_id,
+        "details_display":  details_display,
+        "outcome":          entry.outcome,
+    }
+
+
 async def _log_audit(session, remote_user: str, action: str,
-                     resource_type: str, resource_id: str, details: dict = None):
+                     resource_type: str, resource_id: str, details: dict = None,
+                     remote_ip: str = None, outcome: str = "ok"):
     """Write an audit log entry."""
     entry = AuditLog(
         remote_user   = remote_user,
@@ -896,6 +964,8 @@ async def _log_audit(session, remote_user: str, action: str,
         resource_type = resource_type,
         resource_id   = str(resource_id),
         details       = json.dumps(details or {}, default=str),
+        remote_ip     = remote_ip,
+        outcome       = outcome,
     )
     session.add(entry)
 
@@ -2080,6 +2150,7 @@ async def admin_page(request: Request):
             .limit(10)
         )
         recent_audit = audit_rows.scalars().all()
+        recent_audit_display = [_format_audit_entry(e) for e in recent_audit]
 
         # Phase 5: System auth breakdown
         sys_auth_row = await session.execute(
@@ -2098,6 +2169,13 @@ async def admin_page(request: Request):
             .where(Submission.status.in_(["submitted", "under_review"]))
         )
         submissions_review_count = sub_review_row.scalar() or 0
+
+        # Phase 5: Open observations
+        obs_open_row = await session.execute(
+            select(func.count(Observation.id))
+            .where(Observation.status == "open")
+        )
+        obs_open_count = obs_open_row.scalar() or 0
 
     now = datetime.now(timezone.utc)
     week_ago = now - timedelta(days=7)
@@ -2156,9 +2234,11 @@ async def admin_page(request: Request):
         "poam_on_track":    poam_on_track,
         "risk_by_level":             risk_by_level,
         "recent_audit":              recent_audit,
+        "recent_audit_display":      recent_audit_display,
         "systems_auth_count":        systems_auth_count,
         "systems_in_progress_count": systems_in_progress_count,
         "submissions_review_count":  submissions_review_count,
+        "obs_open_count":            obs_open_count,
         **_tpl_ctx(request),
     })
 
@@ -2168,8 +2248,19 @@ async def admin_page(request: Request):
 # Update the permissions matrix — this was a documentation error, not a code gap.
 
 @app.get("/admin/audit", response_class=HTMLResponse)
-async def admin_audit(request: Request, days: str = "30",
-                      hide_view: str = "1", page: int = 1, per_page: int = 25):
+async def admin_audit(
+    request:       Request,
+    days:          str = "30",
+    hide_view:     str = "1",
+    page:          int = 1,
+    per_page:      int = 25,
+    actor:         str = "",
+    action_filter: str = "",
+    rtype:         str = "",
+    rid:           str = "",
+    outcome_filter:str = "",
+    q:             str = "",
+):
     async with SessionLocal() as _chk_session:
         _chk_role = await _get_user_role(request, _chk_session)
     if not _is_admin(request) and _chk_role not in ("issm", "auditor"):
@@ -2182,40 +2273,130 @@ async def admin_audit(request: Request, days: str = "30",
 
     per_page = max(10, min(per_page, 100))
     page     = max(1, page)
-    offset   = (page - 1) * per_page
+
+    # ── Human-readable label maps ──────────────────────────────────────────
+    _RTYPE_LABELS = {
+        "system": "System", "poam": "POA&M", "poam_item": "POA&M Item",
+        "poam_evidence": "POA&M Evidence", "poam_bulk_import": "POA&M Bulk Import",
+        "risk": "Risk", "assessment": "Assessment", "user_profile": "User Profile",
+        "submission": "Submission", "ato_document": "ATO Document",
+        "artifact": "Artifact", "observation": "Observation",
+        "bcdr_event": "BCDR Event", "bcdr_signoff": "BCDR Sign-off",
+        "system_assignment": "System Assignment", "system_connection": "Connection",
+        "system_control": "System Control", "inventory_item": "Inventory Item",
+        "control": "Control", "control_parameter": "Control Parameter",
+        "role_shell": "Role Shell", "rmf_record": "RMF Record",
+        "profile": "Profile", "vendor": "Vendor",
+        "interconnection_record": "Interconnection", "data_flow_record": "Data Flow",
+        "privacy_assessment": "Privacy Assessment", "restore_test_record": "Restore Test",
+        "deep_work_completion": "Deep Work Rotation", "daily_logbook": "Daily Logbook",
+        "change_review_record": "Change Review", "backup_check_record": "Backup Check",
+        "access_spot_check": "Access Spot-Check", "generated_report": "Generated Report",
+        "bundle": "Bundle", "auto_fail_engine": "AutoFail Engine",
+        "audit_log": "Audit Log Export", "nist_feed": "NIST Feed",
+        "nvd_feed": "NVD Feed", "removed_user_reservation": "User Reservation",
+    }
+    _ACTION_LABELS = {
+        "CREATE": "Created", "UPDATE": "Updated", "DELETE": "Deleted",
+        "VIEW": "Viewed", "LOGIN": "Logged In", "EXPORT": "Exported",
+        "IMPORT": "Imported", "UPLOAD": "Uploaded", "DOWNLOAD": "Downloaded",
+        "GENERATE": "Generated", "PROVISION": "Provisioned", "SAVE": "Saved",
+        "INGEST": "Ingested", "DENIED": "Denied", "ATO_DECISION": "ATO Decision",
+        "RUN": "Ran", "UPSERT": "Upserted",
+    }
+    # resource_type → URL template (use {id} placeholder)
+    _RTYPE_URLS = {
+        "system":               "/systems/{id}",
+        "poam":                 "/poam/{id}",
+        "poam_item":            "/poam/{id}",
+        "risk":                 "/risks/{id}",
+        "assessment":           "/admin",
+        "submission":           "/submissions",
+        "observation":          "/observations/{id}",
+        "ato_document":         "/ato",
+        "artifact":             "/systems",
+        "user_profile":         "/admin/users",
+        "bcdr_event":           "/bcdr/dashboard",
+    }
 
     async with SessionLocal() as session:
         def _base_q():
-            q = select(AuditLog)
+            q_stmt = select(AuditLog)
             if days_int > 0:
                 cutoff = datetime.now(timezone.utc) - timedelta(days=days_int)
-                q = q.where(AuditLog.timestamp >= cutoff)
+                q_stmt = q_stmt.where(AuditLog.timestamp >= cutoff)
             if hide_view == "1":
-                q = q.where(AuditLog.action != "VIEW")
-            return q
+                q_stmt = q_stmt.where(AuditLog.action != "VIEW")
+            if actor.strip():
+                q_stmt = q_stmt.where(AuditLog.remote_user == actor.strip())
+            if action_filter.strip():
+                q_stmt = q_stmt.where(AuditLog.action == action_filter.strip().upper())
+            if rtype.strip():
+                q_stmt = q_stmt.where(AuditLog.resource_type == rtype.strip())
+            if rid.strip():
+                q_stmt = q_stmt.where(AuditLog.resource_id.ilike(f"%{rid.strip()}%"))
+            if outcome_filter.strip():
+                q_stmt = q_stmt.where(AuditLog.outcome == outcome_filter.strip())
+            if q.strip():
+                q_stmt = q_stmt.where(AuditLog.details.ilike(f"%{q.strip()}%"))
+            return q_stmt
 
         total = (await session.execute(
             select(func.count()).select_from(_base_q().subquery())
         )).scalar() or 0
         total_pages = max(1, (total + per_page - 1) // per_page)
         page = min(page, total_pages)
+        offset = (page - 1) * per_page
 
         rows    = await session.execute(
             _base_q().order_by(AuditLog.timestamp.desc()).offset(offset).limit(per_page)
         )
         entries = rows.scalars().all()
+
+        # Filter option lists for dropdowns
+        actor_rows  = (await session.execute(
+            select(AuditLog.remote_user).distinct().where(AuditLog.remote_user.isnot(None))
+            .order_by(AuditLog.remote_user)
+        )).scalars().all()
+        action_rows = (await session.execute(
+            select(AuditLog.action).distinct().where(AuditLog.action.isnot(None))
+            .order_by(AuditLog.action)
+        )).scalars().all()
+        rtype_rows  = (await session.execute(
+            select(AuditLog.resource_type).distinct().where(AuditLog.resource_type.isnot(None))
+            .order_by(AuditLog.resource_type)
+        )).scalars().all()
+
         role = await _get_user_role(request, session)
 
+    active_filters = any([actor, action_filter, rtype, rid, outcome_filter, q])
+
     return templates.TemplateResponse("audit_log.html", {
-        "request":     request,
-        "entries":     entries,
-        "days":        days_int,
-        "hide_view":   hide_view,
-        "user_role":   role,
-        "page":        page,
-        "total_pages": total_pages,
-        "per_page":    per_page,
-        "total":       total,
+        "request":        request,
+        "entries":        entries,
+        "days":           days_int,
+        "hide_view":      hide_view,
+        "user_role":      role,
+        "page":           page,
+        "total_pages":    total_pages,
+        "per_page":       per_page,
+        "total":          total,
+        # Filter values
+        "actor":          actor,
+        "action_filter":  action_filter,
+        "rtype":          rtype,
+        "rid":            rid,
+        "outcome_filter": outcome_filter,
+        "q":              q,
+        "active_filters": active_filters,
+        # Filter options
+        "all_actors":     actor_rows,
+        "all_actions":    action_rows,
+        "all_rtypes":     rtype_rows,
+        # Label maps
+        "rtype_labels":   _RTYPE_LABELS,
+        "action_labels":  _ACTION_LABELS,
+        "rtype_urls":     _RTYPE_URLS,
         **_tpl_ctx(request),
     })
 
@@ -2257,6 +2438,8 @@ async def admin_view_as(request: Request, username: str):
         )
         my_entries = [{"assessment": a, "candidate": c} for a, c in my_rows.all()]
 
+        viewed_profile = await session.get(UserProfile, username)
+
     today_activity = past_activities.get(today)
     quiz_done      = today_activity is not None
     quiz_passed    = today_activity.passed if today_activity else False
@@ -2285,18 +2468,20 @@ async def admin_view_as(request: Request, username: str):
     pass_threshold = quiz_cfg.get("pass_threshold", 75)
 
     return templates.TemplateResponse("dashboard.html", {
-        "request":        request,
-        "today_activity": today_activity,
-        "quiz_done":      quiz_done,
-        "quiz_passed":    quiz_passed,
-        "quiz_score":     quiz_score_val,
-        "streak":         streak,
-        "week_data":      week_data,
-        "score_history":  score_history,
-        "my_entries":     my_entries,
-        "pass_threshold": pass_threshold,
-        "view_as_mode":   True,
-        "viewing_as":     username,
+        "request":          request,
+        "today_activity":   today_activity,
+        "quiz_done":        quiz_done,
+        "quiz_passed":      quiz_passed,
+        "quiz_score":       quiz_score_val,
+        "streak":           streak,
+        "week_data":        week_data,
+        "score_history":    score_history,
+        "my_entries":       my_entries,
+        "pass_threshold":   pass_threshold,
+        "view_as_mode":     True,
+        "viewing_as":       username,
+        "viewing_as_role":  viewed_profile.role         if viewed_profile else "employee",
+        "viewing_as_tier":  viewed_profile.company_tier if viewed_profile else "analyst",
         **_tpl_ctx(request),
     })
 
@@ -3073,6 +3258,12 @@ async def system_create(request: Request):
             environment            = str(form.get("environment", "")).strip() or None,
             owner_name             = str(form.get("owner_name", "")).strip() or None,
             owner_email            = str(form.get("owner_email", "")).strip() or None,
+            ao_name                = str(form.get("ao_name", "")).strip() or None,
+            ao_email               = str(form.get("ao_email", "")).strip() or None,
+            issm_name              = str(form.get("issm_name", "")).strip() or None,
+            issm_email             = str(form.get("issm_email", "")).strip() or None,
+            isso_name              = str(form.get("isso_name", "")).strip() or None,
+            isso_email             = str(form.get("isso_email", "")).strip() or None,
             description            = str(form.get("description", "")).strip() or None,
             purpose                = str(form.get("purpose", "")).strip() or None,
             boundary               = str(form.get("boundary", "")).strip() or None,
@@ -3246,6 +3437,14 @@ async def system_detail(request: Request, system_id: str):
         _detail_role = await _get_user_role(request, session)
         can_edit = _detail_role in ("admin", "ao", "ciso")
 
+        # ATO documents for the process map card on system detail
+        ato_doc_rows = await session.execute(
+            select(AtoDocument)
+            .where(AtoDocument.system_id == system_id)
+            .order_by(AtoDocument.doc_type)
+        )
+        ato_docs = list(ato_doc_rows.scalars().all())
+
         # Phase 25: today's logbook summary for Daily Ops tab badge
         _today_iso = date.today().isoformat()
         _detail_lb = (await session.execute(
@@ -3290,6 +3489,7 @@ async def system_detail(request: Request, system_id: str):
         "art_count":               art_count,
         "obs_open_count":          obs_open_count,
         "can_edit":                can_edit,
+        "ato_docs":                ato_docs,
         "daily_tasks_done":        _daily_tasks_done,
         "daily_tasks_total":       _daily_tasks_total,
         **_tpl_ctx(request),
@@ -3456,6 +3656,12 @@ async def system_update(request: Request, system_id: str):
         sys.environment            = str(form.get("environment", "")).strip() or None
         sys.owner_name             = str(form.get("owner_name", "")).strip() or None
         sys.owner_email            = str(form.get("owner_email", "")).strip() or None
+        sys.ao_name                = str(form.get("ao_name", "")).strip() or None
+        sys.ao_email               = str(form.get("ao_email", "")).strip() or None
+        sys.issm_name              = str(form.get("issm_name", "")).strip() or None
+        sys.issm_email             = str(form.get("issm_email", "")).strip() or None
+        sys.isso_name              = str(form.get("isso_name", "")).strip() or None
+        sys.isso_email             = str(form.get("isso_email", "")).strip() or None
         sys.description            = str(form.get("description", "")).strip() or None
         sys.purpose                = str(form.get("purpose", "")).strip() or None
         sys.boundary               = str(form.get("boundary", "")).strip() or None
@@ -3485,6 +3691,164 @@ async def system_update(request: Request, system_id: str):
         await session.commit()
 
     return RedirectResponse(url=f"/systems/{system_id}", status_code=303)
+
+
+# ── Evidence Locker (Phase 29) ─────────────────────────────────────────────────
+
+_EVIDENCE_BASE = Path("data/evidence")
+_EVIDENCE_MAX_MB = 50
+_ALLOWED_MIME_PREFIXES = (
+    "application/pdf", "application/msword", "application/vnd.",
+    "text/", "image/", "application/zip", "application/x-zip",
+    "application/octet-stream",
+)
+
+
+@app.get("/systems/{system_id}/evidence", response_class=HTMLResponse)
+async def evidence_list(request: Request, system_id: str):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as session:
+        sys_row = await session.execute(select(System).where(System.id == system_id))
+        sys = sys_row.scalar_one_or_none()
+        if not sys:
+            raise HTTPException(status_code=404)
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+        rows = await session.execute(
+            select(EvidenceFile)
+            .where(EvidenceFile.system_id == system_id)
+            .order_by(EvidenceFile.uploaded_at.desc())
+        )
+        files = rows.scalars().all()
+    return templates.TemplateResponse("evidence_locker.html", {
+        "request": request,
+        "system":  sys,
+        "files":   files,
+        "can_delete": True,  # route enforces per-file ownership/role checks
+        **_tpl_ctx(request),
+    })
+
+
+@app.post("/systems/{system_id}/evidence")
+async def evidence_upload(
+    request: Request,
+    system_id: str,
+    file:        UploadFile = File(...),
+    description: str        = Form(""),
+    control_ids: str        = Form(""),
+    tags:        str        = Form(""),
+):
+    import mimetypes as _mt
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        sys_row = await session.execute(select(System).where(System.id == system_id))
+        sys = sys_row.scalar_one_or_none()
+        if not sys:
+            raise HTTPException(status_code=404)
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        # Read file bytes and validate size
+        raw = await file.read()
+        size_mb = len(raw) / (1024 * 1024)
+        if size_mb > _EVIDENCE_MAX_MB:
+            raise HTTPException(status_code=413,
+                                detail=f"File too large ({size_mb:.1f} MB > {_EVIDENCE_MAX_MB} MB limit)")
+
+        # Determine MIME type
+        guessed, _ = _mt.guess_type(file.filename or "")
+        mime = file.content_type or guessed or "application/octet-stream"
+
+        # Sanitize original filename and build storage path
+        orig = Path(file.filename or "upload").name  # strip dir traversal
+        ext  = Path(orig).suffix.lower()
+        stored_name = f"{uuid.uuid4().hex}{ext}"
+        dest_dir  = _EVIDENCE_BASE / system_id
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_path = dest_dir / stored_name
+        rel_path  = f"evidence/{system_id}/{stored_name}"
+
+        async with aiofiles.open(dest_path, "wb") as fh:
+            await fh.write(raw)
+
+        # Normalise control_ids to JSON array
+        ctrl_list = [c.strip().upper() for c in control_ids.split(",") if c.strip()]
+        import json as _json
+        ctrl_json = _json.dumps(ctrl_list) if ctrl_list else None
+
+        ev = EvidenceFile(
+            system_id     = system_id,
+            filename      = stored_name,
+            original_name = orig,
+            file_path     = rel_path,
+            file_size     = len(raw),
+            mime_type     = mime,
+            description   = description.strip() or None,
+            control_ids   = ctrl_json,
+            tags          = tags.strip() or None,
+            uploaded_by   = user,
+        )
+        session.add(ev)
+        await _log_audit(session, user, "CREATE", "evidence", system_id,
+                         {"filename": orig, "size": len(raw)})
+        await session.commit()
+
+    return RedirectResponse(url=f"/systems/{system_id}/evidence", status_code=303)
+
+
+@app.get("/systems/{system_id}/evidence/{file_id}/download")
+async def evidence_download(request: Request, system_id: str, file_id: int):
+    from fastapi.responses import FileResponse
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as session:
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+        ev = await session.get(EvidenceFile, file_id)
+        if not ev or ev.system_id != system_id:
+            raise HTTPException(status_code=404)
+    fpath = Path("data") / ev.file_path
+    if not fpath.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    return FileResponse(
+        fpath,
+        media_type=ev.mime_type or "application/octet-stream",
+        filename=ev.original_name,
+    )
+
+
+@app.post("/systems/{system_id}/evidence/{file_id}/delete")
+async def evidence_delete(request: Request, system_id: str, file_id: int):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as session:
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+        ev = await session.get(EvidenceFile, file_id)
+        if not ev or ev.system_id != system_id:
+            raise HTTPException(status_code=404)
+        if ev.is_locked:
+            raise HTTPException(status_code=403, detail="This file is locked and cannot be deleted")
+        # Non-admin can only delete their own uploads
+        role = await _get_user_role(request, session)
+        if role not in ("admin", "ao", "ciso", "isso") and ev.uploaded_by != user:
+            raise HTTPException(status_code=403, detail="You can only delete your own uploads")
+        # Remove from disk
+        fpath = Path("data") / ev.file_path
+        if fpath.exists():
+            fpath.unlink()
+        await _log_audit(session, user, "DELETE", "evidence", system_id,
+                         {"filename": ev.original_name, "file_id": file_id})
+        await session.delete(ev)
+        await session.commit()
+    return RedirectResponse(url=f"/systems/{system_id}/evidence", status_code=303)
 
 
 @app.post("/systems/{system_id}/delete")
@@ -3662,9 +4026,10 @@ async def poam_dashboard(request: Request):
     status_filter   = request.query_params.get("status", "open")   # open|in_progress|all|closed
     severity_filter = request.query_params.get("severity", "")
     system_filter   = request.query_params.get("system_id", "")
-    crit_high_filter = request.query_params.get("crit_high", "")   # "1" → Critical+High only
-    overdue_filter   = request.query_params.get("overdue", "")     # "1" → past due date
-    due_soon_filter  = request.query_params.get("due_soon", "")    # "1" → due within 7 days
+    crit_high_filter         = request.query_params.get("crit_high", "")         # "1" → Critical+High only
+    overdue_filter           = request.query_params.get("overdue", "")           # "1" → past due date
+    due_soon_filter          = request.query_params.get("due_soon", "")          # "1" → due within 7 days
+    closed_this_month_filter = request.query_params.get("closed_this_month", "") # "1" → closed last 30 days
     try:
         PAGE_SIZE = max(10, min(int(request.query_params.get("per_page", 10)), 100))
     except ValueError:
@@ -3702,6 +4067,8 @@ async def poam_dashboard(request: Request):
             if due_soon_filter == "1":
                 base_q = base_q.where(PoamItem.scheduled_completion >= today_str) \
                                .where(PoamItem.scheduled_completion <= week_str)
+            if closed_this_month_filter == "1":
+                base_q = base_q.where(PoamItem.completion_date >= month_ago)
             if system_filter:
                 base_q = base_q.where(PoamItem.system_id == system_filter)
             return base_q
@@ -3823,9 +4190,10 @@ async def poam_dashboard(request: Request):
         "status_filter":     status_filter,
         "severity_filter":   severity_filter,
         "system_filter":     system_filter,
-        "crit_high_filter":  crit_high_filter,
-        "overdue_filter":    overdue_filter,
-        "due_soon_filter":   due_soon_filter,
+        "crit_high_filter":          crit_high_filter,
+        "overdue_filter":            overdue_filter,
+        "due_soon_filter":           due_soon_filter,
+        "closed_this_month_filter":  closed_this_month_filter,
         "page":              page,
         "total_pages":       total_pages,
         "total_filtered":    total_filtered,
@@ -6677,6 +7045,14 @@ async def api_poam_overdue_alerts(request: Request):
             .limit(50)
         )).scalars().all()
 
+        # Batch into tier buckets — send one digest per tier, not one per item.
+        dedupe_digest_key = f"poam_overdue_digest:{today_str}"
+        if await session.get(SystemSettings, dedupe_digest_key):
+            # Already sent today's digest — skip
+            return JSONResponse({"alerts_sent": 0, "overdue_count": len(overdue_items),
+                                 "detail": "digest already sent today"})
+
+        tier1, tier2, tier3 = [], [], []
         for item in overdue_items:
             try:
                 due = date.fromisoformat(item.scheduled_completion)
@@ -6685,36 +7061,42 @@ async def api_poam_overdue_alerts(request: Request):
             days_overdue = (today - due).days
             if days_overdue < 1:
                 continue
-
-            # Determine escalation tier
+            entry = (item.poam_id or item.id[:8], item.weakness_name or "Unknown",
+                     item.scheduled_completion, days_overdue, item.severity or "?")
             if days_overdue >= 14:
-                tier_key = "tier1_ao"
-                tier_label = "🔴 AO Tier 1 Escalation"
+                tier1.append(entry)
             elif days_overdue >= 7:
-                tier_key = "tier2_issm"
-                tier_label = "🟠 ISSM Tier 2 Escalation"
+                tier2.append(entry)
             else:
-                tier_key = "tier3_isso"
-                tier_label = "⚠️ ISSO Tier 3 Operational"
+                tier3.append(entry)
 
-            item_id = item.poam_id or item.id[:8]
-            dedupe_key = f"poam_overdue:{item.id}:{tier_key}:{today_str}"
-            existing = await session.get(SystemSettings, dedupe_key)
-            if existing:
-                continue
+        def _fmt_tier(label: str, items: list) -> str | None:
+            if not items:
+                return None
+            lines = [f"{label} — {len(items)} item(s)\n"]
+            for pid, name, due, days, sev in items[:10]:
+                lines.append(f"  • `{pid}` {name[:50]} ({days}d overdue, {sev})")
+            if len(items) > 10:
+                lines.append(f"  … and {len(items)-10} more")
+            return "\n".join(lines)
 
-            msg = (
-                f"{tier_label}\n\n"
-                f"*POA\\&M:* `{item_id}`\n"
-                f"*Weakness:* {(item.weakness_name or 'Unknown')[:80]}\n"
-                f"*Due:* {item.scheduled_completion} ({days_overdue}d overdue)\n"
-                f"*Severity:* {item.severity or 'Unknown'}\n"
-                f"*System:* {item.system_id or 'N/A'}\n"
-                f"Review: https://blacksite.borisov.network/poam/{item.id}"
+        parts = list(filter(None, [
+            _fmt_tier("🔴 AO Tier 1 (≥14d)", tier1),
+            _fmt_tier("🟠 ISSM Tier 2 (7-13d)", tier2),
+            _fmt_tier("⚠️ ISSO Tier 3 (1-6d)", tier3),
+        ]))
+
+        if parts:
+            total = len(tier1) + len(tier2) + len(tier3)
+            digest = (
+                f"📋 *BLACKSITE — POA\\&M Overdue Digest*\n"
+                f"*{today_str} · {total} item(s) overdue*\n\n"
+                + "\n\n".join(parts)
+                + f"\n\nReview: https://blacksite.borisov.network/poam"
             )
-            _telegram_send(msg)
+            _telegram_send(digest)
             alerts_sent += 1
-            session.add(SystemSettings(key=dedupe_key, value=today_str))
+            session.add(SystemSettings(key=dedupe_digest_key, value=today_str))
 
         await session.commit()
 
@@ -6746,19 +7128,28 @@ async def api_audit_check(request: Request):
             .limit(500)
         )).scalars().all()
 
-        # ── Role changes ───────────────────────────────────────────────────
+        # ── Real role changes (admin sets user role) ───────────────────────
+        # resource_type="role_shell" = role VIEW switch — normal, not alertable.
+        # Real mutations: resource_type="user_profile" + old_role in details.
         role_changes = [e for e in recent_logs
-                        if e.action == "UPDATE" and e.resource_type == "role_shell"
-                        and "set_shell" in (e.details or "")]
+                        if e.action == "UPDATE" and e.resource_type == "user_profile"
+                        and "old_role" in (e.details or "")]
         for ev in role_changes:
             dedupe_key = f"audit_role_change:{ev.remote_user}:{today_str}"
             if await session.get(SystemSettings, dedupe_key):
                 continue
+            try:
+                d = json.loads(ev.details or "{}")
+            except Exception:
+                d = {}
+            old_r = d.get("old_role", "?")
+            new_r = d.get("new_role", "?")
             msg = (
-                f"🔑 *BLACKSITE Audit Alert — Role Change*\n\n"
-                f"*User:* `{ev.remote_user}`\n"
+                f"🔑 *BLACKSITE Audit Alert — Platform Role Changed*\n\n"
+                f"*Target user:* `{ev.remote_user}`\n"
+                f"*Changed by:* `{ev.remote_user}`\n"
+                f"*Role:* {old_r} → {new_r}\n"
                 f"*Time:* {ev.timestamp.strftime('%Y-%m-%dT%H:%M:%SZ') if ev.timestamp else 'unknown'}\n"
-                f"*Detail:* {(ev.details or '')[:200]}\n"
                 f"Severity: HIGH"
             )
             _telegram_send(msg)
@@ -7128,7 +7519,7 @@ async def rmf_update_step(request: Request, system_id: str, step: str,
 
 @app.get("/admin/users", response_class=HTMLResponse)
 async def admin_users(request: Request, provisioned: str = "",
-                      page: int = 1, per_page: int = 10):
+                      page: int = 1, per_page: int = 10, show_removed: str = ""):
     async with SessionLocal() as _chk_session:
         _chk_role = await _get_user_role(request, _chk_session)
     if not _is_admin(request):
@@ -7137,14 +7528,19 @@ async def admin_users(request: Request, provisioned: str = "",
     per_page = max(5, min(100, per_page))
     page     = max(1, page)
     offset   = (page - 1) * per_page
+    include_removed = show_removed == "1"
 
     async with SessionLocal() as session:
+        base_q = select(UserProfile)
+        if not include_removed:
+            base_q = base_q.where(UserProfile.status != "removed")
+
         total_count = (await session.execute(
-            select(func.count()).select_from(UserProfile)
+            select(func.count()).select_from(base_q.subquery())
         )).scalar() or 0
 
         rows = await session.execute(
-            select(UserProfile).order_by(UserProfile.remote_user)
+            base_q.order_by(UserProfile.remote_user)
             .limit(per_page).offset(offset)
         )
         profiles = list(rows.scalars().all())
@@ -7156,10 +7552,10 @@ async def admin_users(request: Request, provisioned: str = "",
         )
         assign_counts = dict(assign_rows.all())
 
-        # Role counts for stats (full table)
-        all_role_rows = await session.execute(
+        # Role counts for stats (full table) — consume inside session before it closes
+        all_role_rows = list((await session.execute(
             select(UserProfile.remote_user, UserProfile.role)
-        )
+        )).all())
 
         role = await _get_user_role(request, session)
 
@@ -7167,7 +7563,7 @@ async def admin_users(request: Request, provisioned: str = "",
     employees_cfg   = CONFIG.get("employees", [])
 
     role_counts: dict = {}
-    for ru, rl in all_role_rows.all():
+    for ru, rl in all_role_rows:
         r = "admin" if ru in admin_users_cfg else (rl or "employee")
         role_counts[r] = role_counts.get(r, 0) + 1
 
@@ -7188,6 +7584,7 @@ async def admin_users(request: Request, provisioned: str = "",
         "page": page,
         "per_page": per_page,
         "total_pages": total_pages,
+        "show_removed": include_removed,
         **_tpl_ctx(request),
     })
 
@@ -7510,6 +7907,30 @@ async def admin_set_role(request: Request, username: str, role: str = Form(...))
     return JSONResponse({"status": "ok", "username": username, "role": role})
 
 
+@app.post("/admin/users/{username}/tier")
+async def admin_set_tier(request: Request, username: str):
+    if not _effective_is_admin(request):
+        raise HTTPException(status_code=403)
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
+    body  = await request.json()
+    tier  = body.get("tier", "")
+    valid_tiers = {"analyst", "manager", "executive", "principal"}
+    if tier not in valid_tiers:
+        raise HTTPException(status_code=400, detail="Invalid tier")
+
+    async with SessionLocal() as session:
+        profile = await session.get(UserProfile, username)
+        if not profile:
+            raise HTTPException(status_code=404, detail="User not found")
+        old_tier          = profile.company_tier
+        profile.company_tier = tier
+        await _log_audit(session, admin, "UPDATE", "user_profile", username,
+                         {"old_tier": old_tier, "new_tier": tier})
+        await session.commit()
+
+    return JSONResponse({"status": "ok", "username": username, "tier": tier})
+
+
 # ── Bulk user actions ────────────────────────────────────────────────────────────
 
 @app.post("/admin/users/bulk-role")
@@ -7622,6 +8043,8 @@ async def admin_remove_user(request: Request, username: str):
     effective_role = _verify_shell(request.cookies.get("bsv_role_shell", "")) or "admin"
     form  = await request.form()
     reason = str(form.get("removal_reason", "Termination")).strip() or "Termination"
+    if reason == "Other":
+        reason = str(form.get("removal_reason_other", "")).strip() or "Other"
     async with SessionLocal() as session:
         profile = await session.get(UserProfile, username)
         if not profile:
@@ -7633,8 +8056,27 @@ async def admin_remove_user(request: Request, username: str):
         await _log_audit(session, admin, "DELETE", "user_profile", username,
                          {"action": "remove", "reason": reason,
                           "_effective_role": effective_role, "_real_role": "admin"})
-        # B2: Create 1-year re-use reservation for this username/email
         _now_utc = datetime.now(timezone.utc)
+        # Revoke all active ProgramRoleAssignments — snapshot preserved; restorable
+        pra_rows = (await session.execute(
+            select(ProgramRoleAssignment)
+            .where(ProgramRoleAssignment.remote_user == username)
+            .where(ProgramRoleAssignment.status == "active")
+        )).scalars().all()
+        for pra in pra_rows:
+            pra.status     = "revoked"
+            pra.revoked_by = f"system:user_removed:{admin}"
+            pra.revoked_at = _now_utc
+        # Deactivate all active DutyAssignments — marked for restore on un-remove
+        duty_rows = (await session.execute(
+            select(DutyAssignment)
+            .where(DutyAssignment.remote_user == username)
+            .where(DutyAssignment.active == True)
+        )).scalars().all()
+        for da in duty_rows:
+            da.active = False
+            da.note   = (((da.note or "") + " [deactivated:user_removed]").strip())
+        # B2: Create 1-year re-use reservation for this username/email
         reservation = RemovedUserReservation(
             username   = username,
             email      = profile.email or None,
@@ -7662,8 +8104,33 @@ async def admin_restore_user(request: Request, username: str):
         profile.status     = "active"
         profile.removed_at = None
         profile.removed_by = None
+        # Restore ProgramRoleAssignments that were revoked due to this removal
+        pra_rows = (await session.execute(
+            select(ProgramRoleAssignment)
+            .where(ProgramRoleAssignment.remote_user == username)
+            .where(ProgramRoleAssignment.status == "revoked")
+            .where(ProgramRoleAssignment.revoked_by.like("system:user_removed:%"))
+        )).scalars().all()
+        restored_roles = 0
+        for pra in pra_rows:
+            pra.status     = "active"
+            pra.revoked_by = None
+            pra.revoked_at = None
+            restored_roles += 1
+        # Restore DutyAssignments that were deactivated due to this removal
+        duty_rows = (await session.execute(
+            select(DutyAssignment)
+            .where(DutyAssignment.remote_user == username)
+            .where(DutyAssignment.active == False)
+            .where(DutyAssignment.note.like("%[deactivated:user_removed]%"))
+        )).scalars().all()
+        restored_duties = 0
+        for da in duty_rows:
+            da.active = True
+            restored_duties += 1
         await _log_audit(session, admin, "UPDATE", "user_profile", username,
-                         {"action": "restore"})
+                         {"action": "restore", "roles_restored": restored_roles,
+                          "duties_restored": restored_duties})
         await session.commit()
     return RedirectResponse(url="/admin/users/shadow", status_code=303)
 
@@ -7723,9 +8190,23 @@ async def admin_shadow_users(request: Request):
             .order_by(UserProfile.removed_at.desc())
         )
         removed_profiles = list(rows.scalars().all())
+        # Fetch revoked system role assignments for each removed user
+        usernames = [p.remote_user for p in removed_profiles]
+        pra_map: dict = {}
+        if usernames:
+            pra_rows = (await session.execute(
+                select(ProgramRoleAssignment)
+                .where(ProgramRoleAssignment.remote_user.in_(usernames))
+                .where(ProgramRoleAssignment.status == "revoked")
+                .where(ProgramRoleAssignment.revoked_by.like("system:user_removed:%"))
+                .order_by(ProgramRoleAssignment.remote_user, ProgramRoleAssignment.program_role)
+            )).scalars().all()
+            for pra in pra_rows:
+                pra_map.setdefault(pra.remote_user, []).append(pra)
     return templates.TemplateResponse("shadow_users.html", {
         "request":  request,
         "profiles": removed_profiles,
+        "pra_map":  pra_map,
         **_tpl_ctx(request),
     })
 
@@ -9283,6 +9764,443 @@ async def ato_upload(request: Request, system_id: str, doc_type: str,
         await session.commit()
 
     return RedirectResponse(url=f"/ato/{system_id}/{doc_type}", status_code=303)
+
+
+# ── ATO Package Export + RTM (Phase 29) ─────────────────────────────────────────
+
+@app.get("/systems/{system_id}/export-ato-package")
+async def export_ato_package(request: Request, system_id: str):
+    """Stream a ZIP archive of all finalized ATO documents for a system."""
+    import io, zipfile as _zf, textwrap
+
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+        sys_obj = await session.get(System, system_id)
+        if not sys_obj:
+            raise HTTPException(status_code=404)
+
+        docs_rows = await session.execute(
+            select(AtoDocument)
+            .where(AtoDocument.system_id == system_id)
+            .order_by(AtoDocument.doc_type)
+        )
+        docs = docs_rows.scalars().all()
+
+        # Controls summary
+        ctrl_rows = await session.execute(
+            select(SystemControl)
+            .where(SystemControl.system_id == system_id)
+            .order_by(SystemControl.control_family, SystemControl.control_id)
+        )
+        controls = ctrl_rows.scalars().all()
+
+        # POA&Ms
+        poam_rows = await session.execute(
+            select(PoamItem)
+            .where(PoamItem.system_id == system_id)
+            .order_by(PoamItem.severity, PoamItem.scheduled_completion)
+        )
+        poams = poam_rows.scalars().all()
+
+        await _log_audit(session, user, "EXPORT", "system", system_id,
+                         {"export": "ato_package", "doc_count": len(docs)})
+        await session.commit()
+
+    today = date.today().strftime("%Y%m%d")
+    abbr  = (sys_obj.abbreviation or system_id[:8]).upper()
+
+    buf = io.BytesIO()
+    with _zf.ZipFile(buf, "w", _zf.ZIP_DEFLATED) as zf:
+
+        # ── MANIFEST ──
+        manifest_lines = [
+            f"ATO PACKAGE MANIFEST",
+            f"System: {sys_obj.name}  [{abbr}]",
+            f"Generated: {date.today().isoformat()} by {user}",
+            f"Auth Status: {sys_obj.auth_status or '—'}",
+            f"Auth Date:   {sys_obj.auth_date or '—'}",
+            f"Auth Expiry: {sys_obj.auth_expiry or '—'}",
+            "",
+            "CONTENTS",
+            "─" * 60,
+        ]
+        for i, doc in enumerate(docs, 1):
+            manifest_lines.append(f"  {i:02d}. [{doc.status.upper():10s}]  {doc.doc_type:20s}  {doc.title}")
+        manifest_lines += [
+            "",
+            f"Controls:  {len(controls)} total",
+            f"POA&Ms:    {len(poams)} items",
+            "",
+            "This package was generated by BLACKSITE GRC Platform.",
+        ]
+        zf.writestr(f"{abbr}_MANIFEST_{today}.txt", "\n".join(manifest_lines))
+
+        # ── ATO DOCUMENTS ──
+        for doc in docs:
+            # Try to include actual file if it exists
+            if doc.file_path and Path(doc.file_path).exists():
+                file_bytes = Path(doc.file_path).read_bytes()
+                ext = Path(doc.file_path).suffix or ".txt"
+            else:
+                # Fall back to text content
+                body = doc.content or f"[No content available for {doc.doc_type}]"
+                file_bytes = body.encode()
+                ext = ".txt"
+            fname = f"{abbr}_{doc.doc_type}_{today}{ext}"
+            zf.writestr(fname, file_bytes)
+
+        # ── CONTROLS SUMMARY ──
+        lines = [
+            f"CONTROLS IMPLEMENTATION SUMMARY — {sys_obj.name}",
+            f"Generated: {date.today().isoformat()}",
+            "",
+            f"{'Control ID':<12} {'Family':<6} {'Status':<16} {'Type':<16} Title",
+            "─" * 90,
+        ]
+        for c in controls:
+            lines.append(
+                f"{(c.control_id or '').upper():<12} "
+                f"{(c.control_family or '').upper():<6} "
+                f"{(c.status or '').replace('_',' '):<16} "
+                f"{(c.implementation_type or '').replace('_',' '):<16} "
+                f"{(c.control_title or '')[:60]}"
+            )
+        zf.writestr(f"{abbr}_CONTROLS_SUMMARY_{today}.txt", "\n".join(lines))
+
+        # ── POA&M SUMMARY ──
+        if poams:
+            plines = [
+                f"POA&M SUMMARY — {sys_obj.name}",
+                f"Generated: {date.today().isoformat()}",
+                "",
+                f"{'Control':<10} {'Severity':<10} {'Status':<14} {'Due':<12} Weakness",
+                "─" * 80,
+            ]
+            for p in poams:
+                plines.append(
+                    f"{(p.control_id or '—'):<10} "
+                    f"{(p.severity or '—'):<10} "
+                    f"{(p.status or '—'):<14} "
+                    f"{(p.scheduled_completion or '—'):<12} "
+                    f"{(p.weakness_name or '')[:50]}"
+                )
+            zf.writestr(f"{abbr}_POAM_SUMMARY_{today}.txt", "\n".join(plines))
+
+    buf.seek(0)
+    zip_name = f"{abbr}_ATO_PACKAGE_{today}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_name}"'},
+    )
+
+
+@app.get("/systems/{system_id}/rtm", response_class=HTMLResponse)
+async def system_rtm(request: Request, system_id: str, family: str = ""):
+    """Requirements Traceability Matrix: controls × findings × POA&Ms."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        sys_obj = await session.get(System, system_id)
+        if not sys_obj:
+            raise HTTPException(status_code=404)
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        # Controls
+        ctrl_q = select(SystemControl).where(SystemControl.system_id == system_id)
+        if family:
+            ctrl_q = ctrl_q.where(SystemControl.control_family == family.upper())
+        ctrl_rows = await session.execute(ctrl_q.order_by(
+            SystemControl.control_family, SystemControl.control_id))
+        controls = ctrl_rows.scalars().all()
+
+        # POA&Ms
+        poam_rows = await session.execute(
+            select(PoamItem).where(PoamItem.system_id == system_id))
+        poams = poam_rows.scalars().all()
+        poam_by_ctrl: dict[str, list] = {}
+        for p in poams:
+            key = (p.control_id or "").upper()
+            poam_by_ctrl.setdefault(key, []).append(p)
+
+        # Observations
+        obs_rows = await session.execute(
+            select(Observation).where(Observation.system_id == system_id))
+        obs_list = obs_rows.scalars().all()
+        obs_by_ctrl: dict[str, list] = {}
+        for o in obs_list:
+            ctrl_ids_raw = o.control_ids or "[]"
+            try:
+                import json as _j
+                ids = _j.loads(ctrl_ids_raw) if isinstance(ctrl_ids_raw, str) else ctrl_ids_raw
+            except Exception:
+                ids = []
+            for cid in ids:
+                key = str(cid).upper().strip()
+                obs_by_ctrl.setdefault(key, []).append(o)
+
+        # Family list for filter dropdown
+        fam_rows = await session.execute(
+            select(SystemControl.control_family)
+            .where(SystemControl.system_id == system_id)
+            .group_by(SystemControl.control_family)
+            .order_by(SystemControl.control_family)
+        )
+        families = [r[0] for r in fam_rows.all()]
+
+    return templates.TemplateResponse("system_rtm.html", {
+        "request":      request,
+        "system":       sys_obj,
+        "controls":     controls,
+        "poam_by_ctrl": poam_by_ctrl,
+        "obs_by_ctrl":  obs_by_ctrl,
+        "families":     families,
+        "family":       family.upper(),
+        **_tpl_ctx(request),
+    })
+
+
+# ── Compliance Framework Crosswalk (Phase 30) ───────────────────────────────────
+
+def _fw_coverage(controls_by_id: dict, crosswalk_rows: list) -> dict:
+    """Given a dict {nist_control_id: status} and crosswalk rows (fc_id, nist_id),
+    return per-fc_id coverage: 'satisfied'|'partial'|'gap'|'na'."""
+    # Build fc_id → set of (nist_id, status)
+    from collections import defaultdict
+    fc_statuses: dict = defaultdict(list)
+    for fc_id, nist_id in crosswalk_rows:
+        st = controls_by_id.get(nist_id.lower())
+        fc_statuses[fc_id].append(st)
+
+    result = {}
+    for fc_id, statuses in fc_statuses.items():
+        real = [s for s in statuses if s is not None]
+        if not real:
+            result[fc_id] = "unmapped"
+        elif all(s == "not_applicable" for s in real):
+            result[fc_id] = "na"
+        elif any(s in ("implemented", "inherited") for s in real):
+            result[fc_id] = "satisfied"
+        elif any(s == "in_progress" for s in real):
+            result[fc_id] = "partial"
+        else:
+            result[fc_id] = "gap"
+    return result
+
+
+@app.get("/systems/{system_id}/frameworks", response_class=HTMLResponse)
+async def system_frameworks(request: Request, system_id: str):
+    """Phase 30 — Framework crosswalk overview for a system."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as session:
+        sys_obj = await session.get(System, system_id)
+        if not sys_obj:
+            raise HTTPException(status_code=404)
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        # All frameworks
+        fw_rows = (await session.execute(
+            select(ComplianceFramework).where(ComplianceFramework.is_active == True)
+            .order_by(ComplianceFramework.category, ComplianceFramework.name)
+        )).scalars().all()
+
+        # Which frameworks are already applied to this system
+        sf_rows = (await session.execute(
+            select(SystemFramework).where(SystemFramework.system_id == system_id)
+        )).scalars().all()
+        applied_ids = {sf.framework_id for sf in sf_rows}
+
+        # System controls lookup {control_id: status}
+        sc_rows = (await session.execute(
+            select(SystemControl.control_id, SystemControl.status)
+            .where(SystemControl.system_id == system_id)
+        )).all()
+        controls_by_id = {r[0].lower(): r[1] for r in sc_rows}
+
+        # Coverage per framework
+        coverage = {}
+        for fw in fw_rows:
+            cx = (await session.execute(
+                select(ControlCrosswalk.framework_control_id, ControlCrosswalk.nist_control_id)
+                .join(FrameworkControl, FrameworkControl.id == ControlCrosswalk.framework_control_id)
+                .where(FrameworkControl.framework_id == fw.id)
+            )).all()
+            fc_cov = _fw_coverage(controls_by_id, cx)
+            total = len(set(r[0] for r in cx))
+            satisfied = sum(1 for v in fc_cov.values() if v == "satisfied")
+            gap       = sum(1 for v in fc_cov.values() if v == "gap")
+            partial   = sum(1 for v in fc_cov.values() if v == "partial")
+            pct = round(satisfied / total * 100) if total else 0
+            coverage[fw.id] = {"total": total, "satisfied": satisfied,
+                                "gap": gap, "partial": partial, "pct": pct}
+
+    return templates.TemplateResponse("system_frameworks.html", {
+        "request":     request,
+        "system":      sys_obj,
+        "frameworks":  fw_rows,
+        "applied_ids": applied_ids,
+        "coverage":    coverage,
+        **_tpl_ctx(request),
+    })
+
+
+@app.post("/systems/{system_id}/frameworks/{fw_id}/toggle")
+async def system_framework_toggle(request: Request, system_id: str, fw_id: str):
+    """Add or remove a framework from a system's applicability list."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as session:
+        sys_obj = await session.get(System, system_id)
+        if not sys_obj:
+            raise HTTPException(status_code=404)
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+        existing = (await session.execute(
+            select(SystemFramework)
+            .where(SystemFramework.system_id == system_id)
+            .where(SystemFramework.framework_id == fw_id)
+        )).scalar_one_or_none()
+        if existing:
+            await session.delete(existing)
+            action = "removed"
+        else:
+            session.add(SystemFramework(
+                system_id=system_id, framework_id=fw_id, added_by=user
+            ))
+            action = "added"
+        await _log_audit(session, user, "UPDATE", "system_framework", system_id,
+                         {"framework_id": fw_id, "action": action})
+        await session.commit()
+    return RedirectResponse(url=f"/systems/{system_id}/frameworks", status_code=303)
+
+
+@app.get("/systems/{system_id}/frameworks/{fw_short_name}", response_class=HTMLResponse)
+async def system_framework_detail(request: Request, system_id: str, fw_short_name: str,
+                                   domain: str = "", status_filter: str = ""):
+    """Phase 30 — Per-framework crosswalk detail view for a system."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as session:
+        sys_obj = await session.get(System, system_id)
+        if not sys_obj:
+            raise HTTPException(status_code=404)
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        fw = (await session.execute(
+            select(ComplianceFramework)
+            .where(ComplianceFramework.short_name == fw_short_name)
+        )).scalar_one_or_none()
+        if not fw:
+            raise HTTPException(status_code=404, detail="Framework not found")
+
+        # Framework controls
+        fc_q = select(FrameworkControl).where(FrameworkControl.framework_id == fw.id)
+        if domain:
+            fc_q = fc_q.where(FrameworkControl.domain == domain)
+        fc_q = fc_q.order_by(FrameworkControl.domain, FrameworkControl.control_id)
+        fc_rows = (await session.execute(fc_q)).scalars().all()
+        fc_ids  = [r.id for r in fc_rows]
+
+        # Crosswalk: fc_id → [nist_control_id]
+        if fc_ids:
+            cx_rows = (await session.execute(
+                select(ControlCrosswalk.framework_control_id, ControlCrosswalk.nist_control_id)
+                .where(ControlCrosswalk.framework_control_id.in_(fc_ids))
+            )).all()
+        else:
+            cx_rows = []
+        from collections import defaultdict
+        cx_by_fc: dict = defaultdict(list)
+        for fc_id, nist_id in cx_rows:
+            cx_by_fc[fc_id].append(nist_id)
+
+        # System controls lookup
+        sc_rows = (await session.execute(
+            select(SystemControl)
+            .where(SystemControl.system_id == system_id)
+        )).scalars().all()
+        sc_by_id = {r.control_id.lower(): r for r in sc_rows}
+
+        # Build per-fc coverage
+        fc_coverage = {}
+        for fc in fc_rows:
+            nist_ids = cx_by_fc.get(fc.id, [])
+            statuses = [sc_by_id.get(n, None) for n in nist_ids]
+            real = [s.status for s in statuses if s is not None]
+            if not real:
+                cov = "unmapped"
+            elif all(s == "not_applicable" for s in real):
+                cov = "na"
+            elif any(s in ("implemented", "inherited") for s in real):
+                cov = "satisfied"
+            elif any(s == "in_progress" for s in real):
+                cov = "partial"
+            else:
+                cov = "gap"
+            fc_coverage[fc.id] = {"cov": cov, "nist_ids": nist_ids, "sc_map": sc_by_id}
+
+        # Apply status filter
+        if status_filter:
+            fc_rows = [f for f in fc_rows if fc_coverage[f.id]["cov"] == status_filter]
+
+        # Domain list for filter pills
+        dom_rows = (await session.execute(
+            select(FrameworkControl.domain)
+            .where(FrameworkControl.framework_id == fw.id)
+            .group_by(FrameworkControl.domain)
+            .order_by(FrameworkControl.domain)
+        )).all()
+        domains = [r[0] for r in dom_rows if r[0]]
+
+        # Summary counts
+        all_fc = (await session.execute(
+            select(FrameworkControl.id)
+            .where(FrameworkControl.framework_id == fw.id)
+        )).scalars().all()
+        all_cx = (await session.execute(
+            select(ControlCrosswalk.framework_control_id, ControlCrosswalk.nist_control_id)
+            .join(FrameworkControl, FrameworkControl.id == ControlCrosswalk.framework_control_id)
+            .where(FrameworkControl.framework_id == fw.id)
+        )).all()
+        all_cov = _fw_coverage({k: v.status for k, v in sc_by_id.items()}, all_cx)
+        summary = {
+            "total":     len(all_fc),
+            "satisfied": sum(1 for v in all_cov.values() if v == "satisfied"),
+            "partial":   sum(1 for v in all_cov.values() if v == "partial"),
+            "gap":       sum(1 for v in all_cov.values() if v == "gap"),
+            "na":        sum(1 for v in all_cov.values() if v == "na"),
+            "unmapped":  sum(1 for v in all_cov.values() if v == "unmapped"),
+        }
+        summary["pct"] = round(summary["satisfied"] / summary["total"] * 100) if summary["total"] else 0
+
+    return templates.TemplateResponse("system_framework_detail.html", {
+        "request":       request,
+        "system":        sys_obj,
+        "framework":     fw,
+        "fc_rows":       fc_rows,
+        "fc_coverage":   fc_coverage,
+        "cx_by_fc":      {k: v for k, v in cx_by_fc.items()},
+        "sc_by_id":      sc_by_id,
+        "domains":       domains,
+        "domain":        domain,
+        "status_filter": status_filter,
+        "summary":       summary,
+        **_tpl_ctx(request),
+    })
 
 
 # ── ISSM Workload Dashboard ─────────────────────────────────────────────────────
@@ -11147,8 +12065,8 @@ async def exit_view_as(request: Request):
     return resp
 
 
-@app.get("/chat/popup/{room:path}", response_class=HTMLResponse)
-async def chat_popup(request: Request, room: str):
+@app.get("/chat/popup", response_class=HTMLResponse)
+async def chat_popup(request: Request, room: str = "@group"):
     """Standalone pop-out chat window for a specific room."""
     user = request.headers.get(_REMOTE_USER_HDR, "")
     if not _is_admin_user(user):
@@ -14110,4 +15028,171 @@ async def issm_daily_portfolio(request: Request):
         ctx = await _full_ctx(request, session,
             portfolio=portfolio, today=today)
     return templates.TemplateResponse("issm_daily_portfolio.html", ctx)
+
+
+# ── Phase 26: AI Assistant ─────────────────────────────────────────────────────
+
+@app.get("/ai/chat", response_class=HTMLResponse)
+async def ai_chat_page(
+    request: Request,
+    system_id: Optional[str] = None,
+):
+    """Render the AI assistant chat interface."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    async with SessionLocal() as session:
+        # Load systems the user can access for context selector
+        role = await _get_user_role(request, session)
+        if _is_admin(request):
+            systems_q = (await session.execute(
+                select(System).where(System.deleted_at.is_(None)).order_by(System.name)
+            )).scalars().all()
+        else:
+            systems_q = (await session.execute(
+                select(System)
+                .join(SystemAssignment, System.id == SystemAssignment.system_id)
+                .where(SystemAssignment.remote_user == user)
+                .where(System.deleted_at.is_(None))
+                .order_by(System.name)
+            )).scalars().all()
+
+        # Load selected system context
+        selected_system = None
+        if system_id:
+            row = (await session.execute(
+                select(System).where(System.id == system_id)
+            )).scalar_one_or_none()
+            if row and (await _can_access_system(system_id, request, session)):
+                # Attach open POA&M count
+                open_poams = (await session.execute(
+                    select(func.count(PoamItem.id))
+                    .where(PoamItem.system_id == system_id)
+                    .where(PoamItem.status.notin_(["closed", "false_positive", "not_applicable"]))
+                )).scalar() or 0
+                row.open_poams = open_poams
+                selected_system = row
+
+        # Load LLM config for UI hints
+        engine = _get_llm_engine()
+        llm_cfg = engine._config if engine else {}
+        chat_cfg = llm_cfg.get("chat", {}) if isinstance(llm_cfg, dict) else {}
+
+        ctx = await _full_ctx(request, session,
+            systems=systems_q,
+            selected_system=selected_system,
+            today=date.today().isoformat(),
+            show_sources=chat_cfg.get("show_sources", True),
+            placeholder_text=chat_cfg.get("placeholder_text",
+                "Ask about RMF, controls, POA&Ms, BLACKSITE workflows..."),
+            max_query_length=llm_cfg.get("safety", {}).get("max_query_length", 2000)
+                if isinstance(llm_cfg, dict) else 2000,
+        )
+    return templates.TemplateResponse("ai_assistant.html", ctx)
+
+
+@app.post("/api/ai/ask")
+async def ai_ask(request: Request):
+    """LLM query endpoint — RAG-augmented answer with source citations."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    body = await request.json()
+    query     = (body.get("query") or "").strip()
+    history   = body.get("history") or []
+    system_id = body.get("system_id") or None
+
+    if not query:
+        return JSONResponse({"error": "Empty query"}, status_code=400)
+    if len(query) > 4000:
+        return JSONResponse({"error": "Query too long"}, status_code=400)
+
+    async with SessionLocal() as session:
+        role = await _get_user_role(request, session)
+
+        # Build template variables from system context
+        template_vars: dict = {
+            "ROLE": role,
+            "TODAY": date.today().isoformat(),
+        }
+        if system_id and await _can_access_system(system_id, request, session):
+            sys_row = (await session.execute(
+                select(System).where(System.id == system_id)
+            )).scalar_one_or_none()
+            if sys_row:
+                template_vars["SYSTEM_NAME"]  = sys_row.name or ""
+                template_vars["SYSTEM_ABBR"]  = sys_row.abbreviation or ""
+                template_vars["IMPACT_LEVEL"] = sys_row.overall_impact or "moderate"
+                template_vars["ATO_EXPIRY"]   = str(sys_row.ato_decision or "")
+                open_poams = (await session.execute(
+                    select(func.count(PoamItem.id))
+                    .where(PoamItem.system_id == system_id)
+                    .where(PoamItem.status.notin_(["closed", "false_positive", "not_applicable"]))
+                )).scalar() or 0
+                template_vars["OPEN_POAM_COUNT"] = str(open_poams)
+
+    engine = _get_llm_engine()
+    if not engine:
+        return JSONResponse({"error": "LLM engine not initialized"}, status_code=503)
+    if not await engine.is_available():
+        return JSONResponse({"error": "LLM backend unavailable"}, status_code=503)
+
+    try:
+        user_context = {
+            "role":            role,
+            "system_name":     template_vars.get("SYSTEM_NAME", ""),
+            "system_abbr":     template_vars.get("SYSTEM_ABBR", ""),
+            "impact_level":    template_vars.get("IMPACT_LEVEL", "moderate"),
+            "open_poam_count": template_vars.get("OPEN_POAM_COUNT", ""),
+            "ato_expiry":      template_vars.get("ATO_EXPIRY", ""),
+        }
+        result = await engine.ask(
+            query=query,
+            user_context=user_context,
+            history=history,
+        )
+        await _log_audit(
+            user, "ai_query", "llm", system_id or "global",
+            outcome="ok" if not result.get("error") else "error",
+            detail=f"query_len={len(query)} sources={len(result.get('sources',[]))} elapsed={result.get('elapsed_ms')}ms"
+        )
+        # Return `response` key for template compatibility
+        return JSONResponse({
+            "response": result.get("answer", ""),
+            "sources":  result.get("sources", []),
+            "elapsed_ms": result.get("elapsed_ms"),
+            "model":    result.get("model"),
+            "error":    result.get("error"),
+        })
+    except Exception as exc:
+        log.error("LLM ask error: %s", exc)
+        return JSONResponse({"error": f"LLM error: {exc}"}, status_code=500)
+
+
+@app.get("/api/ai/status")
+async def ai_status(request: Request):
+    """Check LLM backend availability."""
+    engine = _get_llm_engine()
+    if not engine:
+        return JSONResponse({"available": False, "reason": "Engine not initialized"})
+    try:
+        available = await engine.is_available()
+        model = getattr(getattr(engine, "_client", None), "model", None) or ""
+        return JSONResponse({"available": available, "model": model})
+    except Exception as exc:
+        return JSONResponse({"available": False, "reason": str(exc)})
+
+
+@app.post("/api/ai/reload")
+async def ai_reload_knowledge(request: Request):
+    """Admin-only: reload the LLM knowledge base index."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403, detail="Admin only")
+    engine = _get_llm_engine()
+    if not engine:
+        return JSONResponse({"ok": False, "error": "Engine not initialized"})
+    try:
+        engine.reload_knowledge()
+        return JSONResponse({"ok": True, "message": "Knowledge base reloaded"})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)})
 

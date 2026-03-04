@@ -146,7 +146,16 @@
 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:8px">
   <h1 style="margin:0">User Management</h1>
   {% if is_admin %}
-  <div style="display:flex;gap:8px">
+  <div style="display:flex;gap:8px;align-items:center">
+    {% if show_removed %}
+    <a href="/admin/users" class="btn btn-ghost btn-sm" style="font-size:0.82em;color:var(--cyan);border-color:rgba(0,255,204,.4)">
+      Active Users
+    </a>
+    {% else %}
+    <a href="/admin/users?show_removed=1" class="btn btn-ghost btn-sm" style="font-size:0.82em;color:var(--muted)">
+      Show Removed
+    </a>
+    {% endif %}
     <a href="/admin/users/shadow" class="btn btn-ghost btn-sm" style="font-size:0.82em">
       Shadow Archive
     </a>
@@ -290,15 +299,22 @@ function copyField(id, btn) {
 </details>
 
 {# ── Users table ── #}
-<div class="card" style="padding:0;overflow:hidden">
-  <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+<div class="card" style="padding:0;overflow:visible">
+  <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
     <span class="card-title" style="margin:0">Platform Users</span>
-    <span style="font-size:0.75em;color:var(--muted)">
-      {{ total_count }} user{{ 's' if total_count != 1 }}
-      {% if total_pages > 1 %} · Page {{ page }} of {{ total_pages }}{% endif %}
-    </span>
+    <div style="display:flex;align-items:center;gap:10px;flex:1;justify-content:flex-end;min-width:180px">
+      <input type="text" id="userSearch" placeholder="Search users…"
+             oninput="filterUsers(this.value)"
+             style="background:var(--surface);border:1px solid var(--border);color:var(--text);
+                    border-radius:5px;padding:5px 10px;font-size:0.82em;width:180px">
+      <span style="font-size:0.75em;color:var(--muted);white-space:nowrap">
+        {{ total_count }} user{{ 's' if total_count != 1 }}
+        {% if total_pages > 1 %} · Page {{ page }} of {{ total_pages }}{% endif %}
+      </span>
+    </div>
   </div>
   {% if profiles %}
+  <div style="overflow-x:auto">
   <table id="users-table">
     <thead>
       <tr>
@@ -322,7 +338,8 @@ function copyField(id, btn) {
       {% else %}
         {% set age_days = 999 %}
       {% endif %}
-      <tr {% if pstatus == 'frozen' %}style="opacity:0.75;background:rgba(255,107,0,0.04)"{% endif %}>
+      <tr class="user-row" data-user="{{ (profile.display_name or profile.remote_user) | lower }} {{ profile.remote_user | lower }} {{ (profile.email or '') | lower }}"
+          {% if pstatus == 'frozen' %}style="opacity:0.75;background:rgba(255,107,0,0.04)"{% endif %}>
         {% if is_admin %}<td style="padding:8px"><input type="checkbox" class="row-chk" value="{{ profile.remote_user }}" {% if is_config_admin %}disabled{% endif %}></td>{% endif %}
         <td>
           <span class="mono" style="font-size:0.88em">{{ profile.remote_user }}</span>
@@ -345,52 +362,35 @@ function copyField(id, btn) {
         <td style="text-align:center">
           <span style="font-size:0.9em;color:var(--cyan)">{{ assign_counts.get(profile.remote_user, 0) }}</span>
         </td>
-        <td>
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;white-space:nowrap">
-            {% if not is_config_admin %}
-            <form class="role-select-form" onsubmit="return setRole(event, '{{ profile.remote_user }}')">
-              <select name="role" id="role-sel-{{ loop.index }}">
-                <option value="employee"          {% if eff_role=='employee' %}selected{% endif %}>Employee</option>
-                <option value="system_owner"      {% if eff_role=='system_owner' %}selected{% endif %}>System Owner</option>
-                <option value="isso"              {% if eff_role=='isso' %}selected{% endif %}>ISSO</option>
-                <option value="issm"              {% if eff_role=='issm' %}selected{% endif %}>ISSM</option>
-                <option value="ao"               {% if eff_role=='ao' %}selected{% endif %}>AO</option>
-                <option value="sca"              {% if eff_role=='sca' %}selected{% endif %}>SCA</option>
-                <option value="auditor"           {% if eff_role=='auditor' %}selected{% endif %}>Auditor</option>
-                <option value="bcdr"              {% if eff_role=='bcdr' %}selected{% endif %}>BCDR</option>
-                <option value="ciso"              {% if eff_role=='ciso' %}selected{% endif %}>CISO</option>
-                <option value="pen_tester"        {% if eff_role=='pen_tester' %}selected{% endif %}>Pen Tester</option>
-                <option value="data_owner"        {% if eff_role=='data_owner' %}selected{% endif %}>Data Owner</option>
-                <option value="pmo"               {% if eff_role=='pmo' %}selected{% endif %}>PMO</option>
-                <option value="incident_responder" {% if eff_role=='incident_responder' %}selected{% endif %}>Incident Responder</option>
-              </select>
-              <button type="submit" class="btn btn-ghost btn-sm">Set</button>
+        <td style="padding:8px 14px;white-space:nowrap">
+          {% if not is_config_admin %}
+          {% if is_admin %}
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap">
+            <a href="/view-as/{{ profile.remote_user }}" class="btn btn-sm"
+               style="font-size:0.74em;background:rgba(118,255,3,0.08);color:#76ff03;border:1px solid rgba(118,255,3,0.25);padding:4px 10px;white-space:nowrap;min-width:64px;text-align:center;flex-shrink:0"
+               title="View dashboard as this user">View</a>
+            {% if pstatus == 'frozen' %}
+            <form method="post" action="/admin/users/{{ profile.remote_user }}/unfreeze" style="flex-shrink:0">
+              <button class="btn btn-sm" style="font-size:0.74em;background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.3);padding:4px 10px;white-space:nowrap;min-width:64px">Unfreeze</button>
             </form>
-            {% if is_admin %}
-              <a href="/view-as/{{ profile.remote_user }}"
-                 class="btn btn-ghost btn-sm"
-                 style="font-size:0.75em;color:#76ff03;border:1px solid rgba(118,255,3,0.25)"
-                 title="View this user's workspace">View ⟶</a>
-              {% if pstatus == 'frozen' %}
-              <form method="post" action="/admin/users/{{ profile.remote_user }}/unfreeze" style="display:inline">
-                <button class="btn btn-sm" style="background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.3);font-size:0.75em">Unfreeze</button>
-              </form>
-              {% else %}
-              <form method="post" action="/admin/users/{{ profile.remote_user }}/freeze" style="display:inline">
-                <button class="btn btn-sm" style="background:rgba(255,107,0,0.1);color:#ff8c42;border:1px solid rgba(255,107,0,0.3);font-size:0.75em">Freeze</button>
-              </form>
-              {% endif %}
-              <a href="/admin/users/{{ profile.remote_user }}/remove" class="btn btn-sm" style="background:rgba(244,67,54,0.1);color:var(--red);border:1px solid rgba(244,67,54,0.3);font-size:0.75em">Remove</a>
-            {% endif %}
             {% else %}
-            <span style="font-size:0.75em;color:var(--muted)">Config-managed</span>
+            <form method="post" action="/admin/users/{{ profile.remote_user }}/freeze" style="flex-shrink:0">
+              <button class="btn btn-sm" style="font-size:0.74em;background:rgba(255,107,0,0.1);color:#ff8c42;border:1px solid rgba(255,107,0,0.3);padding:4px 10px;white-space:nowrap;min-width:64px">Freeze</button>
+            </form>
             {% endif %}
+            <a href="/admin/users/{{ profile.remote_user }}/remove" class="btn btn-sm"
+               style="font-size:0.74em;background:rgba(244,67,54,0.1);color:var(--red);border:1px solid rgba(244,67,54,0.3);padding:4px 10px;white-space:nowrap;min-width:64px;text-align:center;flex-shrink:0">Remove</a>
           </div>
+          {% endif %}
+          {% else %}
+          <span style="font-size:0.75em;color:var(--muted)">Config-managed</span>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <div style="padding:40px;text-align:center;color:var(--muted)">
     No user profiles found. Users are created automatically on first login.
@@ -446,23 +446,7 @@ function copyField(id, btn) {
      padding:10px 16px;box-shadow:0 4px 20px rgba(0,0,0,0.5);z-index:500;
      align-items:center;gap:12px;min-width:380px">
   <span id="bulk-count" style="font-size:0.82em;color:var(--cyan);font-weight:700;white-space:nowrap">0 selected</span>
-  <select id="bulk-role-sel" style="background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:3px 8px;font-size:0.8em">
-    <option value="">— set role —</option>
-    <option value="employee">Employee</option>
-    <option value="system_owner">System Owner</option>
-    <option value="isso">ISSO</option>
-    <option value="issm">ISSM</option>
-    <option value="ao">AO</option>
-    <option value="sca">SCA</option>
-    <option value="auditor">Auditor</option>
-    <option value="bcdr">BCDR</option>
-    <option value="ciso">CISO</option>
-    <option value="pen_tester">Pen Tester</option>
-    <option value="data_owner">Data Owner</option>
-    <option value="pmo">PMO</option>
-    <option value="incident_responder">Incident Responder</option>
-  </select>
-  <button onclick="bulkSetRole()" class="btn btn-sm btn-ghost">Set Role</button>
+  <span style="font-size:0.75em;color:var(--muted)">To change roles, use View → profile page</span>
   <button onclick="bulkFreeze()" class="btn btn-sm" style="background:rgba(255,107,0,0.1);color:#ff8c42;border:1px solid rgba(255,107,0,0.3)">Freeze Selected</button>
   <button onclick="clearSelection()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1em">✕</button>
 </div>
@@ -473,6 +457,14 @@ function copyField(id, btn) {
 
 {% block scripts %}
 <script>
+function filterUsers(q) {
+  var term = q.trim().toLowerCase();
+  document.querySelectorAll('.user-row').forEach(function(row) {
+    var match = !term || row.dataset.user.indexOf(term) !== -1;
+    row.style.display = match ? '' : 'none';
+  });
+}
+
 async function setRole(e, username) {
   e.preventDefault();
   const form = e.target;

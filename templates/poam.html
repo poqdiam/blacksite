@@ -16,33 +16,40 @@
 </div>
 
 {# ── Stat row ─────────────────────────────────────────────────────────────── #}
+{# Active state: compare current params to each card's target filter #}
+{% set _card_all     = (status_filter == 'all'    and not crit_high_filter and not overdue_filter and not due_soon_filter and not closed_this_month_filter) %}
+{% set _card_open    = (status_filter == 'open'   and not crit_high_filter and not overdue_filter and not due_soon_filter and not closed_this_month_filter) %}
+{% set _card_crit    = (status_filter == 'open'   and crit_high_filter == '1') %}
+{% set _card_overdue = (status_filter == 'open'   and overdue_filter   == '1') %}
+{% set _card_soon    = (status_filter == 'open'   and due_soon_filter  == '1') %}
+{% set _card_closed  = (status_filter == 'closed' and closed_this_month_filter == '1') %}
 <div class="stats" style="margin-bottom:24px">
-  <a href="/poam?status=all" class="stat" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
+  <a href="/poam?status=all" class="stat{% if _card_all %} stat-active{% endif %}" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
      title="View all POA&amp;M items">
     <div class="stat-value">{{ total_all }}</div>
     <div class="stat-label">All Items</div>
   </a>
-  <a href="/poam?status=open" class="stat" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
+  <a href="/poam?status=open" class="stat{% if _card_open %} stat-active{% endif %}" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
      title="View all open POA&amp;M items">
     <div class="stat-value">{{ total_open }}</div>
     <div class="stat-label">Open Items</div>
   </a>
-  <a href="/poam?status=open&crit_high=1" class="stat" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
+  <a href="/poam?status=open&crit_high=1" class="stat{% if _card_crit %} stat-active{% endif %}" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
      title="View Critical and High severity open items">
     <div class="stat-value" style="color:var(--red)">{{ crit_high_ct }}</div>
     <div class="stat-label">Critical + High</div>
   </a>
-  <a href="/poam?status=open&overdue=1" class="stat" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
+  <a href="/poam?status=open&overdue=1" class="stat{% if _card_overdue %} stat-active{% endif %}" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
      title="View open items past their scheduled completion date">
     <div class="stat-value" style="color:var(--red)">{{ overdue_ct }}</div>
     <div class="stat-label">Overdue</div>
   </a>
-  <a href="/poam?status=open&due_soon=1" class="stat" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
+  <a href="/poam?status=open&due_soon=1" class="stat{% if _card_soon %} stat-active{% endif %}" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
      title="View open items due within 7 days">
     <div class="stat-value" style="color:var(--yellow)">{{ due_soon_ct }}</div>
     <div class="stat-label">Due This Week</div>
   </a>
-  <a href="/poam?status=closed" class="stat" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
+  <a href="/poam?status=closed&closed_this_month=1" class="stat{% if _card_closed %} stat-active{% endif %}" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
      title="View items closed in the last 30 days">
     <div class="stat-value" style="color:var(--green)">{{ closed_month_ct }}</div>
     <div class="stat-label">Closed This Month</div>
@@ -135,7 +142,7 @@
   </select>
   {% endif %}
   <button type="submit" class="btn btn-ghost btn-sm">Filter</button>
-  {% if status_filter != 'open' or severity_filter or system_filter or crit_high_filter or overdue_filter or due_soon_filter %}
+  {% if status_filter != 'open' or severity_filter or system_filter or crit_high_filter or overdue_filter or due_soon_filter or closed_this_month_filter %}
   <a href="/poam" class="btn btn-ghost btn-sm" style="color:var(--muted)">✕ Clear</a>
   {% endif %}
 </form>

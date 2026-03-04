@@ -48,6 +48,14 @@ employees:               # Known employees (non-admin Authelia users)
     name: "Dickie"
     email: ""
 
+  - username: "t.conlin"
+    name: "T,Conlin"
+    email: "conlin4365@gmail.com"
+
+  - username: "tt"
+    name: "tt"
+    email: "daniel@thekramerica.com"
+
 quiz:
   daily: true
   question_count: 15     # questions shown per daily quiz attempt

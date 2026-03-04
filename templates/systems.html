@@ -548,13 +548,29 @@
 
   <div class="sort-divider"></div>
 
-  {# Bulk toolbar (shown when items are selected) #}
-  <div id="bulk-toolbar" class="bulk-toolbar" style="display:none">
-    <span class="bulk-count" id="bulk-count">0 selected</span>
-    <button class="btn btn-ghost btn-sm" style="font-size:0.72em" onclick="clearBulkSelect()">Clear</button>
-    {% if is_admin or user_role in ['issm'] %}
-    <button class="btn btn-primary btn-sm" style="font-size:0.72em" onclick="bulkAssignSelected()">Assign Selected</button>
-    {% endif %}
+  {# Right-side group: search + bulk toolbar #}
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <div style="position:relative;display:flex;align-items:center">
+      <span style="position:absolute;left:8px;color:var(--muted);font-size:0.8em;pointer-events:none">⌕</span>
+      <input type="text" id="catalog-search"
+             placeholder="Search systems…"
+             autocomplete="off"
+             oninput="catalogSearch(this.value)"
+             style="background:var(--card);border:1px solid var(--border);border-radius:3px;
+                    color:var(--text);font-size:0.72em;font-family:var(--mono);
+                    padding:3px 10px 3px 24px;outline:none;width:180px;
+                    transition:border-color 0.15s,width 0.2s"
+             onfocus="this.style.borderColor='rgba(0,255,204,0.4)';this.style.width='220px'"
+             onblur="this.style.borderColor='var(--border)';this.style.width='180px'">
+    </div>
+    {# Bulk toolbar (shown when items are selected) #}
+    <div id="bulk-toolbar" class="bulk-toolbar" style="display:none">
+      <span class="bulk-count" id="bulk-count">0 selected</span>
+      <button class="btn btn-ghost btn-sm" style="font-size:0.72em" onclick="clearBulkSelect()">Clear</button>
+      {% if is_admin or user_role in ['issm'] %}
+      <button class="btn btn-primary btn-sm" style="font-size:0.72em" onclick="bulkAssignSelected()">Assign Selected</button>
+      {% endif %}
+    </div>
   </div>
 </div>
 
@@ -731,6 +747,13 @@
 </div>
 
 <script>
+// ── Catalog search ───────────────────────────────────────────────────────────
+let _searchQuery = '';
+function catalogSearch(q) {
+  _searchQuery = q.trim().toLowerCase();
+  renderPage(1);
+}
+
 // ── Card click — navigate to system detail unless clicking interactive element ──
 function cardClick(e, card) {
   // Suppress navigation if click landed on a button, link, or the checkbox column
@@ -941,8 +964,17 @@ function updatePageSizeButtons() {
 
 function renderPage(pageNum) {
   const allCards = Array.from(document.querySelectorAll('.sys-card'));
-  // Filter to those matching the active status filter
-  const filtered = allCards.filter(card => !_activeFilter || card.dataset.status === _activeFilter);
+  // Filter to those matching the active status filter AND search query
+  const filtered = allCards.filter(card => {
+    if (_activeFilter && card.dataset.status !== _activeFilter) return false;
+    if (_searchQuery) {
+      const name  = (card.dataset.sortName  || '').toLowerCase();
+      const owner = (card.dataset.sortOwner || '').toLowerCase();
+      const text  = (card.textContent       || '').toLowerCase();
+      if (!name.includes(_searchQuery) && !owner.includes(_searchQuery) && !text.includes(_searchQuery)) return false;
+    }
+    return true;
+  });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / _pgSize));
   _pgCurrent = Math.min(pageNum, totalPages);

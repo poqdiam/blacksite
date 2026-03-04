@@ -5,42 +5,158 @@
 {% block head %}
 <style>
   /* ── Action badge colors ─────────────────────────────────────────────────── */
-  .act-create  { background: rgba(0,200,83,0.15);   color: var(--green);  }
-  .act-delete  { background: rgba(244,67,54,0.15);  color: var(--red);    }
-  .act-update  { background: rgba(255,179,0,0.15);  color: var(--yellow); }
-  .act-export  { background: rgba(0,255,204,0.1);   color: var(--cyan);   }
-  .act-view    { background: rgba(136,136,136,0.1); color: var(--muted);  }
-  .act-login   { background: rgba(255,215,0,0.12);  color: var(--gold);   }
-  .act-default { background: rgba(136,136,136,0.08);color: var(--muted);  }
+  .act-create   { background:rgba(0,200,83,0.15);   color:var(--green);  }
+  .act-delete   { background:rgba(244,67,54,0.15);  color:var(--red);    }
+  .act-update   { background:rgba(255,179,0,0.15);  color:var(--yellow); }
+  .act-export   { background:rgba(0,255,204,0.1);   color:var(--cyan);   }
+  .act-view     { background:rgba(136,136,136,0.1); color:var(--muted);  }
+  .act-login    { background:rgba(255,215,0,0.12);  color:var(--gold);   }
+  .act-denied   { background:rgba(244,67,54,0.18);  color:var(--red); font-weight:700; }
+  .act-generate { background:rgba(0,255,204,0.1);   color:var(--cyan);   }
+  .act-upload   { background:rgba(100,180,255,0.12);color:#64b4ff;       }
+  .act-default  { background:rgba(136,136,136,0.08);color:var(--muted);  }
 
-  /* ── Table hover highlight ───────────────────────────────────────────────── */
-  .audit-table tbody tr:hover td {
-    background: rgba(0,255,204,0.025);
+  /* ── Outcome badge ───────────────────────────────────────────────────────── */
+  .out-ok     { color:var(--green);  font-size:0.75em; }
+  .out-denied { color:var(--red);    font-size:0.75em; font-weight:700; }
+  .out-error  { color:var(--yellow); font-size:0.75em; font-weight:700; }
+
+  /* ── Table ───────────────────────────────────────────────────────────────── */
+  .audit-table tbody tr:hover td { background:rgba(0,255,204,0.025); }
+  .audit-table tbody tr:nth-child(even) td { background:rgba(255,255,255,0.012); }
+  .audit-table tbody tr:nth-child(even):hover td { background:rgba(0,255,204,0.025); }
+  .col-ts   { font-family:var(--mono);font-size:0.78em;color:var(--muted);white-space:nowrap; }
+  .col-id   { font-family:var(--mono);font-size:0.8em; color:var(--muted);white-space:nowrap; }
+  .col-rid  { font-size:0.82em; }
+  .col-ip   { font-family:var(--mono);font-size:0.75em;color:var(--muted);white-space:nowrap; }
+
+  /* ── Filter panel ────────────────────────────────────────────────────────── */
+  #filter-panel {
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:16px 20px 12px;
+    margin-bottom:16px;
   }
-  .audit-table tbody tr:nth-child(even) td {
-    background: rgba(255,255,255,0.012);
+  .filter-grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(190px, 1fr));
+    gap:10px 14px;
   }
-  .audit-table tbody tr:nth-child(even):hover td {
-    background: rgba(0,255,204,0.025);
+  .filter-field label {
+    display:block;
+    font-size:0.68em;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    color:var(--muted);
+    margin-bottom:4px;
+  }
+  .filter-field input,
+  .filter-field select {
+    width:100%;
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:4px;
+    color:var(--text);
+    padding:5px 9px;
+    font-size:0.82em;
+  }
+  .filter-field input:focus,
+  .filter-field select:focus {
+    outline:none;
+    border-color:rgba(0,255,204,0.45);
+  }
+  .filter-actions { display:flex; gap:8px; align-items:center; margin-top:14px; flex-wrap:wrap; }
+
+  /* ── Column chooser ──────────────────────────────────────────────────────── */
+  #col-chooser-panel {
+    display:none;
+    position:absolute;
+    right:0;
+    top:calc(100% + 4px);
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:12px 16px;
+    z-index:200;
+    min-width:200px;
+    box-shadow:0 4px 20px rgba(0,0,0,0.5);
+  }
+  #col-chooser-wrap { position:relative; }
+  .col-toggle-item {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:4px 0;
+    font-size:0.85em;
+    cursor:pointer;
+    user-select:none;
+  }
+  .col-toggle-item input[type=checkbox] { cursor:pointer; }
+
+  /* ── Details expand ──────────────────────────────────────────────────────── */
+  .detail-kv { display:flex; flex-wrap:wrap; gap:4px 12px; }
+  .detail-kv-item {
+    font-size:0.78em;
+    background:rgba(255,255,255,0.04);
+    border-radius:3px;
+    padding:2px 7px;
+    white-space:nowrap;
+  }
+  .detail-kv-key   { color:var(--muted); }
+  .detail-kv-val   { color:var(--text); margin-left:3px; }
+  .detail-raw-btn  {
+    font-size:0.7em;
+    color:var(--muted);
+    cursor:pointer;
+    border:1px solid var(--border);
+    border-radius:3px;
+    padding:1px 6px;
+    background:none;
+    margin-top:4px;
+  }
+  .detail-raw-btn:hover { color:var(--cyan); border-color:rgba(0,255,204,0.4); }
+  .detail-raw-block {
+    display:none;
+    font-family:var(--mono);
+    font-size:0.72em;
+    background:rgba(0,0,0,0.3);
+    border-radius:4px;
+    padding:8px 12px;
+    margin-top:6px;
+    white-space:pre-wrap;
+    word-break:break-all;
+    color:var(--muted);
   }
 
-  /* ── Mono timestamp + ID ─────────────────────────────────────────────────── */
-  .col-ts  { font-family: var(--mono); font-size: 0.78em; color: var(--muted); white-space: nowrap; }
-  .col-id  { font-family: var(--mono); font-size: 0.8em;  color: var(--muted); white-space: nowrap; }
-  .col-rid { font-family: var(--mono); font-size: 0.8em;  color: var(--muted); letter-spacing: 0.5px; }
+  /* ── Resource link ───────────────────────────────────────────────────────── */
+  .res-link { color:var(--cyan); text-decoration:none; font-size:0.82em; }
+  .res-link:hover { text-decoration:underline; }
+  .res-raw  { font-family:var(--mono); font-size:0.78em; color:var(--muted); }
 
-  /* ── Empty state ─────────────────────────────────────────────────────────── */
+  /* ── Active filter badge ─────────────────────────────────────────────────── */
+  .filter-active-badge {
+    background:rgba(0,255,204,0.12);
+    color:var(--cyan);
+    border:1px solid rgba(0,255,204,0.3);
+    border-radius:3px;
+    font-size:0.7em;
+    padding:2px 8px;
+    font-weight:700;
+    letter-spacing:1px;
+  }
+
   .audit-empty {
-    padding: 64px 24px;
-    text-align: center;
-    color: var(--muted);
+    padding:64px 24px;
+    text-align:center;
+    color:var(--muted);
   }
   .audit-empty-icon {
-    font-size: 2em;
-    font-family: var(--mono);
-    color: #1e1e30;
-    margin-bottom: 12px;
-    letter-spacing: 3px;
+    font-size:2em;
+    font-family:var(--mono);
+    color:#1e1e30;
+    margin-bottom:12px;
+    letter-spacing:3px;
   }
 </style>
 {% endblock %}
@@ -55,132 +171,284 @@
 </div>
 
 {# ── Page header ─────────────────────────────────────────────────────────── #}
-<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px">
   <div>
     <h1 style="margin:0">Audit Log</h1>
-    <p class="text-muted" style="margin-top:5px;font-size:0.85em">
+    <p class="text-muted" style="margin-top:4px;font-size:0.85em">
       System event trail &middot; NIST AU-2 / AU-12
+      {% if active_filters %}<span class="filter-active-badge" style="margin-left:8px">FILTERED</span>{% endif %}
     </p>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-    {# Days filter #}
-    <form method="get" action="/admin/audit" style="display:flex;align-items:center;gap:6px">
-      <label style="font-size:0.72em;color:var(--muted);margin:0;text-transform:uppercase;letter-spacing:1px">Range</label>
-      <select name="days" onchange="this.form.submit()"
-              style="background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 8px;font-size:0.8em;cursor:pointer">
-        <option value="30"  {% if days==30 %}selected{% endif %}>30 days</option>
-        <option value="90"  {% if days==90 %}selected{% endif %}>90 days</option>
-        <option value="365" {% if days==365 %}selected{% endif %}>1 year</option>
-        <option value="0"   {% if days==0 %}selected{% endif %}>All time</option>
-      </select>
-      <input type="hidden" name="hide_view" value="{{ hide_view }}">
-      <input type="hidden" name="per_page" value="{{ per_page }}">
-    </form>
-    {# VIEW toggle #}
-    {% if hide_view == '1' %}
-    <a href="/admin/audit?days={{ days }}&hide_view=0&per_page={{ per_page }}"
-       class="btn btn-sm btn-ghost" style="font-size:0.75em">Show VIEW events</a>
-    {% else %}
-    <a href="/admin/audit?days={{ days }}&hide_view=1&per_page={{ per_page }}"
-       class="btn btn-sm" style="background:rgba(0,255,204,0.08);color:var(--cyan);font-size:0.75em">Hide VIEW events</a>
-    {% endif %}
-    {# Export buttons #}
-    <a href="/admin/audit/export?format=csv&days={{ days }}" class="btn btn-ghost btn-sm">↓ CSV</a>
-    <a href="/admin/audit/export?format=json&days={{ days }}" class="btn btn-ghost btn-sm">↓ JSON</a>
+    <a href="/admin/audit/export?format=csv&days={{ days }}&actor={{ actor }}&action_filter={{ action_filter }}&rtype={{ rtype }}&q={{ q }}"
+       class="btn btn-ghost btn-sm">↓ CSV</a>
+    <a href="/admin/audit/export?format=json&days={{ days }}"
+       class="btn btn-ghost btn-sm">↓ JSON</a>
+    <div id="col-chooser-wrap">
+      <button class="btn btn-ghost btn-sm" onclick="toggleColChooser()">⊞ Columns</button>
+      <div id="col-chooser-panel">
+        <div style="font-size:0.72em;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px">Show / Hide Columns</div>
+        {% for col_id, col_label in [
+          ('col-ts',  'Timestamp'),
+          ('col-actor','Actor'),
+          ('col-action','Action'),
+          ('col-rtype','Resource Type'),
+          ('col-res',  'Resource'),
+          ('col-out',  'Outcome'),
+          ('col-ip',   'IP Address'),
+          ('col-detail','Details'),
+        ] %}
+        <label class="col-toggle-item">
+          <input type="checkbox" checked data-col="{{ col_id }}"
+                 onchange="toggleCol('{{ col_id }}', this.checked)">
+          {{ col_label }}
+        </label>
+        {% endfor %}
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
+          <button class="btn btn-ghost btn-sm" style="font-size:0.72em" onclick="resetCols()">Reset to defaults</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
-{# ── Section header with count ────────────────────────────────────────────── #}
-<div class="section-header" style="margin-bottom:16px">
-  {% if entries %}
-    Showing {{ entries | length }} of {{ total }} event{% if total != 1 %}s{% endif %}
-    {% if days and days > 0 %}(last {{ days }} days){% endif %}
-    {% if hide_view == '1' %} · VIEW events hidden{% endif %}
-  {% else %}
-    Audit Events
-  {% endif %}
+{# ── Filter Panel ─────────────────────────────────────────────────────────── #}
+<div id="filter-panel">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <span style="font-size:0.75em;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:700">Filters</span>
+    {% if active_filters %}
+    <a href="/admin/audit?days={{ days }}&hide_view={{ hide_view }}&per_page={{ per_page }}"
+       class="btn btn-ghost btn-sm" style="font-size:0.72em;color:var(--red)">✕ Clear all filters</a>
+    {% endif %}
+  </div>
+  <form method="get" action="/admin/audit" id="filter-form">
+    <input type="hidden" name="hide_view" value="{{ hide_view }}">
+    <input type="hidden" name="per_page"  value="{{ per_page }}">
+    <input type="hidden" name="page"      value="1">
+    <div class="filter-grid">
+
+      <div class="filter-field">
+        <label>Time Range</label>
+        <select name="days" onchange="this.form.submit()">
+          <option value="1"   {% if days==1   %}selected{% endif %}>Last 24 hours</option>
+          <option value="7"   {% if days==7   %}selected{% endif %}>Last 7 days</option>
+          <option value="30"  {% if days==30  %}selected{% endif %}>Last 30 days</option>
+          <option value="90"  {% if days==90  %}selected{% endif %}>Last 90 days</option>
+          <option value="365" {% if days==365 %}selected{% endif %}>Last 1 year</option>
+          <option value="0"   {% if days==0   %}selected{% endif %}>All time</option>
+        </select>
+      </div>
+
+      <div class="filter-field">
+        <label>Actor (User)</label>
+        <select name="actor">
+          <option value="">All users</option>
+          {% for a in all_actors %}
+          <option value="{{ a }}" {% if actor == a %}selected{% endif %}>{{ a }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filter-field">
+        <label>Action</label>
+        <select name="action_filter">
+          <option value="">All actions</option>
+          {% for a in all_actions %}
+          {% set lbl = action_labels.get(a, a) %}
+          <option value="{{ a }}" {% if action_filter == a %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filter-field">
+        <label>Resource Type</label>
+        <select name="rtype">
+          <option value="">All types</option>
+          {% for rt in all_rtypes %}
+          {% set lbl = rtype_labels.get(rt, rt) %}
+          <option value="{{ rt }}" {% if rtype == rt %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filter-field">
+        <label>Resource ID (partial)</label>
+        <input type="text" name="rid" value="{{ rid }}"
+               placeholder="e.g. ac-1, abc123…" autocomplete="off">
+      </div>
+
+      <div class="filter-field">
+        <label>Outcome</label>
+        <select name="outcome_filter">
+          <option value="">All outcomes</option>
+          <option value="ok"     {% if outcome_filter=="ok"     %}selected{% endif %}>✓ OK</option>
+          <option value="denied" {% if outcome_filter=="denied" %}selected{% endif %}>✗ Denied</option>
+          <option value="error"  {% if outcome_filter=="error"  %}selected{% endif %}>⚠ Error</option>
+        </select>
+      </div>
+
+      <div class="filter-field">
+        <label>Free text search (details)</label>
+        <input type="text" name="q" value="{{ q }}"
+               placeholder="Search details…" autocomplete="off">
+      </div>
+
+    </div>
+    <div class="filter-actions">
+      <button type="submit" class="btn btn-primary btn-sm" style="font-size:0.8em">Apply Filters</button>
+      {% if hide_view == '1' %}
+      <a href="/admin/audit?days={{ days }}&hide_view=0&per_page={{ per_page }}&actor={{ actor }}&action_filter={{ action_filter }}&rtype={{ rtype }}&rid={{ rid }}&q={{ q }}"
+         class="btn btn-ghost btn-sm" style="font-size:0.75em">Show VIEW events</a>
+      {% else %}
+      <a href="/admin/audit?days={{ days }}&hide_view=1&per_page={{ per_page }}&actor={{ actor }}&action_filter={{ action_filter }}&rtype={{ rtype }}&rid={{ rid }}&q={{ q }}"
+         class="btn btn-sm" style="background:rgba(0,255,204,0.08);color:var(--cyan);font-size:0.75em">Hide VIEW events</a>
+      {% endif %}
+      <span style="font-size:0.8em;color:var(--muted);margin-left:auto">
+        {% if total %}{{ total }} event{% if total != 1 %}s{% endif %} match{% if active_filters %}ing current filters{% endif %}{% endif %}
+      </span>
+    </div>
+  </form>
 </div>
 
 {# ── Legend ───────────────────────────────────────────────────────────────── #}
-<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
   {% for label, cls in [
-    ('CREATE', 'act-create'),
-    ('DELETE', 'act-delete'),
-    ('UPDATE', 'act-update'),
-    ('EXPORT', 'act-export'),
-    ('VIEW',   'act-view'),
-    ('LOGIN',  'act-login'),
+    ('Created', 'act-create'),  ('Deleted', 'act-delete'),
+    ('Updated', 'act-update'),  ('Exported', 'act-export'),
+    ('Denied',  'act-denied'),  ('Uploaded', 'act-upload'),
+    ('Viewed',  'act-view'),    ('Logged In','act-login'),
   ] %}
   <span class="badge {{ cls }}" style="font-size:0.65em;padding:3px 8px">{{ label }}</span>
   {% endfor %}
 </div>
 
-{# ── Audit table card ─────────────────────────────────────────────────────── #}
+{# ── Audit table ──────────────────────────────────────────────────────────── #}
 <div class="card" style="padding:0;overflow:hidden">
   {% if entries %}
   <div style="overflow-x:auto">
-    <table class="audit-table">
+    <table class="audit-table" id="audit-table">
       <thead>
         <tr>
-          <th style="width:40px;text-align:center">#</th>
-          <th>Time</th>
-          <th>User</th>
-          <th>Action</th>
-          <th>Resource Type</th>
-          <th>Resource ID</th>
-          <th>Details</th>
+          <th style="width:34px;text-align:center">#</th>
+          <th data-col="col-ts">Timestamp</th>
+          <th data-col="col-actor">Actor</th>
+          <th data-col="col-action">Action</th>
+          <th data-col="col-rtype">Resource Type</th>
+          <th data-col="col-res">Resource</th>
+          <th data-col="col-out">Outcome</th>
+          <th data-col="col-ip">IP Address</th>
+          <th data-col="col-detail">Details</th>
         </tr>
       </thead>
       <tbody>
         {% for entry in entries %}
         {% set act = (entry.action or '') | upper %}
-        {% if act == 'CREATE' %}
-          {% set act_cls = 'act-create' %}
-        {% elif act == 'DELETE' %}
-          {% set act_cls = 'act-delete' %}
-        {% elif act == 'UPDATE' %}
-          {% set act_cls = 'act-update' %}
-        {% elif act == 'EXPORT' %}
-          {% set act_cls = 'act-export' %}
-        {% elif act == 'VIEW' %}
-          {% set act_cls = 'act-view' %}
-        {% elif act == 'LOGIN' %}
-          {% set act_cls = 'act-login' %}
-        {% else %}
-          {% set act_cls = 'act-default' %}
+        {% set act_lbl = action_labels.get(act, act) %}
+        {% set rtype_lbl = rtype_labels.get(entry.resource_type or '', entry.resource_type or '—') %}
+        {% set res_url = rtype_urls.get(entry.resource_type or '', '') %}
+        {% if act in ('CREATE',) %}{% set act_cls = 'act-create' %}
+        {% elif act == 'DELETE' %}{% set act_cls = 'act-delete' %}
+        {% elif act in ('UPDATE','SAVE','UPSERT') %}{% set act_cls = 'act-update' %}
+        {% elif act in ('EXPORT','DOWNLOAD') %}{% set act_cls = 'act-export' %}
+        {% elif act in ('UPLOAD','INGEST') %}{% set act_cls = 'act-upload' %}
+        {% elif act in ('GENERATE','PROVISION','RUN') %}{% set act_cls = 'act-generate' %}
+        {% elif act == 'VIEW' %}{% set act_cls = 'act-view' %}
+        {% elif act in ('LOGIN',) %}{% set act_cls = 'act-login' %}
+        {% elif act == 'DENIED' %}{% set act_cls = 'act-denied' %}
+        {% else %}{% set act_cls = 'act-default' %}
         {% endif %}
+        {% set outcome = entry.outcome or 'ok' %}
         <tr>
-          <td style="text-align:center;font-size:0.72em;color:#444;user-select:none">
-            {{ loop.index }}
+          {# Row number #}
+          <td style="text-align:center;font-size:0.7em;color:#444;user-select:none">
+            {{ loop.index + (page - 1) * per_page }}
           </td>
-          <td class="col-ts">
-            {{ entry.timestamp.strftime('%Y-%m-%d %H:%M:%S') if entry.timestamp else '—' }}
+
+          {# Timestamp #}
+          <td class="col-ts" data-col="col-ts">
+            {% if entry.timestamp %}
+              <span title="{{ entry.timestamp.isoformat() }}">
+                {{ entry.timestamp.strftime('%Y-%m-%d') }}
+                <br><span style="color:#555">{{ entry.timestamp.strftime('%H:%M:%S UTC') }}</span>
+              </span>
+            {% else %}—{% endif %}
           </td>
-          <td style="font-size:0.85em;white-space:nowrap">
+
+          {# Actor #}
+          <td data-col="col-actor" style="white-space:nowrap">
             {% if entry.remote_user %}
-              <span style="color:var(--text)">{{ entry.remote_user }}</span>
-            {% else %}
-              <span style="color:#444">—</span>
-            {% endif %}
+              <a href="/admin/audit?days={{ days }}&actor={{ entry.remote_user }}&hide_view={{ hide_view }}"
+                 style="color:var(--cyan);text-decoration:none;font-size:0.85em"
+                 title="Filter by this user">{{ entry.remote_user }}</a>
+            {% else %}<span style="color:#444">—</span>{% endif %}
           </td>
-          <td>
-            <span class="badge {{ act_cls }}">{{ act or '—' }}</span>
+
+          {# Action #}
+          <td data-col="col-action">
+            <a href="/admin/audit?days={{ days }}&action_filter={{ act }}&hide_view={{ hide_view }}"
+               style="text-decoration:none" title="Filter by this action">
+              <span class="badge {{ act_cls }}" style="cursor:pointer">{{ act_lbl }}</span>
+            </a>
           </td>
-          <td style="font-size:0.82em;color:var(--muted);white-space:nowrap">
-            {{ entry.resource_type or '—' }}
+
+          {# Resource Type #}
+          <td data-col="col-rtype" style="white-space:nowrap">
+            {% if entry.resource_type %}
+              <a href="/admin/audit?days={{ days }}&rtype={{ entry.resource_type }}&hide_view={{ hide_view }}"
+                 style="font-size:0.82em;color:var(--muted);text-decoration:none"
+                 title="Filter by this type">{{ rtype_lbl }}</a>
+            {% else %}<span style="color:#444">—</span>{% endif %}
           </td>
-          <td class="col-rid">
+
+          {# Resource (clickable) #}
+          <td class="col-rid" data-col="col-res">
             {% if entry.resource_id %}
-              {{ entry.resource_id[:8] }}{% if entry.resource_id | length > 8 %}…{% endif %}
+              {% set rid_val = entry.resource_id %}
+              {% if res_url and rid_val %}
+                {% set href = res_url.replace('{id}', rid_val) %}
+                <a class="res-link" href="{{ href }}" title="{{ rid_val }}">
+                  {{ rid_val[:24] }}{% if rid_val | length > 24 %}…{% endif %}
+                </a>
+              {% else %}
+                <span class="res-raw" title="{{ rid_val }}">
+                  {{ rid_val[:24] }}{% if rid_val | length > 24 %}…{% endif %}
+                </span>
+              {% endif %}
+            {% else %}<span style="color:#444">—</span>{% endif %}
+          </td>
+
+          {# Outcome #}
+          <td data-col="col-out">
+            {% if outcome == 'denied' %}
+              <span class="out-denied" title="Action was denied">✗ Denied</span>
+            {% elif outcome == 'error' %}
+              <span class="out-error" title="Action produced an error">⚠ Error</span>
             {% else %}
-              <span style="color:#444">—</span>
+              <span class="out-ok">✓</span>
             {% endif %}
           </td>
-          <td style="font-size:0.8em;color:var(--muted);max-width:280px;
-                     overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-              title="{{ entry.details or '' }}">
-            {% if entry.details %}
-              {{ entry.details[:120] }}{% if entry.details | length > 120 %}…{% endif %}
+
+          {# IP Address #}
+          <td class="col-ip" data-col="col-ip">
+            {% if entry.remote_ip %}
+              <a href="/admin/audit?days={{ days }}&q={{ entry.remote_ip }}&hide_view={{ hide_view }}"
+                 style="color:var(--muted);text-decoration:none;font-family:var(--mono);font-size:0.75em"
+                 title="Filter by this IP">{{ entry.remote_ip }}</a>
+            {% else %}<span style="color:#2a2a3a">—</span>{% endif %}
+          </td>
+
+          {# Details #}
+          <td data-col="col-detail" style="max-width:320px">
+            {% if entry.details and entry.details != '{}' %}
+              {% set detail_id = 'det-' ~ loop.index %}
+              <div class="detail-kv">
+                {# Parse and render key-value pairs from JSON #}
+                {# We do this with a JS approach since Jinja can't parse JSON #}
+                <span class="detail-raw-display" id="{{ detail_id }}-kv"
+                      data-raw="{{ entry.details | e }}"></span>
+              </div>
+              <button class="detail-raw-btn" onclick="toggleRaw('{{ detail_id }}')">{ raw }</button>
+              <div class="detail-raw-block" id="{{ detail_id }}-raw">{{ entry.details }}</div>
             {% else %}
               <span style="color:#333">—</span>
             {% endif %}
@@ -193,19 +461,132 @@
   {% else %}
   <div class="audit-empty">
     <div class="audit-empty-icon">[ AUDIT ]</div>
-    <div style="font-size:0.9em;margin-bottom:6px">No audit events recorded yet.</div>
-    <div style="font-size:0.78em;color:#444">
-      Events will appear here as users interact with the platform.
+    <div style="font-size:0.9em;margin-bottom:6px">
+      {% if active_filters %}No events match the current filters.{% else %}No audit events recorded yet.{% endif %}
     </div>
+    {% if active_filters %}
+    <a href="/admin/audit?days={{ days }}&hide_view={{ hide_view }}" class="btn btn-ghost btn-sm" style="margin-top:8px">Clear filters</a>
+    {% endif %}
   </div>
   {% endif %}
 </div>
 
 {% if entries %}
-{{ paginate(page, total_pages, per_page, "/admin/audit", "days=" ~ days ~ "&hide_view=" ~ hide_view) }}
+{{ paginate(page, total_pages, per_page, "/admin/audit",
+    "days=" ~ days
+    ~ "&hide_view=" ~ hide_view
+    ~ "&actor=" ~ actor
+    ~ "&action_filter=" ~ action_filter
+    ~ "&rtype=" ~ rtype
+    ~ "&rid=" ~ rid
+    ~ "&outcome_filter=" ~ outcome_filter
+    ~ "&q=" ~ q) }}
 <p class="text-muted" style="font-size:0.75em;margin-top:10px;text-align:right">
-  Audit events are retained per NIST AU-11. Contact your administrator to adjust the retention period.
+  Audit events are retained per NIST AU-11.
 </p>
 {% endif %}
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Column chooser ─────────────────────────────────────────────────────────
+
+const COL_PREF_KEY = 'bsv-audit-cols';
+const DEFAULT_COLS = ['col-ts','col-actor','col-action','col-rtype','col-res','col-out','col-ip','col-detail'];
+
+function loadColPrefs() {
+  try {
+    const stored = localStorage.getItem(COL_PREF_KEY);
+    return stored ? JSON.parse(stored) : DEFAULT_COLS;
+  } catch { return DEFAULT_COLS; }
+}
+
+function saveColPrefs(cols) {
+  try { localStorage.setItem(COL_PREF_KEY, JSON.stringify(cols)); } catch {}
+}
+
+function applyColPrefs(visibleCols) {
+  const allCols = DEFAULT_COLS;
+  allCols.forEach(colId => {
+    const show = visibleCols.includes(colId);
+    // Toggle table header
+    document.querySelectorAll(`th[data-col="${colId}"]`).forEach(el => {
+      el.style.display = show ? '' : 'none';
+    });
+    // Toggle table cells
+    document.querySelectorAll(`td[data-col="${colId}"]`).forEach(el => {
+      el.style.display = show ? '' : 'none';
+    });
+    // Sync checkbox
+    const cb = document.querySelector(`input[data-col="${colId}"]`);
+    if (cb) cb.checked = show;
+  });
+}
+
+function toggleCol(colId, show) {
+  const prefs = loadColPrefs();
+  const updated = show
+    ? [...new Set([...prefs, colId])]
+    : prefs.filter(c => c !== colId);
+  saveColPrefs(updated);
+  applyColPrefs(updated);
+}
+
+function resetCols() {
+  saveColPrefs(DEFAULT_COLS);
+  applyColPrefs(DEFAULT_COLS);
+}
+
+function toggleColChooser() {
+  const panel = document.getElementById('col-chooser-panel');
+  panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+}
+
+// Close chooser on outside click
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('col-chooser-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('col-chooser-panel').style.display = 'none';
+  }
+});
+
+// ── Details key-value renderer ─────────────────────────────────────────────
+
+function renderDetailKV(el) {
+  const raw = el.dataset.raw;
+  if (!raw) return;
+  try {
+    const obj = JSON.parse(raw);
+    const items = Object.entries(obj);
+    if (items.length === 0) return;
+    el.innerHTML = items.map(([k, v]) => {
+      const val = typeof v === 'object' ? JSON.stringify(v) : String(v);
+      const truncVal = val.length > 60 ? val.slice(0,60) + '…' : val;
+      return `<span class="detail-kv-item" title="${k}: ${val.replace(/"/g,'&quot;')}">
+        <span class="detail-kv-key">${k}:</span>
+        <span class="detail-kv-val">${truncVal}</span>
+      </span>`;
+    }).join('');
+  } catch {
+    el.innerHTML = `<span class="detail-kv-item" style="color:var(--muted)">${raw.slice(0,80)}</span>`;
+  }
+}
+
+function toggleRaw(detailId) {
+  const raw = document.getElementById(detailId + '-raw');
+  if (raw) raw.style.display = raw.style.display === 'block' ? 'none' : 'block';
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Apply column preferences
+  const prefs = loadColPrefs();
+  applyColPrefs(prefs);
+
+  // Render detail key-value cells
+  document.querySelectorAll('.detail-raw-display').forEach(renderDetailKV);
+});
+</script>
 {% endblock %}

@@ -17,7 +17,13 @@
     border-radius: 6px;
     padding: 12px;
     text-align: center;
+    text-decoration: none;
+    display: block;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
   }
+  .ctrl-stat:hover { border-color: var(--cyan); background: rgba(0,255,204,0.04); }
+  .ctrl-stat.active { border-color: var(--cyan); background: rgba(0,255,204,0.07); }
   .ctrl-stat-val { font-size: 1.6em; font-weight: 800; line-height: 1; }
   .ctrl-stat-lbl { font-size: 0.6em; letter-spacing: 1.5px; text-transform: uppercase;
                    color: var(--muted); margin-top: 4px; }
@@ -34,6 +40,13 @@
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 0.82em; cursor: pointer;
   }
+  .active-filter-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(0,255,204,0.1); border: 1px solid rgba(0,255,204,0.3);
+    border-radius: 12px; padding: 3px 10px; font-size: 0.75em; color: var(--cyan);
+  }
+  .active-filter-pill a { color: var(--muted); text-decoration: none; margin-left:2px; }
+  .active-filter-pill a:hover { color: var(--red); }
 
   /* ── Control rows ── */
   .ctrl-plan-row {
@@ -79,6 +92,25 @@
   /* ── Inherited row ── */
   .inherited-section { display: none; }
   .inherited-section.active { display: block; }
+
+  /* ── Narrative highlight classes ── */
+  .np-time   { color: var(--green); font-weight: 600; }
+  .np-system { color: var(--cyan);  font-weight: 600; }
+  .np-role   { color: var(--gold);  font-weight: 600; }
+  .np-param  { color: #e080ff;      font-weight: 600; }
+
+  /* ── Narrative preview strip (collapsed) ── */
+  .narr-strip {
+    font-size: 0.72em; color: var(--muted); margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 420px;
+  }
+
+  /* ── Narrative rendered view (expanded) ── */
+  .narr-rendered {
+    font-size: 0.82em; line-height: 1.65; color: var(--text);
+    padding: 10px 12px; background: rgba(0,0,0,0.25); border-radius: 4px;
+    border: 1px solid rgba(0,255,204,0.12); margin-bottom: 8px; white-space: pre-wrap; word-break: break-word;
+  }
 </style>
 {% endblock %}
 
@@ -105,72 +137,88 @@
     <button onclick="importFromAssessment()" class="btn btn-ghost" style="font-size:0.82em;color:var(--yellow)">
       ⬇ Import from Assessment
     </button>
+    <a href="/systems/{{ system.id }}/evidence" class="btn btn-ghost" style="font-size:0.82em;color:var(--cyan)">
+      🔒 Evidence Locker
+    </a>
+    <a href="/systems/{{ system.id }}/rtm" class="btn btn-ghost" style="font-size:0.82em">
+      RTM →
+    </a>
     <a href="/systems/{{ system.id }}/submit" class="btn btn-primary" style="font-size:0.82em">
       Submit for ATO →
     </a>
   </div>
 </div>
 
-{# ── Stats ── #}
+{# ── Stats — each box is a clickable filter ── #}
 <div class="ctrl-stats">
-  <div class="ctrl-stat">
+  <a href="/systems/{{ system.id }}/controls"
+     class="ctrl-stat {% if not status_filter %}active{% endif %}">
     <div class="ctrl-stat-val">{{ stats.total }}</div>
     <div class="ctrl-stat-lbl">Total Controls</div>
-  </div>
-  <div class="ctrl-stat">
+  </a>
+  <a href="/systems/{{ system.id }}/controls{% if family %}?family={{ family }}&{% else %}?{% endif %}status_filter=implemented"
+     class="ctrl-stat {% if status_filter=='implemented' %}active{% endif %}">
     <div class="ctrl-stat-val" style="color:var(--green)">{{ stats.implemented }}</div>
     <div class="ctrl-stat-lbl">Implemented</div>
-  </div>
-  <div class="ctrl-stat">
+  </a>
+  <a href="/systems/{{ system.id }}/controls{% if family %}?family={{ family }}&{% else %}?{% endif %}status_filter=inherited"
+     class="ctrl-stat {% if status_filter=='inherited' %}active{% endif %}">
     <div class="ctrl-stat-val" style="color:var(--cyan)">{{ stats.inherited }}</div>
     <div class="ctrl-stat-lbl">Inherited</div>
-  </div>
-  <div class="ctrl-stat">
+  </a>
+  <a href="/systems/{{ system.id }}/controls{% if family %}?family={{ family }}&{% else %}?{% endif %}status_filter=in_progress"
+     class="ctrl-stat {% if status_filter=='in_progress' %}active{% endif %}">
     <div class="ctrl-stat-val" style="color:var(--yellow)">{{ stats.in_progress }}</div>
     <div class="ctrl-stat-lbl">In Progress</div>
-  </div>
-  <div class="ctrl-stat">
+  </a>
+  <a href="/systems/{{ system.id }}/controls{% if family %}?family={{ family }}&{% else %}?{% endif %}status_filter=not_applicable"
+     class="ctrl-stat {% if status_filter=='not_applicable' %}active{% endif %}">
     <div class="ctrl-stat-val" style="color:var(--muted)">{{ stats.not_applicable }}</div>
     <div class="ctrl-stat-lbl">N/A</div>
-  </div>
-  <div class="ctrl-stat">
-    <div class="ctrl-stat-val" style="color:#333">{{ stats.not_started }}</div>
+  </a>
+  <a href="/systems/{{ system.id }}/controls{% if family %}?family={{ family }}&{% else %}?{% endif %}status_filter=not_started"
+     class="ctrl-stat {% if status_filter=='not_started' %}active{% endif %}">
+    <div class="ctrl-stat-val" style="color:#888">{{ stats.not_started }}</div>
     <div class="ctrl-stat-lbl">Not Started</div>
-  </div>
-  <div class="ctrl-stat">
+  </a>
+  <a href="/systems/{{ system.id }}/controls{% if family %}?family={{ family }}&{% else %}?{% endif %}status_filter=implemented&status_filter2=inherited"
+     class="ctrl-stat {% if not status_filter %}active{% endif %}" style="pointer-events:none;opacity:0.9">
     <div class="ctrl-stat-val" style="color:var(--cyan)">{{ stats.pct }}%</div>
     <div class="ctrl-stat-lbl">Coverage</div>
-  </div>
+  </a>
 </div>
 
 <div class="prog-bar">
   <div class="prog-fill" style="width:{{ stats.pct }}%"></div>
 </div>
 
-{# ── Filters ── #}
+{# ── Filters — family only (status handled by clickable stats) ── #}
 <form method="get" class="filter-bar" id="filterForm">
   <input type="hidden" name="family" id="familyInput" value="{{ family }}">
-  <input type="hidden" name="status_filter" id="statusInput" value="{{ status_filter }}">
+  {% if status_filter %}
+  <input type="hidden" name="status_filter" value="{{ status_filter }}">
+  {% endif %}
 
-  <select onchange="document.getElementById('familyInput').value=this.value; document.getElementById('filterForm').submit()">
+  <select onchange="document.getElementById('familyInput').value=this.value; document.getElementById('filterForm').submit()"
+          style="min-width:220px">
     <option value="">All Families</option>
-    {% for fam in families %}
-    <option value="{{ fam }}" {% if family == fam %}selected{% endif %}>{{ fam }}</option>
+    {% for fam_id, fam_title in families %}
+    <option value="{{ fam_id }}" {% if family == fam_id %}selected{% endif %}>{{ fam_id }} - {{ fam_title | upper }}</option>
     {% endfor %}
   </select>
 
-  <select onchange="document.getElementById('statusInput').value=this.value; document.getElementById('filterForm').submit()">
-    <option value="">All Statuses</option>
-    <option value="not_started"    {% if status_filter=='not_started'    %}selected{% endif %}>Not Started</option>
-    <option value="in_progress"    {% if status_filter=='in_progress'    %}selected{% endif %}>In Progress</option>
-    <option value="implemented"    {% if status_filter=='implemented'    %}selected{% endif %}>Implemented</option>
-    <option value="not_applicable" {% if status_filter=='not_applicable' %}selected{% endif %}>Not Applicable</option>
-    <option value="inherited"      {% if status_filter=='inherited'      %}selected{% endif %}>Inherited</option>
-    <option value="planned"        {% if status_filter=='planned'        %}selected{% endif %}>Planned</option>
-  </select>
-
-  {% if family or status_filter %}
-  <a href="/systems/{{ system.id }}/controls" class="btn btn-ghost" style="font-size:0.82em;color:var(--muted)">Clear</a>
+  {# Active filter pills #}
+  {% if family %}
+  <span class="active-filter-pill">
+    Family: {{ family }}
+    <a href="/systems/{{ system.id }}/controls{% if status_filter %}?status_filter={{ status_filter }}{% endif %}" title="Remove family filter">✕</a>
+  </span>
+  {% endif %}
+  {% if status_filter %}
+  <span class="active-filter-pill">
+    Status: {{ status_filter | replace('_', ' ') | title }}
+    <a href="/systems/{{ system.id }}/controls{% if family %}?family={{ family }}{% endif %}" title="Remove status filter">✕</a>
+  </span>
   {% endif %}
 
   <span style="color:var(--muted);font-size:0.82em;margin-left:auto">
@@ -192,10 +240,7 @@
       <div>
         <div class="ctrl-plan-title">{{ c.title }}</div>
         {% if c.sc and c.sc.narrative %}
-        <div style="font-size:0.72em;color:var(--muted);margin-top:2px;
-                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:420px">
-          {{ c.sc.narrative[:80] }}…
-        </div>
+        <div class="narr-strip" id="strip-{{ c.id }}">{{ c.sc.narrative[:80] }}{% if c.sc.narrative|length > 80 %}…{% endif %}</div>
         {% endif %}
       </div>
       <div style="display:flex;gap:6px;align-items:center">
@@ -231,8 +276,8 @@
         <div>
           <label>Implementation Type</label>
           <select id="itype-{{ c.id }}">
-            {% for t in ['system','hybrid','inherited'] %}
-            <option value="{{ t }}" {% if c.sc and c.sc.implementation_type == t %}selected{% endif %}>{{ t | title }}</option>
+            {% for t in ['technical','administrative','physical','hybrid','not_applicable','inherited'] %}
+            <option value="{{ t }}" {% if c.sc and c.sc.implementation_type == t %}selected{% endif %}>{{ t | replace('_',' ') | title }}</option>
             {% endfor %}
           </select>
         </div>
@@ -257,8 +302,16 @@
         <textarea id="inhnarr-{{ c.id }}" placeholder="What the providing system implements for this control…">{{ c.sc.inherited_narrative if c.sc else '' }}</textarea>
       </div>
 
+      {# Narrative rendered view #}
+      {% if c.sc and c.sc.narrative %}
+      <label style="margin-top:14px">Narrative Preview</label>
+      <div class="narr-rendered" id="narr-rendered-{{ c.id }}"></div>
+      {% endif %}
+
       <label>Implementation Narrative</label>
-      <textarea id="narr-{{ c.id }}" placeholder="Describe how this control is implemented…">{{ c.sc.narrative if c.sc else '' }}</textarea>
+      <textarea id="narr-{{ c.id }}"
+                oninput="renderNarrativePreview('{{ c.id }}')"
+                placeholder="Describe how this control is implemented…">{{ c.sc.narrative if c.sc else '' }}</textarea>
 
       <div class="save-btn">
         <button onclick="saveControl('{{ c.id }}')" class="btn btn-primary" style="font-size:0.82em;padding:7px 18px" id="savebtn-{{ c.id }}">
@@ -296,12 +349,77 @@
 <script>
 const SYSTEM_ID = "{{ system.id }}";
 
+/* ── Narrative parameter highlighting ─────────────────────────────────────── */
+const NP_SYSTEMS = [
+  'BLACKSITE','Authelia','Caddy','Docker','Wazuh','AdGuard','Plex','Sonarr','Radarr',
+  'Tdarr','Portainer','Uptime Kuma','Grafana','Prometheus','Home Assistant',
+  'borisov.network','borisov','oumuamua','Iapetus','graycat','dan',
+  'RAMD','UniFi','Cloudflare','GitHub','Linux','Ubuntu','FIPS',
+  'SQLite','FastAPI','uvicorn','rsync'
+];
+const NP_ROLES = [
+  'System Administrator','Security Officer','ISSO','ISSM',
+  'Authorizing Official','AO','System Owner','CISO','Administrator',
+  'sole operator','system administrator'
+];
+
+function highlightNarrative(raw) {
+  if (!raw) return '';
+  // Escape HTML first
+  let text = raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // Time periods
+  text = text.replace(/\b(\d+[\s\-]?(?:days?|hours?|weeks?|months?|years?|minutes?))\b/gi,
+    '<span class="np-time">$1</span>');
+
+  // System names (longest first to avoid partial matches)
+  NP_SYSTEMS.slice().sort((a,b)=>b.length-a.length).forEach(name => {
+    const esc = name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    text = text.replace(new RegExp('\\b' + esc + '\\b', 'g'),
+      `<span class="np-system">${name}</span>`);
+  });
+
+  // Role names
+  NP_ROLES.slice().sort((a,b)=>b.length-a.length).forEach(role => {
+    const esc = role.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    text = text.replace(new RegExp('\\b' + esc + '\\b', 'gi'),
+      `<span class="np-role">${role}</span>`);
+  });
+
+  // NIST org-defined parameter placeholders: [Assignment: ...] or [Selection: ...]
+  text = text.replace(/\[(Assignment|Selection|organization-defined)[^\]]*\]/gi,
+    match => `<span class="np-param">${match}</span>`);
+
+  return text;
+}
+
+function renderNarrativePreview(ctrlId) {
+  const ta = document.getElementById('narr-' + ctrlId);
+  const preview = document.getElementById('narr-rendered-' + ctrlId);
+  if (ta && preview) {
+    preview.innerHTML = highlightNarrative(ta.value);
+  }
+}
+
 function toggleEdit(ctrlId) {
   const panel   = document.getElementById('edit-' + ctrlId);
   const chevron = document.getElementById('chevron-' + ctrlId);
   const isOpen  = panel.classList.contains('open');
   panel.classList.toggle('open', !isOpen);
   chevron.textContent = isOpen ? '▾' : '▴';
+  // Render narrative on open
+  if (!isOpen) {
+    renderNarrativePreview(ctrlId);
+    // Also update collapsed strip with highlighted text
+    const strip = document.getElementById('strip-' + ctrlId);
+    const ta = document.getElementById('narr-' + ctrlId);
+    if (strip && ta && ta.value) {
+      const plain = ta.value.substring(0, 100) + (ta.value.length > 100 ? '…' : '');
+      strip.innerHTML = highlightNarrative(plain);
+      strip.style.overflow = 'visible';
+      strip.style.whiteSpace = 'normal';
+    }
+  }
 }
 
 function saveControl(ctrlId) {
@@ -328,14 +446,13 @@ function saveControl(ctrlId) {
       if (d.ok) {
         btn.textContent = '✓ Saved';
         btn.style.background = 'var(--green)';
-        // Update badge
         const labels = {
           'not_started':'Not Started','in_progress':'In Progress','implemented':'Implemented',
           'planned':'Planned','not_applicable':'Not Applicable','inherited':'Inherited'
         };
         const colors = {
           'implemented':'var(--green)','in_progress':'var(--yellow)','planned':'var(--cyan)',
-          'not_applicable':'var(--muted)','inherited':'var(--cyan)','not_started':'#333'
+          'not_applicable':'var(--muted)','inherited':'var(--cyan)','not_started':'#888'
         };
         badge.textContent = labels[status] || status;
         badge.style.color = colors[status] || 'var(--muted)';
