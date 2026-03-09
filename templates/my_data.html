@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — My Data & Privacy Rights{% endblock %}
+
+{% block content %}
+<div style="max-width:860px;margin:0 auto;padding:24px 16px">
+
+  <h1 style="font-family:var(--mono);font-size:1.4em;color:var(--cyan);
+             letter-spacing:1px;margin-bottom:4px">My Data &amp; Privacy Rights</h1>
+  <p style="color:var(--muted);font-size:0.85em;margin-bottom:32px">
+    CCPA / CPRA — California Consumer Privacy Act rights management
+  </p>
+
+  {# ── Identity summary ────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      Your Account Summary
+    </h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px">
+        <div style="font-size:0.72em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Username</div>
+        <div style="font-family:var(--mono);color:var(--cyan);font-size:0.95em">{{ username }}</div>
+      </div>
+
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px">
+        <div style="font-size:0.72em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Email</div>
+        <div style="font-family:var(--mono);color:var(--text);font-size:0.95em">
+          {{ profile.email if profile and profile.email else '—' }}
+        </div>
+      </div>
+
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px">
+        <div style="font-size:0.72em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Role</div>
+        <div style="font-family:var(--mono);color:var(--text);font-size:0.95em">
+          {{ profile.role if profile and profile.role else 'employee' }}
+        </div>
+      </div>
+
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px">
+        <div style="font-size:0.72em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Member Since</div>
+        <div style="font-family:var(--mono);color:var(--text);font-size:0.95em">
+          {% if profile and profile.created_at %}
+            {{ profile.created_at.strftime('%Y-%m-%d') }}
+          {% else %}
+            —
+          {% endif %}
+        </div>
+      </div>
+
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px">
+        <div style="font-size:0.72em;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Audit Log Entries</div>
+        <div style="font-family:var(--mono);color:var(--cyan);font-size:1.1em;font-weight:700">
+          {{ audit_count | default(0) }}
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  {# ── Your rights ─────────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      Your Rights Under CCPA / CPRA
+    </h2>
+    <div style="display:grid;gap:10px">
+
+      <div style="border-left:3px solid var(--cyan);padding:10px 14px;background:var(--surface);border-radius:0 6px 6px 0">
+        <div style="font-weight:700;font-size:0.9em;color:var(--text);margin-bottom:3px">Right to Know</div>
+        <div style="font-size:0.85em;color:var(--muted)">You have the right to know what personal information is collected about you, how it is used, and with whom it is shared.</div>
+      </div>
+
+      <div style="border-left:3px solid var(--cyan);padding:10px 14px;background:var(--surface);border-radius:0 6px 6px 0">
+        <div style="font-weight:700;font-size:0.9em;color:var(--text);margin-bottom:3px">Right to Access</div>
+        <div style="font-size:0.85em;color:var(--muted)">You have the right to request a copy of the personal information we hold about you. Use the export button below to submit a request.</div>
+      </div>
+
+      <div style="border-left:3px solid var(--cyan);padding:10px 14px;background:var(--surface);border-radius:0 6px 6px 0">
+        <div style="font-weight:700;font-size:0.9em;color:var(--text);margin-bottom:3px">Right to Correct</div>
+        <div style="font-size:0.85em;color:var(--muted)">You have the right to request correction of inaccurate personal information. Update your profile information via <a href="/profile" style="color:var(--cyan)">My Profile</a>.</div>
+      </div>
+
+      <div style="border-left:3px solid var(--cyan);padding:10px 14px;background:var(--surface);border-radius:0 6px 6px 0">
+        <div style="font-weight:700;font-size:0.9em;color:var(--text);margin-bottom:3px">Right to Delete</div>
+        <div style="font-size:0.85em;color:var(--muted)">You have the right to request deletion of your personal information. Note that compliance audit records may be retained per legal obligations even after a deletion request is honored.</div>
+      </div>
+
+      <div style="border-left:3px solid var(--cyan);padding:10px 14px;background:var(--surface);border-radius:0 6px 6px 0">
+        <div style="font-weight:700;font-size:0.9em;color:var(--text);margin-bottom:3px">Right to Opt-Out of Sale</div>
+        <div style="font-size:0.85em;color:var(--muted)">We do <strong>not</strong> sell, rent, or trade your personal information to third parties. No opt-out action is required.</div>
+      </div>
+
+    </div>
+  </div>
+
+  {# ── Export my data ───────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 8px;font-weight:700">
+      Export My Data
+    </h2>
+    <p style="color:var(--muted);font-size:0.85em;margin:0 0 16px">
+      A data export includes your profile information, preferences, system assignments,
+      and a summary of your activity log entries. An administrator will prepare your export
+      and contact you within <strong style="color:var(--text)">30 days</strong>.
+    </p>
+    <button id="export-btn" onclick="requestExport()"
+            style="background:rgba(0,255,204,0.1);border:1px solid rgba(0,255,204,0.3);
+                   border-radius:5px;color:var(--cyan);font-size:0.9em;font-weight:600;
+                   padding:9px 22px;cursor:pointer">
+      Request Data Export
+    </button>
+    <div id="export-msg" role="status" aria-live="polite"
+         style="display:none;margin-top:12px;font-size:0.88em;padding:10px 14px;
+                border-radius:5px"></div>
+  </div>
+
+  {# ── Deletion request ─────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 8px;font-weight:700">
+      Request Data Deletion
+    </h2>
+    <div style="background:rgba(244,67,54,0.08);border:1px solid rgba(244,67,54,0.25);
+                border-radius:5px;padding:12px 14px;margin-bottom:16px;font-size:0.85em;color:var(--text)">
+      <strong style="color:var(--red)">Important:</strong>
+      Compliance audit records (AU-2, AU-10 per NIST 800-53) may be retained per legal
+      and regulatory obligations even after a deletion request is honored. Profile
+      information and preferences will be removed; audit trail entries may be anonymized
+      rather than deleted.
+    </div>
+    <p style="color:var(--muted);font-size:0.85em;margin:0 0 14px">
+      An administrator will review and process your request within
+      <strong style="color:var(--text)">45 days</strong>.
+    </p>
+    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;
+                  margin-bottom:14px;font-size:0.88em;color:var(--text)">
+      <input type="checkbox" id="deletion-confirm"
+             style="margin-top:2px;accent-color:var(--cyan);flex-shrink:0">
+      I understand that compliance audit records may be retained per legal obligations,
+      and I still wish to request deletion of my personal data.
+    </label>
+    <button id="deletion-btn" onclick="requestDeletion()" disabled
+            style="background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);
+                   border-radius:5px;color:var(--red);font-size:0.9em;font-weight:600;
+                   padding:9px 22px;cursor:not-allowed;opacity:0.5"
+            aria-label="Request data deletion">
+      Request Deletion
+    </button>
+    <div id="deletion-msg" role="status" aria-live="polite"
+         style="display:none;margin-top:12px;font-size:0.88em;padding:10px 14px;
+                border-radius:5px"></div>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  // Enable deletion button only when checkbox is checked
+  var chk = document.getElementById('deletion-confirm');
+  var btn = document.getElementById('deletion-btn');
+  if (chk && btn) {
+    chk.addEventListener('change', function() {
+      btn.disabled = !chk.checked;
+      btn.style.opacity    = chk.checked ? '1'   : '0.5';
+      btn.style.cursor     = chk.checked ? 'pointer' : 'not-allowed';
+    });
+  }
+})();
+
+async function requestExport() {
+  var btn = document.getElementById('export-btn');
+  var msg = document.getElementById('export-msg');
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+  try {
+    var r = await fetch('/privacy/export-request', { method: 'POST' });
+    var d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      msg.style.background = 'rgba(0,200,83,0.1)';
+      msg.style.border     = '1px solid rgba(0,200,83,0.3)';
+      msg.style.color      = 'var(--green)';
+      msg.textContent      = d.message || 'Export request received.';
+    } else {
+      msg.style.background = 'rgba(244,67,54,0.08)';
+      msg.style.border     = '1px solid rgba(244,67,54,0.25)';
+      msg.style.color      = 'var(--red)';
+      msg.textContent      = d.detail || 'Request failed — please try again.';
+      btn.disabled = false;
+      btn.textContent = 'Request Data Export';
+    }
+    msg.style.display = 'block';
+  } catch (ex) {
+    msg.style.background = 'rgba(244,67,54,0.08)';
+    msg.style.border     = '1px solid rgba(244,67,54,0.25)';
+    msg.style.color      = 'var(--red)';
+    msg.textContent      = 'Network error — please try again.';
+    msg.style.display    = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Request Data Export';
+  }
+}
+
+async function requestDeletion() {
+  var btn = document.getElementById('deletion-btn');
+  var msg = document.getElementById('deletion-msg');
+  var chk = document.getElementById('deletion-confirm');
+  if (!chk || !chk.checked) return;
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+  try {
+    var r = await fetch('/privacy/deletion-request', { method: 'POST' });
+    var d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      msg.style.background = 'rgba(0,200,83,0.1)';
+      msg.style.border     = '1px solid rgba(0,200,83,0.3)';
+      msg.style.color      = 'var(--green)';
+      msg.textContent      = d.message || 'Deletion request received.';
+      chk.disabled = true;
+    } else {
+      msg.style.background = 'rgba(244,67,54,0.08)';
+      msg.style.border     = '1px solid rgba(244,67,54,0.25)';
+      msg.style.color      = 'var(--red)';
+      msg.textContent      = d.detail || 'Request failed — please try again.';
+      btn.disabled = !chk.checked;
+      btn.textContent = 'Request Deletion';
+    }
+    msg.style.display = 'block';
+  } catch (ex) {
+    msg.style.background = 'rgba(244,67,54,0.08)';
+    msg.style.border     = '1px solid rgba(244,67,54,0.25)';
+    msg.style.color      = 'var(--red)';
+    msg.textContent      = 'Network error — please try again.';
+    msg.style.display    = 'block';
+    btn.disabled = !chk.checked;
+    btn.textContent = 'Request Deletion';
+  }
+}
+</script>
+{% endblock %}

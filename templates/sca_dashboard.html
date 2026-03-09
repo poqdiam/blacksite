@@ -2,6 +2,12 @@
 {% block title %}{{ app_name }} — SCA Dashboard{% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <a href="/dashboard">Dashboard</a>
+  <span class="sep">/</span>
+  <span>SCA Dashboard</span>
+</div>
+
 <div style="margin-bottom:28px">
   <h1 style="margin:0;margin-bottom:4px">SCA Dashboard</h1>
   <p class="text-muted" style="font-size:0.88em">Controls assessment status, schedule, and POA&Ms requiring concurrence</p>
@@ -26,7 +32,7 @@
 {# ── Control Assessment Progress ── #}
 <div class="card" style="margin-bottom:20px">
   <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
-    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Control Assessment Progress</div>
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Control Assessment Coverage</div>
   </div>
   {% if assigned_systems %}
   <table style="width:100%;border-collapse:collapse;font-size:0.83em">
@@ -34,22 +40,28 @@
       <tr style="border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)">
         <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">System</th>
         <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Controls</th>
-        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Tested</th>
-        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Progress</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Assessed</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Satisfied</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">OTS</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Coverage</th>
       </tr>
     </thead>
     <tbody>
       {% for sys in assigned_systems %}
       {% set stats = ctrl_stats.get(sys.id, {}) %}
-      {% set total = stats.get('total', 0) %}
-      {% set tested = stats.get('tested', 0) %}
-      {% set pct = ((tested / total * 100) | round | int) if total > 0 else 0 %}
+      {% set total    = stats.get('total', 0) %}
+      {% set assessed = stats.get('assessed', 0) %}
+      {% set sat      = stats.get('sat', 0) %}
+      {% set ots      = stats.get('ots', 0) %}
+      {% set pct = ((assessed / total * 100) | round | int) if total > 0 else 0 %}
       <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
         <td style="padding:10px 20px">
           <a href="/systems/{{ sys.id }}/controls" style="color:var(--cyan);font-weight:600">{{ sys.name }}</a>
         </td>
         <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono)">{{ total }}</td>
-        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono)">{{ tested }}</td>
+        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono)">{{ assessed }}</td>
+        <td style="padding:10px 20px;color:var(--green);font-family:var(--mono)">{{ sat }}</td>
+        <td style="padding:10px 20px;color:{% if ots > 0 %}var(--red){% else %}var(--muted){% endif %};font-family:var(--mono)">{{ ots }}</td>
         <td style="padding:10px 20px">
           <div style="display:flex;align-items:center;gap:10px">
             <div style="flex:1;background:var(--border);border-radius:4px;height:6px;overflow:hidden">

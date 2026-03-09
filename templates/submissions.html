@@ -3,12 +3,19 @@
 {% block title %}{{ app_name }} — Submissions{% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <span>Authorization Submissions</span>
+</div>
+
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
   <div>
     <h1 style="margin:0">Authorization Submissions</h1>
-    <p class="text-muted" style="margin:4px 0 0;font-size:0.85em">ATO packages — all systems</p>
+    <p class="text-muted" style="margin:4px 0 0;font-size:0.85em">Active packages awaiting review or decision</p>
   </div>
-  <a href="/systems" class="btn btn-ghost" style="font-size:0.82em">System Catalog →</a>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/submissions/approved" class="btn btn-ghost" style="font-size:0.82em">Approved Packages →</a>
+    <a href="/systems" class="btn btn-ghost" style="font-size:0.82em">System Catalog →</a>
+  </div>
 </div>
 
 {% set status_colors = {
@@ -72,8 +79,8 @@
   </table>
   {% else %}
   <div style="padding:48px;text-align:center;color:var(--muted)">
-    No submissions yet.
-    <a href="/systems" style="color:var(--cyan)">Go to System Catalog →</a>
+    No active submissions.
+    <a href="/submissions/approved" style="color:var(--cyan)">View approved packages →</a>
   </div>
   {% endif %}
 </div>

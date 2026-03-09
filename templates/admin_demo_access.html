@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Demo Visitor Log{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Demo Visitor Access Log</h1>
+    <p class="page-sub">
+      Visitor IPs from <strong>demo.borisov.network</strong> — grouped by IP, ordered by most recent.
+      Source: <code style="font-size:0.8em">{{ demo_db_path }}</code>
+    </p>
+  </div>
+  <form method="get" action="/admin/demo-access" style="display:flex;gap:0.5rem;align-items:center">
+    <label for="demo-access-days" style="font-size:0.8em;color:var(--muted)">Last</label>
+    <select name="days" id="demo-access-days" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()" aria-label="Date range (auto-applies on change)">
+      {% for d in [7, 14, 30, 60, 90] %}
+      <option value="{{ d }}" {% if d == days %}selected{% endif %}>{{ d }} days</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% else %}
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="stat-card text-center p-3">
+      <div class="stat-card-n" style="color:var(--cyan)">{{ unique_ips }}</div>
+      <div class="stat-card-l">Unique IPs</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card text-center p-3">
+      <div class="stat-card-n">{{ total }}</div>
+      <div class="stat-card-l">Total Requests</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card text-center p-3">
+      <div class="stat-card-n">{{ unique_paths }}</div>
+      <div class="stat-card-l">Unique Pages</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card text-center p-3">
+      <div class="stat-card-n">{{ days }}</div>
+      <div class="stat-card-l">Day Window</div>
+    </div>
+  </div>
+</div>
+
+{% if top_countries %}
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;align-items:center">
+  <span style="font-size:0.7em;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)">Top Countries</span>
+  {% for country, count in top_countries %}
+  <span style="background:var(--card-bg);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:0.8em">
+    {{ count }} — {{ country }}
+  </span>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if rows %}
+<div class="table-responsive">
+  <table class="table table-hover table-sm">
+    <thead>
+      <tr>
+        <th scope="col">IP Address</th>
+        <th scope="col">Location</th>
+        <th scope="col">Org / ISP</th>
+        <th scope="col">Requests</th>
+        <th scope="col">Pages</th>
+        <th scope="col">First Seen</th>
+        <th scope="col">Last Seen</th>
+        <th scope="col"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>
+          <a href="/admin/demo-access/ip/{{ row.remote_ip }}?days={{ days }}"
+             style="text-decoration:none">
+            <code style="font-size:0.85em">{{ row.remote_ip }}</code>
+          </a>
+        </td>
+        <td style="font-size:0.8em;white-space:nowrap">
+          {% if row.geo_flag %}
+          <span title="{{ row.geo_country }}">{{ row.geo_flag }}</span>
+          {% endif %}
+          {% if row.geo_city %}{{ row.geo_city }}, {% endif %}{{ row.geo_country or '—' }}
+        </td>
+        <td style="font-size:0.75em;color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+            title="{{ row.geo_org }}">{{ row.geo_org or '—' }}</td>
+        <td>{{ row.hits }}</td>
+        <td>{{ row.pages_visited }}</td>
+        <td style="font-size:0.8em;color:var(--muted)">{{ row.first_seen | replace("T"," ") | truncate(16, killwords=True, end="") }}</td>
+        <td style="font-size:0.8em;color:var(--muted)">{{ row.last_seen | replace("T"," ") | truncate(16, killwords=True, end="") }}</td>
+        <td style="white-space:nowrap">
+          <a href="https://www.shodan.io/host/{{ row.remote_ip }}" target="_blank" rel="noopener"
+             style="font-size:0.75em;color:var(--muted);text-decoration:none"
+             title="Look up on Shodan">Shodan ↗</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total_pages > 1 %}
+<div style="display:flex;gap:0.5rem;align-items:center;margin-top:1rem;font-size:0.85em">
+  {% if page > 1 %}
+  <a href="?days={{ days }}&page={{ page - 1 }}" class="btn btn-sm btn-outline">← Prev</a>
+  {% endif %}
+  <span style="color:var(--muted)">Page {{ page }} of {{ total_pages }}</span>
+  {% if page < total_pages %}
+  <a href="?days={{ days }}&page={{ page + 1 }}" class="btn btn-sm btn-outline">Next →</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="alert alert-info">No visitor data in the last {{ days }} days.</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}

@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+{% block title %}IL4 Security Posture{% endblock %}
+
+{% block head %}
+<style>
+/* ── IL4 gap card grid ───────────────────────────────────────────────────── */
+.gap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.gap-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 22px;
+}
+.gap-card.status-closed  { border-left: 3px solid #00cc66; }
+.gap-card.status-warned  { border-left: 3px solid #ffc107; }
+.gap-card.status-open    { border-left: 3px solid #e55; }
+.gap-card.status-dev_excluded { border-left: 3px solid #7b6ee0; }
+.gap-card.status-prod_block   { border-left: 3px solid #e55; }
+
+.gap-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.gap-indicator {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.85em; font-weight: 700; flex-shrink: 0;
+}
+.ind-closed     { background: rgba(0,204,102,.15); color: #00cc66; }
+.ind-warned     { background: rgba(255,193,7,.15);  color: #ffc107; }
+.ind-open       { background: rgba(238,85,85,.15);  color: #e55; }
+.ind-dev_excluded { background: rgba(123,110,224,.15); color: #9d8ff5; }
+.ind-prod_block   { background: rgba(238,85,85,.15);   color: #e55; }
+
+.gap-title {
+  font-weight: 700;
+  font-size: 0.9em;
+  color: var(--text);
+}
+.gap-ref {
+  font-size: 0.7em;
+  color: var(--muted);
+  margin-top: 1px;
+}
+.gap-detail {
+  font-size: 0.8em;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* ── Status badge row ────────────────────────────────────────────────────── */
+.il4-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.il4-badge {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: .5px;
+  border: 1px solid;
+}
+.badge-on  { background: rgba(0,204,102,.12); color: #00cc66; border-color: rgba(0,204,102,.3); }
+.badge-off { background: rgba(255,255,255,.04); color: var(--muted); border-color: var(--border); }
+.badge-prod { background: rgba(255,193,7,.12); color: #ffc107; border-color: rgba(255,193,7,.3); }
+
+/* ── Caddy snippet block ─────────────────────────────────────────────────── */
+.caddy-block {
+  background: #0d1117;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 20px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.78em;
+  color: #c9d1d9;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+  position: relative;
+}
+.copy-btn {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--cyan);
+  font-size: 0.72em;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.copy-btn:hover { background: rgba(0,255,204,.08); }
+
+/* ── Section header ─────────────────────────────────────────────────────── */
+.il4-section-hdr {
+  font-size: 0.62em;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 28px 0 12px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/admin">Admin</a>
+  <span class="sep">/</span>
+  <span>IL4 Security Posture</span>
+</div>
+
+<div class="page-header" style="margin-bottom:24px">
+  <h1 style="margin:0;font-size:1.4em;letter-spacing:1px">IL4 SECURITY POSTURE</h1>
+  <p style="margin:4px 0 0;color:var(--muted);font-size:0.85em">
+    Compliance gap status, CAC/PIV authentication, and NIST 800-53 control coverage.
+  </p>
+</div>
+
+{# ── Loading state ─────────────────────────────────────────────────────────── #}
+<div id="il4-loading" style="color:var(--muted);font-size:0.85em;margin-bottom:24px">
+  Loading security status…
+</div>
+
+<div id="il4-content" style="display:none">
+
+  {# ── Mode + feature badges ─────────────────────────────────────────────── #}
+  <div class="il4-section-hdr">Active Security Features</div>
+  <div class="il4-badges" id="badge-row">
+    {# populated by JS #}
+  </div>
+
+  {# ── Compliance gaps ───────────────────────────────────────────────────── #}
+  <div class="il4-section-hdr">NIST 800-53 Compliance Gaps</div>
+  <div class="gap-grid" id="gap-grid">
+    {# populated by JS #}
+  </div>
+
+  {# ── CAC/PIV section ───────────────────────────────────────────────────── #}
+  <div class="il4-section-hdr">CAC / PIV Authentication</div>
+  <div class="card" style="padding:22px 24px;margin-bottom:24px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px">
+      <div>
+        <div style="font-weight:700;font-size:0.95em;margin-bottom:4px">Client Certificate Authentication</div>
+        <div style="font-size:0.8em;color:var(--muted)">
+          When enabled, BLACKSITE reads the user identity from the CAC/PIV X.509 Common Name injected by
+          Caddy as <code style="background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px">X-Client-Cert-Subject</code>,
+          bypassing Authelia's Remote-User header.
+        </div>
+      </div>
+      <div id="cac-badge" style="flex-shrink:0"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:0.8em;color:var(--muted);margin-bottom:16px">
+      <div>
+        <div style="color:var(--text);font-weight:600;margin-bottom:3px">Header</div>
+        <code id="cac-header-val" style="color:var(--cyan)">—</code>
+      </div>
+      <div>
+        <div style="color:var(--text);font-weight:600;margin-bottom:3px">CN Prefix Strip</div>
+        <code id="cac-prefix-val" style="color:var(--cyan)">—</code>
+      </div>
+    </div>
+
+    <div style="font-size:0.8em;color:var(--muted)">
+      To enable CAC/PIV: set <code style="background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px">security.cac_piv_auth: true</code>
+      in <code>config.yaml</code> and apply the Caddy configuration snippet below.
+    </div>
+  </div>
+
+  {# ── Caddy snippet ─────────────────────────────────────────────────────── #}
+  <div class="il4-section-hdr">Caddyfile Snippet — CAC/PIV Setup</div>
+  <div style="position:relative">
+    <pre class="caddy-block" id="caddy-snippet">Loading…</pre>
+    <button class="copy-btn" onclick="copySnippet()">Copy</button>
+  </div>
+
+  {# ── How-to-close guide ────────────────────────────────────────────────── #}
+  <div class="il4-section-hdr">Closing Open Gaps</div>
+  <div class="card" style="padding:22px 24px;font-size:0.82em;line-height:1.7;color:var(--muted)">
+    <p style="margin:0 0 10px"><strong style="color:var(--text)">GAP-1 — Encryption at Rest (SC-28)</strong><br>
+    Install <code>libsqlcipher3</code> and set <code>security.db_encryption: true</code>.
+    Restart BLACKSITE. A SQLCipher-encrypted database will be used on next startup.
+    Existing data must be migrated using <code>sqlcipher</code> CLI before enabling in production.</p>
+
+    <p style="margin:0 0 10px"><strong style="color:var(--text)">GAP-2 — Immutable Audit Log (AU-2/AU-10)</strong><br>
+    Closed by design. The <code>immutable_audit_log</code> table is always created and
+    the IL4 audit middleware writes append-only entries for all admin, export, and mutation events.
+    Enable <code>security.audit_all_requests: true</code> to log every HTTP request.</p>
+
+    <p style="margin:0 0 10px"><strong style="color:var(--text)">GAP-3 — MFA Enforcement (IA-2(1))</strong><br>
+    Set <code>security.require_mfa: true</code>. BLACKSITE will then require the
+    <code>X-Authelia-Auth-Level: two_factor</code> header on all requests; ensure Authelia is
+    configured with a two_factor policy for the BLACKSITE domain.</p>
+
+    <p style="margin:0"><strong style="color:var(--text)">GAP-4 — FIPS Session Crypto (SC-13)</strong><br>
+    Set <code>security.fips_session_crypto: true</code> and
+    <code>BLACKSITE_ENV=prod</code>. This is a PROD-only guard — the check is bypassed in
+    development to avoid blocking the server.</p>
+  </div>
+
+</div>{# end #il4-content #}
+
+<script>
+(async function() {
+  const statusEl  = document.getElementById("il4-loading");
+  const contentEl = document.getElementById("il4-content");
+
+  // ── Status colours ──────────────────────────────────────────────────────────
+  const STATUS_LABEL = {
+    closed:       "Closed",
+    warned:       "Warning",
+    open:         "Open",
+    dev_excluded: "Dev (bypassed)",
+    prod_block:   "PROD BLOCK",
+  };
+  const STATUS_ICON = {
+    closed:       "✓",
+    warned:       "!",
+    open:         "✗",
+    dev_excluded: "~",
+    prod_block:   "✗",
+  };
+
+  // ── Fetch status ────────────────────────────────────────────────────────────
+  let data;
+  try {
+    const r = await fetch("/api/admin/security/status");
+    data = await r.json();
+  } catch(e) {
+    statusEl.textContent = "Failed to load security status.";
+    return;
+  }
+
+  // ── Badge row ───────────────────────────────────────────────────────────────
+  const badges = [
+    { label: "IL4 Mode",         on: data.il4_mode },
+    { label: "CAC/PIV Auth",     on: data.cac_piv_auth },
+    { label: "MFA Enforcement",  on: data.require_mfa },
+    { label: "Audit All",        on: data.audit_all_requests },
+    { label: "DB Encryption",    on: data.db_encryption },
+    { label: data.env === "prod" ? "PROD" : "DEV", on: null, cls: data.env === "prod" ? "badge-prod" : "badge-off" },
+  ];
+  const badgeRow = document.getElementById("badge-row");
+  badges.forEach(b => {
+    const el = document.createElement("div");
+    const cls = b.cls || (b.on ? "badge-on" : "badge-off");
+    el.className = "il4-badge " + cls;
+    el.textContent = (b.on === true ? "✓ " : b.on === false ? "○ " : "") + b.label;
+    badgeRow.appendChild(el);
+  });
+
+  // ── Gap cards ───────────────────────────────────────────────────────────────
+  const grid = document.getElementById("gap-grid");
+  (data.gaps || []).forEach(gap => {
+    const s = gap.status;
+    const card = document.createElement("div");
+    card.className = "gap-card status-" + s;
+    card.innerHTML = `
+      <div class="gap-header">
+        <div class="gap-indicator ind-${s}">${STATUS_ICON[s] || "?"}</div>
+        <div>
+          <div class="gap-title">GAP-${gap.id} — ${gap.label}</div>
+          <div class="gap-ref">NIST 800-53: ${gap.ref} &nbsp;|&nbsp; ${STATUS_LABEL[s] || s}</div>
+        </div>
+      </div>
+      <div class="gap-detail">${gap.detail}</div>
+    `;
+    grid.appendChild(card);
+  });
+
+  // ── CAC/PIV section ─────────────────────────────────────────────────────────
+  const cacBadge = document.getElementById("cac-badge");
+  cacBadge.innerHTML = data.cac_piv_auth
+    ? '<span class="il4-badge badge-on">✓ ENABLED</span>'
+    : '<span class="il4-badge badge-off">○ DISABLED</span>';
+
+  // Fetch detailed sec config from status (header/prefix values not in status endpoint — use static)
+  document.getElementById("cac-header-val").textContent = "X-Client-Cert-Subject";
+  document.getElementById("cac-prefix-val").textContent = "(none)";
+
+  // ── Caddy snippet ────────────────────────────────────────────────────────────
+  try {
+    const r2 = await fetch("/api/admin/security/cac-caddy-snippet");
+    const d2 = await r2.json();
+    document.getElementById("caddy-snippet").textContent = d2.snippet || "(unavailable)";
+  } catch(e) {
+    document.getElementById("caddy-snippet").textContent = "(failed to load snippet)";
+  }
+
+  statusEl.style.display = "none";
+  contentEl.style.display = "block";
+})();
+
+function copySnippet() {
+  const text = document.getElementById("caddy-snippet").textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector(".copy-btn");
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+  });
+}
+</script>
+{% endblock %}

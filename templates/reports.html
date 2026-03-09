@@ -144,6 +144,10 @@
 {% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <span>Reports</span>
+</div>
+
 
 {# ── Page header ─────────────────────────────────────────────────────────── #}
 <div style="margin-bottom:24px">
@@ -209,7 +213,7 @@
     <div class="report-desc">
       Complete listing of all open, in-progress, and closed POA&amp;M items across assigned systems.
       Includes severity classification, due dates, responsible parties, and remediation notes.
-      Required deliverable for continuous monitoring under NIST SP 800-137.
+      Required deliverable for continuous monitoring programs.
     </div>
     <div class="report-meta">
       <div class="report-stat"><strong>{{ total_poams }}</strong> total items</div>
@@ -236,8 +240,8 @@
     </div>
     <div class="report-desc">
       All tracked security risks with likelihood and impact scores, risk ratings, and treatment
-      decisions (accept/mitigate/transfer/avoid). Supports the risk executive function per
-      NIST SP 800-39 and feeds the POA&amp;M process.
+      decisions (accept/mitigate/transfer/avoid). Supports the risk executive function
+      and feeds the POA&amp;M process.
     </div>
     <div class="report-meta">
       <div class="report-stat"><strong>{{ total_risks }}</strong> total risks</div>
@@ -274,12 +278,12 @@
 </div>
 
 {# ═══════════════════════════════════════════════════════════════════════════
-   SECTION 2 — ATO Package Reports (Agency-Facing)
+   SECTION 2 — Authorization Package Reports (Agency/Program-Facing)
 ══════════════════════════════════════════════════════════════════════════════ #}
-<div class="section-divider"><h2>ATO Package Reports</h2><hr></div>
+<div class="section-divider"><h2>Authorization Package Reports</h2><hr></div>
 <p class="text-muted" style="font-size:0.82em;margin-bottom:16px;line-height:1.6">
-  These reports are the standard deliverables submitted to an Authorizing Official (AO) or Inspector General (IG) as part of
-  the Authorization to Operate (ATO) package. Navigate to a specific system to download its package.
+  These reports are the standard deliverables submitted to an Authorizing Official (AO), Inspector General (IG), or
+  certification body as part of an authorization or compliance package. Navigate to a specific system to download its package.
 </p>
 
 <div class="reports-grid">
@@ -290,13 +294,13 @@
       <div class="report-icon">📄</div>
       <div>
         <div class="report-title">System Security Plan (SSP) <span class="report-badge rb-agency">Agency</span></div>
-        <div class="report-subtitle">NIST SP 800-18 · per-system</div>
+        <div class="report-subtitle">per-system</div>
       </div>
     </div>
     <div class="report-desc">
-      The primary ATO document. Describes the system boundary, its purpose, all applicable NIST 800-53
+      The primary authorization document. Describes the system boundary, its purpose, all applicable
       controls, and the implementation status of each. The SSP is the "source of truth" reviewed by
-      the Authorizing Official before granting an ATO.
+      the Authorizing Official before granting authorization.
     </div>
     <div class="report-actions">
       <a href="/systems" class="btn btn-ghost btn-sm">Go to Systems →</a>
@@ -310,13 +314,13 @@
       <div class="report-icon">🔍</div>
       <div>
         <div class="report-title">Security Assessment Report (SAR) <span class="report-badge rb-agency">Agency</span></div>
-        <div class="report-subtitle">NIST SP 800-53A · per-system</div>
+        <div class="report-subtitle">per-system</div>
       </div>
     </div>
     <div class="report-desc">
-      Documents the results of the security control assessment (SCA). Produced by an independent
-      Security Control Assessor (SCA), it lists all controls tested, findings, and recommendations.
-      Required before the AO can make an authorization decision. Linked to uploaded assessments.
+      Documents the results of the security control assessment. Produced by an independent
+      assessor, it lists all controls tested, findings, and recommendations.
+      Required before the Authorizing Official can make an authorization decision. Linked to uploaded assessments.
     </div>
     <div class="report-actions">
       <a href="/submissions" class="btn btn-ghost btn-sm">View Submissions</a>
@@ -354,7 +358,7 @@
       <div class="report-icon">🔄</div>
       <div>
         <div class="report-title">RMF Lifecycle Summary <span class="report-badge rb-agency">Agency</span></div>
-        <div class="report-subtitle">NIST SP 800-37 Rev 2 · org-wide</div>
+        <div class="report-subtitle">org-wide</div>
       </div>
     </div>
     <div class="report-desc">
@@ -386,13 +390,13 @@
       <div class="report-icon">🛡</div>
       <div>
         <div class="report-title">Control Coverage Report <span class="report-badge rb-ops">Ops</span></div>
-        <div class="report-subtitle">NIST SP 800-53 Rev 5 · per-system</div>
+        <div class="report-subtitle">per-system</div>
       </div>
     </div>
     <div class="report-desc">
-      Shows which NIST 800-53 controls are implemented, not implemented, or not applicable
-      for each system. Organized by control family (AC, AU, CA, CM, etc.). Essential for
-      gap analysis and prioritizing security investments.
+      Shows which controls are implemented, not implemented, or not applicable for each system,
+      organized by domain or control family. Essential for gap analysis and
+      prioritizing security investments.
     </div>
     <div class="report-actions">
       <a href="/controls" class="btn btn-ghost btn-sm">Control Catalog</a>
@@ -460,8 +464,8 @@
     </div>
     <div class="report-desc">
       Complete timestamped log of all user actions — system creates/edits, POA&amp;M updates,
-      risk changes, control edits, assignments, and admin actions. Required for IG investigations
-      and continuous monitoring under FISMA.
+      risk changes, control edits, assignments, and admin actions. Required for audits
+      and continuous monitoring programs.
     </div>
     <div class="report-actions">
       <a href="/admin/audit" class="btn btn-ghost btn-sm">View Log</a>
@@ -482,8 +486,8 @@
     </div>
     <div class="report-desc">
       Full inventory of all registered information systems — system name, type, environment,
-      FIPS 199 categorization, owner, and authorization status. Fulfills FISMA §3554(a)(1)
-      inventory requirement and OMB A-130 system catalog documentation.
+      impact categorization, owner, and authorization status. Supports organization-wide
+      asset inventory and system catalog documentation requirements.
     </div>
     <div class="report-meta">
       <div class="report-stat"><strong>{{ total_sys }}</strong> total systems</div>
@@ -504,8 +508,8 @@
     </div>
     <div class="report-desc">
       All registered users, their RBAC roles (admin, auditor, BCDR, system owner, employee),
-      and their system assignments. Supports access review requirements under NIST AC-2
-      (Account Management) and least-privilege verification.
+      and their system assignments. Supports periodic access reviews and
+      least-privilege verification.
     </div>
     <div class="report-actions">
       <a href="/admin/users" class="btn btn-ghost btn-sm">User Management</a>
@@ -517,17 +521,17 @@
 
 {# ── Reference section ────────────────────────────────────────────────────── #}
 <div class="card" style="margin-top:8px;padding:18px 20px">
-  <div class="card-title" style="margin-bottom:10px">Regulatory References</div>
+  <div class="card-title" style="margin-bottom:10px">Framework References</div>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">
     {% for ref in [
-      ('FISMA 2014', 'Federal Information Security Modernization Act — the law requiring all federal agencies to implement risk-based security programs'),
-      ('NIST SP 800-37 Rev 2', 'Risk Management Framework — the 7-step process for authorizing systems'),
-      ('NIST SP 800-53 Rev 5', 'Security and Privacy Controls — the catalog of controls used in the SSP'),
-      ('NIST SP 800-53A', 'Assessment Procedures — how to test and assess controls (SAR basis)'),
-      ('NIST SP 800-137', 'Continuous Monitoring — requirements for ongoing system oversight'),
-      ('OMB Circular A-130', 'Managing Federal Information Resources — CIO responsibilities'),
-      ('FIPS 199', 'Standards for categorizing information systems by impact level'),
-      ('FIPS 200', 'Minimum security requirements based on FIPS 199 categorization'),
+      ('NIST SP 800-53 Rev 5', 'Security and Privacy Controls — catalog used in federal/RMF SSPs'),
+      ('NIST SP 800-37 Rev 2', 'Risk Management Framework — 7-step authorization process'),
+      ('NIST CSF 2.0', 'Cybersecurity Framework — outcome-based framework for any organization'),
+      ('ISO/IEC 27001:2022', 'International standard for information security management systems (ISMS)'),
+      ('SOC 2 (AICPA TSC)', 'Trust Services Criteria — cloud/service-provider audit standard'),
+      ('NIST SP 800-171', 'Protecting CUI in Non-Federal Systems — DoD supply chain baseline'),
+      ('FIPS 199', 'Standards for categorizing information systems by impact level (federal)'),
+      ('FISMA 2014', 'Federal Information Security Modernization Act — applies to federal agencies'),
     ] %}
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:10px">
       <div style="font-size:0.72em;font-weight:700;color:var(--cyan);margin-bottom:3px;font-family:var(--mono)">{{ ref[0] }}</div>

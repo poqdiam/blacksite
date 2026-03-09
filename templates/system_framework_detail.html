@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — {{ framework.short_name | upper }} — {{ system.name }}{% endblock %}
+
+{% block head %}
+<style>
+  /* ── Summary bar ── */
+  .fw-summary {
+    display: flex;
+    gap: 0;
+    align-items: stretch;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 18px;
+  }
+  .fw-sum-block {
+    flex: 1;
+    padding: 14px 18px;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 90px;
+  }
+  .fw-sum-block:last-child { border-right: none; }
+  .fw-sum-val {
+    font-size: 1.3em;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .fw-sum-lbl {
+    font-size: 0.6em;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .fw-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .fw-progress-bar {
+    flex: 1;
+    height: 8px;
+    background: rgba(255,255,255,.06);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .fw-progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width .5s;
+  }
+
+  /* ── Filter strip ── */
+  .filter-strip {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    align-items: center;
+  }
+  .filter-pill {
+    font-size: 0.68em;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 20px;
+    cursor: pointer;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    text-decoration: none;
+    transition: border-color .15s, color .15s;
+  }
+  .filter-pill:hover, .filter-pill.active {
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+  .filter-pill.f-satisfied.active  { border-color: var(--green); color: var(--green); }
+  .filter-pill.f-partial.active    { border-color: var(--yellow); color: var(--yellow); }
+  .filter-pill.f-gap.active        { border-color: var(--red); color: var(--red); }
+  .filter-pill.f-na.active         { border-color: var(--muted); color: var(--muted); }
+
+  /* ── Crosswalk table ── */
+  .xwalk-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.83em;
+  }
+  .xwalk-table th {
+    background: var(--surface);
+    padding: 9px 12px;
+    text-align: left;
+    font-size: 0.68em;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+  }
+  .xwalk-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid rgba(30,30,48,.7);
+    vertical-align: top;
+  }
+  .xwalk-table tr:hover td { background: rgba(255,255,255,.013); }
+
+  .xwalk-fc-id {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    color: var(--cyan);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .xwalk-fc-id:hover { text-decoration: underline; }
+
+  /* Coverage dot */
+  .cov-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    flex-shrink: 0;
+  }
+  .cov-satisfied .cov-dot { background: var(--green); }
+  .cov-partial   .cov-dot { background: var(--yellow); }
+  .cov-gap       .cov-dot { background: var(--red); }
+  .cov-na        .cov-dot { background: var(--muted); }
+  .cov-unmapped  .cov-dot { background: rgba(158,158,158,.3); }
+
+  .cov-label {
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+  }
+  .cov-satisfied .cov-label { color: var(--green); }
+  .cov-partial   .cov-label { color: var(--yellow); }
+  .cov-gap       .cov-label { color: var(--red); }
+  .cov-na        .cov-label { color: var(--muted); }
+  .cov-unmapped  .cov-label { color: rgba(158,158,158,.5); }
+
+  /* NIST control chip */
+  .nist-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--mono);
+    font-size: 0.78em;
+    padding: 2px 7px;
+    border-radius: 3px;
+    margin: 2px 2px 2px 0;
+    white-space: nowrap;
+    text-decoration: none;
+    border: 1px solid transparent;
+  }
+  .chip-implemented  { background: rgba(0,200,83,.1);  border-color: rgba(0,200,83,.25);  color: var(--green); }
+  .chip-inherited    { background: rgba(0,255,204,.08); border-color: rgba(0,255,204,.2);  color: var(--cyan);  }
+  .chip-in_progress  { background: rgba(255,179,0,.1); border-color: rgba(255,179,0,.25); color: var(--yellow); }
+  .chip-not_started  { background: rgba(244,67,54,.08); border-color: rgba(244,67,54,.2);  color: var(--red);   }
+  .chip-not_applicable { background: rgba(158,158,158,.06); border-color: rgba(158,158,158,.15); color: var(--muted); }
+  .chip-planned      { background: rgba(0,255,204,.05); border-color: rgba(0,255,204,.15); color: var(--muted); }
+  .chip-missing      { background: rgba(158,158,158,.04); border-color: rgba(158,158,158,.1);  color: rgba(158,158,158,.4); }
+
+  /* Domain group row */
+  .domain-group-row td {
+    background: var(--surface) !important;
+    font-size: 0.65em;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 10px 12px 6px;
+    border-bottom: 1px solid var(--border);
+    border-top: 2px solid var(--border);
+  }
+  .domain-group-row:first-child td { border-top: none; }
+
+  /* Quick legend */
+  .legend-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.72em;
+    color: var(--muted);
+    margin-bottom: 12px;
+    align-items: center;
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/systems">System Catalog</a>
+  <span class="sep">/</span>
+  <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+  <span class="sep">/</span>
+  <a href="/systems/{{ system.id }}/frameworks">Frameworks</a>
+  <span class="sep">/</span>
+  <span>{{ framework.name }}</span>
+</div>
+
+<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+  <div>
+    <h1 style="margin:0 0 4px">{{ framework.name }}</h1>
+    <div style="font-size:0.82em;color:var(--muted)">
+      {{ system.name }} &nbsp;·&nbsp; v{{ framework.version }}
+      &nbsp;·&nbsp; Published by {{ framework.published_by }}
+    </div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/systems/{{ system.id }}/frameworks" class="btn btn-ghost btn-sm">All Frameworks</a>
+    <a href="/systems/{{ system.id }}/rtm" class="btn btn-ghost btn-sm">RTM</a>
+    <a href="/systems/{{ system.id }}" class="btn btn-ghost btn-sm">System</a>
+  </div>
+</div>
+
+{# ── Summary strip ── #}
+<div class="fw-summary">
+  <div class="fw-sum-block">
+    <span class="fw-sum-val">{{ summary.total }}</span>
+    <span class="fw-sum-lbl">Requirements</span>
+  </div>
+  <div class="fw-sum-block">
+    <span class="fw-sum-val" style="color:var(--green)">{{ summary.satisfied }}</span>
+    <span class="fw-sum-lbl">Satisfied</span>
+  </div>
+  <div class="fw-sum-block">
+    <span class="fw-sum-val" style="color:var(--yellow)">{{ summary.partial }}</span>
+    <span class="fw-sum-lbl">Partial</span>
+  </div>
+  <div class="fw-sum-block">
+    <span class="fw-sum-val" style="color:var(--red)">{{ summary.gap }}</span>
+    <span class="fw-sum-lbl">Gap</span>
+  </div>
+  <div class="fw-sum-block">
+    <span class="fw-sum-val" style="color:var(--muted)">{{ summary.na }}</span>
+    <span class="fw-sum-lbl">N/A</span>
+  </div>
+  <div class="fw-sum-block" style="min-width:120px">
+    <span class="fw-sum-val" style="color:{% if summary.pct >= 80 %}var(--green){% elif summary.pct >= 50 %}var(--yellow){% else %}var(--red){% endif %}">{{ summary.pct }}%</span>
+    <span class="fw-sum-lbl">Coverage</span>
+  </div>
+</div>
+
+<div class="fw-progress-row">
+  <div class="fw-progress-bar" style="flex:1">
+    <div class="fw-progress-fill"
+         style="width:{{ summary.pct }}%;background:{% if summary.pct >= 80 %}var(--green){% elif summary.pct >= 50 %}var(--yellow){% else %}var(--red){% endif %}"></div>
+  </div>
+  <span style="font-size:0.75em;color:var(--muted);white-space:nowrap">{{ summary.pct }}% satisfied</span>
+</div>
+
+{# ── Filters ── #}
+<div class="filter-strip">
+  <a href="/systems/{{ system.id }}/frameworks/{{ framework.short_name }}"
+     class="filter-pill {% if not status_filter and not domain %}active{% endif %}">All</a>
+  <a href="/systems/{{ system.id }}/frameworks/{{ framework.short_name }}?status_filter=gap{% if domain %}&domain={{ domain }}{% endif %}"
+     class="filter-pill f-gap {% if status_filter == 'gap' %}active{% endif %}">Gaps Only</a>
+  <a href="/systems/{{ system.id }}/frameworks/{{ framework.short_name }}?status_filter=partial{% if domain %}&domain={{ domain }}{% endif %}"
+     class="filter-pill f-partial {% if status_filter == 'partial' %}active{% endif %}">Partial</a>
+  <a href="/systems/{{ system.id }}/frameworks/{{ framework.short_name }}?status_filter=satisfied{% if domain %}&domain={{ domain }}{% endif %}"
+     class="filter-pill f-satisfied {% if status_filter == 'satisfied' %}active{% endif %}">Satisfied</a>
+  <a href="/systems/{{ system.id }}/frameworks/{{ framework.short_name }}?status_filter=na{% if domain %}&domain={{ domain }}{% endif %}"
+     class="filter-pill f-na {% if status_filter == 'na' %}active{% endif %}">N/A</a>
+
+  {% if domains %}
+  <span style="color:var(--border);margin:0 2px">|</span>
+  {% for d in domains %}
+  <a href="/systems/{{ system.id }}/frameworks/{{ framework.short_name }}?domain={{ d }}{% if status_filter %}&status_filter={{ status_filter }}{% endif %}"
+     class="filter-pill {% if domain == d %}active{% endif %}">{{ d }}</a>
+  {% endfor %}
+  {% endif %}
+</div>
+
+{# ── Legend ── #}
+<div class="legend-row">
+  <span style="font-size:0.68em;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">Control status chips:</span>
+  <span class="legend-item"><span class="nist-chip chip-implemented">ac-2</span> Implemented</span>
+  <span class="legend-item"><span class="nist-chip chip-inherited">sc-7</span> Inherited</span>
+  <span class="legend-item"><span class="nist-chip chip-in_progress">ra-5</span> In Progress</span>
+  <span class="legend-item"><span class="nist-chip chip-not_started">ia-8</span> Not Started</span>
+  <span class="legend-item"><span class="nist-chip chip-not_applicable">pe-3</span> N/A</span>
+  <span class="legend-item"><span class="nist-chip chip-missing">xx-0</span> Not in system</span>
+</div>
+
+{# ── Table ── #}
+{% if fc_rows %}
+<table class="xwalk-table">
+  <thead>
+    <tr>
+      <th style="width:120px">Req ID</th>
+      <th>Requirement Title</th>
+      <th style="width:80px">Level</th>
+      <th style="width:90px">Coverage</th>
+      <th>Mapped Controls</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% set ns = namespace(last_domain='__none__') %}
+    {% for fc in fc_rows %}
+    {% set cov_info = fc_coverage.get(fc.id, {}) %}
+    {% set cov = cov_info.get('cov', 'unmapped') %}
+    {% set nist_ids = cx_by_fc.get(fc.id, []) %}
+
+    {% if fc.domain and fc.domain != ns.last_domain %}
+    <tr class="domain-group-row">
+      <td colspan="5">{{ fc.domain }}</td>
+    </tr>
+    {% set ns.last_domain = fc.domain %}
+    {% endif %}
+
+    <tr>
+      <td>
+        <span class="xwalk-fc-id">{{ fc.control_id }}</span>
+      </td>
+      <td style="color:var(--text)">{{ fc.title or '—' }}</td>
+      <td style="font-size:0.78em;color:var(--muted)">{{ fc.level or '—' }}</td>
+      <td>
+        <div class="cov-{{ cov }}" style="display:flex;align-items:center;gap:0">
+          <span class="cov-dot"></span>
+          <span class="cov-label">{{ cov | replace('_',' ') | title }}</span>
+        </div>
+      </td>
+      <td>
+        <div style="display:flex;flex-wrap:wrap;gap:0">
+          {% if nist_ids %}
+            {% for nid in nist_ids | sort %}
+            {% set sc = sc_by_id.get(nid) %}
+            {% if sc %}
+            <a href="/systems/{{ system.id }}/workspace/{{ sc.control_id }}"
+               class="nist-chip chip-{{ sc.status or 'not_started' }}"
+               title="{{ sc.control_title or nid.upper() }} — {{ (sc.status or 'not_started').replace('_',' ').title() }}">
+              {{ nid.upper() }}
+            </a>
+            {% else %}
+            <span class="nist-chip chip-missing" title="{{ nid.upper() }} — Not in system baseline">
+              {{ nid.upper() }}
+            </span>
+            {% endif %}
+            {% endfor %}
+          {% else %}
+            <span style="font-size:0.78em;color:rgba(158,158,158,.4)">—</span>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="card" style="text-align:center;padding:48px;color:var(--muted)">
+  <div style="font-size:2em;margin-bottom:12px">✓</div>
+  <div>No requirements match the current filter.</div>
+  <a href="/systems/{{ system.id }}/frameworks/{{ framework.short_name }}" class="btn btn-ghost btn-sm" style="margin-top:14px">Clear filters</a>
+</div>
+{% endif %}
+
+{% endblock %}

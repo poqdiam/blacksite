@@ -2,9 +2,7 @@
 {% block title %}{{ app_name }} — My Profile{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css"
-      integrity="sha512-UtLOu9C7NuThQhuXXrGwx9Jb/z9zPQJctuAgNUBK3Z6kkSYT9wkCFo4HYE0DnCMXVRCxG7BIMBMoXTCcMZwA=="
-      crossorigin="anonymous" referrerpolicy="no-referrer">
+<link rel="stylesheet" href="/static/cropper.min.css">
 <style>
   .profile-layout {
     display: grid;
@@ -123,11 +121,10 @@
   }
   .domain-check:hover { border-color: rgba(0,255,204,0.3); background: rgba(0,255,204,0.02); }
   .domain-check input[type=checkbox] { accent-color: var(--cyan); width: 15px; height: 15px; flex-shrink: 0; cursor: pointer; }
-  .domain-check input[type=checkbox]:checked ~ .domain-check-body .domain-id { color: var(--cyan); }
+  .domain-check input[type=checkbox]:checked ~ .domain-check-body .domain-name { color: var(--cyan); font-weight: 600; }
   .domain-check:has(input:checked) { border-color: rgba(0,255,204,0.3); }
-  .domain-check-body { display: flex; flex-direction: column; gap: 1px; }
-  .domain-id { font-family: var(--mono); font-size: 0.7em; font-weight: 700; color: var(--muted); letter-spacing: 1px; transition: color 0.15s; }
-  .domain-name { font-size: 0.78em; color: var(--text); }
+  .domain-check-body { display: flex; align-items: center; }
+  .domain-name { font-size: 0.78em; color: var(--text); transition: color 0.15s; }
 
   /* Theme palette swatches */
   .theme-grid {
@@ -278,12 +275,18 @@
         {% else %}
         <div class="avatar-circle" id="avatarInitials">{{ initials | upper }}</div>
         {% endif %}
-        <button class="avatar-edit-btn" onclick="document.getElementById('avatarFileInput').click()" title="Change photo" type="button">📷</button>
+        {% if not demo_mode %}
+        <button class="avatar-edit-btn" onclick="document.getElementById('avatarFileInput').click()" title="Change photo" type="button" aria-label="Change profile photo">📷</button>
+        {% endif %}
       </div>
+      {% if not demo_mode %}
       <input type="file" id="avatarFileInput" accept=".jpg,.jpeg,.png,.gif,.webp" style="display:none">
+      {% endif %}
 
-      {# Username #}
-      <div style="font-weight:700;font-size:1.05em;margin-bottom:4px">{{ remote_user }}</div>
+      {# Display name (Title Case) #}
+      <div style="font-weight:700;font-size:1.05em;margin-bottom:4px">
+        {{ (profile.display_name if profile and profile.display_name else remote_user) | human }}
+      </div>
 
       {# Role badge #}
       {% if is_admin %}
@@ -370,7 +373,7 @@
           <div class="toggle-row">
             <div class="toggle-label">
               <strong>Daily quiz reminder</strong>
-              <span>Get a reminder when today's CISSP quiz is available</span>
+              <span>Get a reminder when today's security quiz is available</span>
             </div>
             <label class="toggle-switch" title="Daily quiz reminder">
               <input type="checkbox" name="notifications_quiz"
@@ -382,20 +385,20 @@
 
         {# ── Section: Quiz Domain Preferences ─────────────────────────── #}
         <div class="form-section">
-          <div class="section-header">Quiz Domain Preferences</div>
+          <div class="section-header">Quiz Preferences</div>
           <p class="text-muted" style="font-size:0.8em;margin-bottom:14px">
-            Select which CISSP domains appear in your daily quiz. If none are selected, all domains are included.
+            Select which domains appear in your daily quiz. If none are selected, all domains are included.
           </p>
 
           {% set domain_map = [
-            ('D1', 'Security &amp; Risk Management'),
-            ('D2', 'Asset Security'),
-            ('D3', 'Security Architecture'),
-            ('D4', 'Communication &amp; Network'),
-            ('D5', 'Identity &amp; Access'),
-            ('D6', 'Security Assessment'),
-            ('D7', 'Security Operations'),
-            ('D8', 'Software Development'),
+            ('D1', 'Risk & Compliance Management'),
+            ('D2', 'Data Classification & Asset Protection'),
+            ('D3', 'System & Security Architecture'),
+            ('D4', 'Network & Communications Security'),
+            ('D5', 'Identity & Access Management'),
+            ('D6', 'Security Assessment & Auditing'),
+            ('D7', 'Security Operations & Monitoring'),
+            ('D8', 'Secure Development & Software Security'),
           ] %}
 
           <div class="domain-grid">
@@ -405,7 +408,6 @@
               <input type="checkbox" name="quiz_domains" value="{{ code }}"
                 {% if is_checked %}checked{% endif %}/>
               <div class="domain-check-body">
-                <span class="domain-id">{{ code }}</span>
                 <span class="domain-name">{{ name }}</span>
               </div>
             </label>
@@ -503,9 +505,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"
-        integrity="sha512-JyCZjCOZoyeQZSd5+YEAcFgz2owMmqfu9rCUjR6G/Wb8wMfAlxXNSWkGG4YrL7Ln08K0qO3VUV/3cAN4OzAtQ=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="/static/cropper.min.js"></script>
 <script>
 function setAllDomains(checked) {
   document.querySelectorAll('input[name="quiz_domains"]').forEach(cb => {
@@ -516,21 +516,21 @@ function setAllDomains(checked) {
 // ── Theme palette picker ────────────────────────────────────────────────────
 (function() {
   const THEMES = [
-    { id: "midnight",  label: "Midnight",  bg: "#0b0b18", accent: "#00ffcc", text: "#c8d0e0" },
-    { id: "obsidian",  label: "Obsidian",  bg: "#08050f", accent: "#b08cff", text: "#c2b8dc" },
-    { id: "void",      label: "Void",      bg: "#030508", accent: "#00c8ff", text: "#b0c8e0" },
-    { id: "ember",     label: "Ember",     bg: "#0c0600", accent: "#ff8c1a", text: "#d4c0a0" },
-    { id: "pine",      label: "Pine",      bg: "#020c06", accent: "#00e870", text: "#a8d0b0" },
-    { id: "steel",     label: "Steel",     bg: "#04080f", accent: "#4da6ff", text: "#b0c4e0" },
-    { id: "arctic",    label: "Arctic",    bg: "#eef3f8", accent: "#0064cc", text: "#1a2840" },
-    { id: "parchment", label: "Parchment", bg: "#f4ede0", accent: "#c05000", text: "#2a1f10" },
-    // Phase 22
-    { id: "terminal",  label: "Terminal",  bg: "#000000", accent: "#00ff41", text: "#00ff41" },
-    { id: "synthwave", label: "Synthwave", bg: "#0a0014", accent: "#ff00ff", text: "#f0e0ff" },
-    { id: "crimson",   label: "Crimson",   bg: "#0a0000", accent: "#ff2244", text: "#f2d8dc" },
-    { id: "ocean",     label: "Ocean",     bg: "#010810", accent: "#00e5ff", text: "#c0dff5" },
-    { id: "amber",     label: "Amber",     bg: "#0a0600", accent: "#ffb300", text: "#ffcc66" },
-    { id: "noir",      label: "Noir",      bg: "#000000", accent: "#ffffff", text: "#e8e8e8" },
+    // Default pair first, then ROYGBIV alternating dark / light
+    { id: "midnight",  label: "Midnight",  bg: "#060608", accent: "#00ffcc", text: "#c8d0e0" },  // D — original palette (default)
+    { id: "cloud",     label: "Cloud",     bg: "#f8fafb", accent: "#0066cc", text: "#141a22" },  // L — alternate light default
+    { id: "ember",     label: "Ember",     bg: "#0c0600", accent: "#ff8c1a", text: "#f0d8c0" },  // D — orange-red
+    { id: "rose",      label: "Rose",      bg: "#fdf0f3", accent: "#b02040", text: "#280810" },  // L — red/pink
+    { id: "terminal",  label: "Terminal",  bg: "#000000", accent: "#00ff41", text: "#00ff41" },  // D — green
+    { id: "linen",     label: "Linen",     bg: "#fde8d0", accent: "#9a3800", text: "#28100a" },  // L — orange
+    { id: "amber",     label: "Amber",     bg: "#0d0800", accent: "#e8a800", text: "#f0d890" },  // D — dark gold
+    { id: "sage",      label: "Sage",      bg: "#eef5ee", accent: "#1a8040", text: "#0d1e0d" },  // L — mint/sage
+    { id: "synthwave", label: "Synthwave", bg: "#0a0014", accent: "#ff00ff", text: "#f0e0ff" },  // D — violet
+    { id: "parchment", label: "Parchment", bg: "#f4ede0", accent: "#c05000", text: "#2a1f10" },  // L — yellow/tan
+    { id: "obsidian",  label: "Obsidian",  bg: "#08050f", accent: "#b08cff", text: "#c2b8dc" },  // D — indigo/purple
+    { id: "arctic",    label: "Arctic",    bg: "#d4ecfa", accent: "#004e96", text: "#041828" },  // L — cyan/light blue
+    { id: "noir",      label: "Noir",      bg: "#000000", accent: "#ffffff", text: "#e8e8e8" },  // D — neutral black
+    { id: "slate",     label: "Slate",     bg: "#c8d8ec", accent: "#0c3ca0", text: "#08162a" },  // L — steel blue
   ];
 
   const current = document.documentElement.dataset.theme || "midnight";

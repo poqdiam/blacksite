@@ -12,6 +12,8 @@ app:
   authelia_logout_url: "https://auth.borisov.network/logout?rd=https://blacksite.borisov.network"
   admin_users:           # Authelia usernames with admin dashboard access
     - dan
+  staff_users:           # Staff with admin chat access (no full admin dashboard)
+    - t.conlin
 
 employees:               # Known employees (non-admin Authelia users)
   - username: "alice.chen"
@@ -92,9 +94,28 @@ scoring:
   allstar_combined_min: 80
   allstar_quiz_min: 80
 
+demo:
+  db_path: "/home/graycat/projects/blacksite-demo/stock.db"   # demo visitor IP log source
+
 ai:
   enabled: false
   provider: "claude"               # claude | openai
   api_key: ""                      # leave blank to use rule-based only
   model: "claude-haiku-4-5-20251001"  # cheapest model for classification tasks
   review_on_complete: false        # auto-trigger AI review when assessment completes
+
+grc:
+  # Short name of the compliance framework pre-selected by default on new system registration.
+  # Must match a short_name in compliance_frameworks table. Set to "" to disable.
+  default_framework: "csf2"
+
+security:
+  il4_mode: false              # Enforces IL4 compliance checks at startup
+  cac_piv_auth: false          # Parse identity from client certificate header instead of Remote-User
+  cac_header: "X-Client-Cert-Subject"   # Header Caddy injects with cert Subject DN
+  cac_cn_prefix: ""            # Optional prefix to strip from CN (e.g. "DOD CA ")
+  require_mfa: true            # Require Authelia MFA header (X-Authelia-Auth-Level: two_factor)
+  db_encryption: true          # SQLCipher AES-256 at-rest encryption — pysqlcipher3 installed ✓
+  db_encryption_key_env: BLACKSITE_DB_KEY   # env var name holding the encryption key
+  fips_session_crypto: false   # [PROD GUARD] Require FIPS-validated session crypto — do not enable in dev
+  audit_all_requests: false    # Log every HTTP request to security_events table (verbose)

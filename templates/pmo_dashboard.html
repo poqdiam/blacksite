@@ -2,9 +2,15 @@
 {% block title %}{{ app_name }} — PMO Dashboard{% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <a href="/dashboard">Dashboard</a>
+  <span class="sep">/</span>
+  <span>PMO Dashboard</span>
+</div>
+
 <div style="margin-bottom:28px">
   <h1 style="margin:0;margin-bottom:4px">PMO Dashboard</h1>
-  <p class="text-muted" style="font-size:0.88em">ATO expiration timeline, portfolio status, and POA&M aging summary</p>
+  <p class="text-muted" style="font-size:0.88em">Authorization expiration timeline, portfolio status, and POA&M aging summary</p>
 </div>
 
 {# ── Stats ── #}
@@ -51,10 +57,10 @@
   </div>
 </div>
 
-{# ── ATO Expiration Timeline ── #}
+{# ── Authorization Expiration Timeline ── #}
 <div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border)">
-    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">ATO Expiration Timeline</div>
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Authorization Expiration Timeline</div>
     <span style="font-size:0.75em;color:var(--muted)">Sorted by nearest expiry</span>
   </div>
   {% if all_systems %}

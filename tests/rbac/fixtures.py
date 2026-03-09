@@ -330,26 +330,48 @@ def bootstrap(db_path: str, clean: bool = False) -> dict:
 
             # ── Create SystemAssignments (required by _can_access_system) ────
             # _can_access_system checks system_assignments, not program_role_assignments.
-            # All fixture users need SystemAssignment on each test system so routes
-            # like /rmf/{id}, /systems/{id}/controls, /systems/{id}/submit etc. return 200.
-            all_fixture_users = [u["remote_user"] for u in TEST_USERS.values()]
-            for ru in all_fixture_users:
-                for sys_id in system_ids:
-                    existing_sa = (await session.execute(
-                        select(SystemAssignment).where(
-                            SystemAssignment.remote_user == ru,
-                            SystemAssignment.system_id == sys_id,
-                        )
-                    )).scalar_one_or_none()
-                    if existing_sa is None:
-                        session.add(SystemAssignment(
-                            system_id=sys_id,
-                            remote_user=ru,
-                            assigned_by="bsv_test_principal",
-                            assigned_at=_now(),
-                            note="RBAC test runner assignment",
-                        ))
-                        log.debug("Created SystemAssignment: %s → %s", ru, sys_id)
+            # Principal (admin) gets SystemAssignment on all test systems.
+            # Non-admin fixture users get SystemAssignment on ALPHA only — this is
+            # intentional so IDOR tests on SYSTEM_B (bravo) correctly return 403.
+            principal_sa_user = TEST_USERS["principal"]["remote_user"]
+            for sys_id in system_ids:
+                existing_sa = (await session.execute(
+                    select(SystemAssignment).where(
+                        SystemAssignment.remote_user == principal_sa_user,
+                        SystemAssignment.system_id == sys_id,
+                    )
+                )).scalar_one_or_none()
+                if existing_sa is None:
+                    session.add(SystemAssignment(
+                        system_id=sys_id,
+                        remote_user=principal_sa_user,
+                        assigned_by="bsv_test_principal",
+                        assigned_at=_now(),
+                        note="RBAC test runner assignment",
+                    ))
+                    log.debug("Created SystemAssignment: %s → %s", principal_sa_user, sys_id)
+
+            # Non-admin tiers: only assign to alpha (SYSTEM_ID). SYSTEM_B intentionally
+            # has no assignment so IDOR flows can verify 403 is returned.
+            non_admin_users = [
+                v["remote_user"] for k, v in TEST_USERS.items() if k != "principal"
+            ]
+            for ru in non_admin_users:
+                existing_sa = (await session.execute(
+                    select(SystemAssignment).where(
+                        SystemAssignment.remote_user == ru,
+                        SystemAssignment.system_id == alpha_id,
+                    )
+                )).scalar_one_or_none()
+                if existing_sa is None:
+                    session.add(SystemAssignment(
+                        system_id=alpha_id,
+                        remote_user=ru,
+                        assigned_by="bsv_test_principal",
+                        assigned_at=_now(),
+                        note="RBAC test runner assignment",
+                    ))
+                    log.debug("Created SystemAssignment: %s → %s (alpha only)", ru, alpha_id)
 
             # ── Create DutyAssignments (time-boxed) ──────────────────────────
             expires_at = _now() + timedelta(days=90)
@@ -436,6 +458,36 @@ def bootstrap(db_path: str, clean: bool = False) -> dict:
             else:
                 fixture_ids["poam"]["test_poam_id"] = existing_poam.id
                 log.info("Test POAM already exists: %s", existing_poam.id)
+
+            # ── Create closed POAM for terminal-state lock tests ──────────────
+            existing_closed_poam = (await session.execute(
+                select(PoamItem).where(
+                    PoamItem.weakness_name == "RBAC Test POAM — Closed Fixture"
+                )
+            )).scalar_one_or_none()
+
+            if existing_closed_poam is None:
+                closed_poam = PoamItem(
+                    id=_uuid(),
+                    system_id=alpha_id,
+                    weakness_name="RBAC Test POAM — Closed Fixture",
+                    weakness_description="Pre-closed POA&M for terminal state lock RBAC tests",
+                    severity="Low",
+                    status="closed_verified",
+                    control_id="ac-1",
+                    detection_source="self_report",
+                    responsible_party="RBAC Test Runner",
+                    scheduled_completion="2026-12-31",
+                    created_by="bsv_test_principal",
+                    created_at=_now(),
+                )
+                session.add(closed_poam)
+                await session.flush()
+                fixture_ids["poam"]["closed_poam_id"] = closed_poam.id
+                log.info("Created closed POAM: %s", closed_poam.id)
+            else:
+                fixture_ids["poam"]["closed_poam_id"] = existing_closed_poam.id
+                log.info("Closed POAM already exists: %s", existing_closed_poam.id)
 
             # ── Create test BCDR event on ALPHA ───────────────────────────────
             try:

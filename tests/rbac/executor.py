@@ -124,7 +124,7 @@ def _parse_flows_from_config(config: list[dict], lens: str,
 
 
 def _substitute(text: str, fixture_ids: dict, run_id: str) -> str:
-    """Replace {SYSTEM_ID}, {RISK_ID}, {POAM_ID}, {BCDR_ID}, {RUN_ID} tokens."""
+    """Replace {SYSTEM_ID}, {RISK_ID}, {POAM_ID}, {POAM_CLOSED_ID}, {BCDR_ID}, {RUN_ID} tokens."""
     if not text:
         return text
     systems = fixture_ids.get("systems", {})
@@ -136,6 +136,7 @@ def _substitute(text: str, fixture_ids: dict, run_id: str) -> str:
     text = text.replace("{SYSTEM_B}", systems.get("bravo_id") or "00000000-0000-0000-0000-000000000002")
     text = text.replace("{RISK_ID}", risks.get("test_risk_id") or "00000000-0000-0000-0000-000000000010")
     text = text.replace("{POAM_ID}", poam.get("test_poam_id") or "00000000-0000-0000-0000-000000000020")
+    text = text.replace("{POAM_CLOSED_ID}", poam.get("closed_poam_id") or "00000000-0000-0000-0000-000000000021")
     text = text.replace("{BCDR_ID}", bcdr.get("test_event_id") or "1")
     text = text.replace("{RUN_ID}", run_id)
     return text

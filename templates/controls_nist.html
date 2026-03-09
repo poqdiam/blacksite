@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — NIST SP 800-53{% endblock %}
+
+{% block head %}
+<style>
+  .family-row {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 72px 1fr auto;
+    gap: 18px;
+    align-items: center;
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.12s;
+  }
+  .family-row:hover { background: rgba(0,255,204,0.04); }
+  .family-row:last-child { border-bottom: none; }
+  .family-row-id {
+    font-family: var(--mono); font-size: 1.1em; font-weight: 700;
+    color: var(--cyan); letter-spacing: 0.5px;
+  }
+  .family-row-title { font-size: 0.88em; font-weight: 600; color: var(--text); }
+  .family-row-count { font-size: 0.78em; color: var(--muted); text-align: right; white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/controls">Control Catalog</a>
+  <span class="sep">/</span>
+  <span>NIST SP 800-53</span>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:6px;flex-wrap:wrap">
+  <h1 style="margin:0">NIST SP 800-53 Rev 5</h1>
+</div>
+<p style="color:var(--muted);font-size:0.84em;margin-bottom:24px">
+  {{ total }} controls across {{ family_stats|length }} control families
+</p>
+
+<div class="card" style="padding:0;overflow:hidden">
+  {% for fs in family_stats %}
+  <a href="/controls/family/{{ fs.id }}" class="family-row">
+    <div class="family-row-id">{{ fs.id }}</div>
+    <div class="family-row-title">{{ fs.title }}</div>
+    <div class="family-row-count">
+      {{ fs.count }} control{{ 's' if fs.count != 1 else '' }}
+      {% if fs.enhancements %}&nbsp;<span style="color:var(--border)">+{{ fs.enhancements }} enh.</span>{% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

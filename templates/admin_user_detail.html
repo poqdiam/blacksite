@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — {{ profile.display_name or profile.remote_user }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/admin">Admin</a>
+  <span class="sep">›</span>
+  <a href="/admin/users">User Management</a>
+  <span class="sep">›</span>
+  <span>{{ (profile.display_name or profile.remote_user) | human }}</span>
+</div>
+
+{% set pstatus = profile.status or 'active' %}
+
+<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+  <div>
+    <h1 style="margin:0;font-size:1.3em">{{ (profile.display_name or profile.remote_user) | human }}</h1>
+    <div style="color:var(--muted);font-size:0.82em;margin-top:4px">
+      <span class="mono">{{ profile.remote_user }}</span>
+      {% if is_config_admin %}<span style="margin-left:8px;font-size:0.85em;color:var(--muted);font-style:italic">(config-managed admin)</span>{% endif %}
+      {% if pstatus == 'frozen' %}<span style="margin-left:8px;font-size:0.7em;color:#ff8c42;font-weight:700;letter-spacing:1px;text-transform:uppercase;background:rgba(255,107,0,0.12);border-radius:3px;padding:1px 6px">frozen</span>{% endif %}
+      {% if pstatus == 'removed' %}<span style="margin-left:8px;font-size:0.7em;color:var(--red);font-weight:700;letter-spacing:1px;text-transform:uppercase;background:rgba(244,67,54,0.12);border-radius:3px;padding:1px 6px">removed</span>{% endif %}
+    </div>
+  </div>
+  {% if not is_config_admin and is_admin %}
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <a href="/view-as/{{ profile.remote_user }}" class="btn btn-sm"
+       style="font-size:0.8em;background:rgba(118,255,3,0.08);color:#76ff03;border:1px solid rgba(118,255,3,0.25)">View As</a>
+    {% if pstatus == 'frozen' %}
+    <form method="post" action="/admin/users/{{ profile.remote_user }}/unfreeze" style="margin:0">
+      <button class="btn btn-sm" style="font-size:0.8em;background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.3)">Unfreeze</button>
+    </form>
+    {% elif pstatus == 'active' %}
+    <form method="post" action="/admin/users/{{ profile.remote_user }}/freeze" style="margin:0">
+      <button class="btn btn-sm" style="font-size:0.8em;background:rgba(255,107,0,0.1);color:#ff8c42;border:1px solid rgba(255,107,0,0.3)">Freeze</button>
+    </form>
+    {% endif %}
+    {% if pstatus != 'removed' %}
+    <a href="/admin/users/{{ profile.remote_user }}/remove" class="btn btn-sm"
+       style="font-size:0.8em;background:rgba(244,67,54,0.1);color:var(--red);border:1px solid rgba(244,67,54,0.3)">Remove</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+
+  {# ── Identity card ── #}
+  <div class="card" style="padding:24px">
+    <div style="font-size:0.72em;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:16px">Identity</div>
+
+    <div style="display:grid;gap:14px">
+
+      <div>
+        <div style="font-size:0.72em;color:var(--muted);margin-bottom:3px">Email</div>
+        <div style="font-size:0.9em;color:var(--text)">{{ profile.email or '—' }}</div>
+      </div>
+
+      <div>
+        <div style="font-size:0.72em;color:var(--muted);margin-bottom:3px">Department</div>
+        <div style="font-size:0.9em;color:var(--text)">{{ profile.department or '—' }}</div>
+      </div>
+
+      <div>
+        <div style="font-size:0.72em;color:var(--muted);margin-bottom:3px">Platform Role</div>
+        <div>
+          {% set role_colors = {
+            'admin':'#76ff03','ao':'var(--red)','issm':'#ff8c42','isso':'var(--yellow)',
+            'sca':'#64b4ff','auditor':'var(--gold)','bcdr':'#ff6b35',
+            'system_owner':'var(--green)','employee':'var(--muted)',
+            'ciso':'#e040fb','pen_tester':'#ff5252'
+          } %}
+          <span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:0.72em;
+                       font-weight:700;letter-spacing:1px;text-transform:uppercase;
+                       color:{{ role_colors.get(eff_role, 'var(--text)') }};
+                       background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.08)">
+            {{ eff_role | human }}
+          </span>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:0.72em;color:var(--muted);margin-bottom:3px">Status</div>
+        <div style="font-size:0.9em;color:{% if pstatus == 'active' %}var(--green){% elif pstatus == 'frozen' %}#ff8c42{% else %}var(--red){% endif %}">
+          {{ pstatus | title }}
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:0.72em;color:var(--muted);margin-bottom:3px">Last Login</div>
+        <div style="font-size:0.9em;color:var(--text)">{{ profile.last_login.strftime('%Y-%m-%d %H:%M UTC') if profile.last_login else 'Never' }}</div>
+      </div>
+
+      <div>
+        <div style="font-size:0.72em;color:var(--muted);margin-bottom:3px">Account Created</div>
+        <div style="font-size:0.9em;color:var(--text)">{{ profile.created_at.strftime('%Y-%m-%d') if profile.created_at else '—' }}</div>
+      </div>
+
+      {% if pstatus == 'removed' %}
+      <div style="border-top:1px solid var(--border);padding-top:14px">
+        <div style="font-size:0.72em;color:var(--muted);margin-bottom:3px">Removed At</div>
+        <div style="font-size:0.9em;color:var(--red)">{{ profile.removed_at.strftime('%Y-%m-%d %H:%M UTC') if profile.removed_at else '—' }}</div>
+        <div style="font-size:0.72em;color:var(--muted);margin-top:8px;margin-bottom:3px">Removed By</div>
+        <div style="font-size:0.9em;color:var(--text)">{{ profile.removed_by or '—' }}</div>
+        <div style="font-size:0.72em;color:var(--muted);margin-top:8px;margin-bottom:3px">Reason</div>
+        <div style="font-size:0.9em;color:var(--text)">{{ profile.removal_reason or '—' }}</div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  {# ── System assignments ── #}
+  <div class="card" style="padding:24px">
+    <div style="font-size:0.72em;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:16px">
+      System Assignments ({{ assignments | length }})
+    </div>
+    {% if assignments %}
+    <div style="display:flex;flex-direction:column;gap:8px">
+      {% for sa, sys in assignments %}
+      <div style="display:flex;align-items:center;justify-content:space-between;
+                  padding:8px 12px;background:var(--surface);border-radius:5px;
+                  border:1px solid var(--border)">
+        <div>
+          {% if sys %}
+          <a href="/systems/{{ sys.id }}" style="color:var(--text);font-size:0.88em;font-weight:600">
+            {{ sys.name }}
+          </a>
+          <div style="font-size:0.72em;color:var(--muted);margin-top:2px">
+            {{ sys.abbreviation or '' }}{% if sys.overall_impact %} · {{ sys.overall_impact | upper }}{% endif %}
+          </div>
+          {% else %}
+          <span style="font-size:0.88em;color:var(--muted)">Unknown system</span>
+          {% endif %}
+        </div>
+        <span style="font-size:0.72em;color:var(--muted)">
+          {{ sa.assigned_at.strftime('%Y-%m-%d') if sa.assigned_at else '' }}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="color:var(--muted);font-size:0.85em;text-align:center;padding:20px 0">No systems assigned.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+{# ── Recent audit activity ── #}
+{% if audit_rows %}
+<div class="card" style="padding:24px;margin-top:20px">
+  <div style="font-size:0.72em;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:16px">
+    Recent Activity (last 20 actions)
+  </div>
+  <table style="width:100%;font-size:0.82em">
+    <thead>
+      <tr style="color:var(--muted);font-size:0.85em">
+        <th style="text-align:left;padding:4px 8px 8px">Time</th>
+        <th style="text-align:left;padding:4px 8px 8px">Action</th>
+        <th style="text-align:left;padding:4px 8px 8px">Object</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in audit_rows %}
+      <tr style="border-top:1px solid var(--border)">
+        <td style="padding:6px 8px;color:var(--muted);white-space:nowrap">
+          {{ row.timestamp.strftime('%m/%d %H:%M') if row.timestamp else '—' }}
+        </td>
+        <td style="padding:6px 8px;color:var(--cyan)">{{ row.action or '—' }}</td>
+        <td style="padding:6px 8px;color:var(--text)">
+          {{ row.resource_type or '' }}{% if row.resource_id %}: <span class="mono" style="font-size:0.9em">{{ row.resource_id[:32] }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}

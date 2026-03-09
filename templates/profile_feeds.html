@@ -2,6 +2,12 @@
 {% block title %}My Feed Subscriptions{% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <a href="/profile">Profile</a>
+  <span class="sep">/</span>
+  <span>News Feed Subscriptions</span>
+</div>
+
 <div class="page-header" style="margin-bottom:28px">
   <h1 style="margin:0;font-size:1.4em;letter-spacing:1px">RSS FEED SUBSCRIPTIONS</h1>
   <p style="margin:4px 0 0;color:var(--muted);font-size:0.85em">
@@ -66,7 +72,7 @@
 </form>
 
 <script>
-const DEFAULTS = {{ enabled | tojson }};  {# current enabled set #}
+const DEFAULTS = {{ enabled_list | tojson }};  {# current enabled feeds #}
 // Actually we want the hardcoded default set for "Restore Defaults"
 const DEFAULT_SET = new Set(["cisa_alerts","thn","bleeping","krebs","nvd"]);
 

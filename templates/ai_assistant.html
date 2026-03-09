@@ -1,0 +1,751 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — AI Assistant{% endblock %}
+
+{% block head %}
+<style>
+  /* ── Page scroll lock — only .ai-messages scrolls ─── */
+  html, body { overflow: hidden; height: 100%; }
+  #main-wrapper { min-height: unset !important; overflow: hidden; }
+  .page { padding-bottom: 0 !important; }
+
+  /* ── Layout ─────────────────────────────────────────── */
+  .ai-wrap {
+    display: flex; flex-direction: column;
+    max-width: 900px; margin: 0 auto;
+    /* height set dynamically by sizeChat() below */
+  }
+  .ai-header {
+    display: flex; align-items: center; gap: 12px;
+    padding-bottom: 16px; border-bottom: 1px solid var(--border); margin-bottom: 0;
+    flex-shrink: 0;
+  }
+  .ai-avatar {
+    width: 38px; height: 38px; border-radius: 8px;
+    background: linear-gradient(135deg, rgba(0,255,204,0.15), rgba(0,255,204,0.05));
+    border: 1px solid rgba(0,255,204,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3em; flex-shrink: 0;
+  }
+  .ai-header-info { flex: 1; }
+  .ai-title { font-size: 1em; font-weight: 700; color: var(--text); }
+  .ai-subtitle { font-size: 0.72em; color: var(--muted); margin-top: 1px; }
+  .ai-status-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    background: var(--muted); transition: background 0.3s;
+  }
+  .ai-status-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .ai-status-dot.error { background: var(--red); }
+
+  /* ── Context strip ───────────────────────────────────── */
+  .ai-ctx-strip {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+    font-size: 0.72em; flex-shrink: 0;
+  }
+  .ai-ctx-chip {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 2px 8px; color: var(--muted);
+  }
+  .ai-ctx-chip span { color: var(--text); font-weight: 600; }
+
+  /* ── Messages ────────────────────────────────────────── */
+  .ai-messages {
+    flex: 1; overflow-y: auto; padding: 16px 0;
+    display: flex; flex-direction: column; gap: 14px;
+    min-height: 0;
+  }
+  .ai-msg { display: flex; gap: 10px; max-width: 100%; }
+  .ai-msg.user { flex-direction: row-reverse; }
+  .ai-msg-bubble {
+    max-width: 75%; padding: 11px 14px; border-radius: 8px;
+    font-size: 0.88em; line-height: 1.55; word-break: break-word;
+  }
+  .ai-msg.user .ai-msg-bubble {
+    background: rgba(0,255,204,0.1); border: 1px solid rgba(0,255,204,0.25);
+    border-radius: 8px 2px 8px 8px; color: var(--text);
+  }
+  .ai-msg.assistant .ai-msg-bubble {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 2px 8px 8px 8px; color: var(--text);
+  }
+  .ai-msg.assistant .ai-msg-bubble.error-bubble {
+    border-color: rgba(244,67,54,0.4); background: rgba(244,67,54,0.06);
+  }
+  .ai-msg-icon {
+    width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 0.85em;
+    margin-top: 2px;
+  }
+  .ai-msg.user .ai-msg-icon {
+    background: rgba(0,255,204,0.08); border: 1px solid rgba(0,255,204,0.15);
+  }
+  .ai-msg.assistant .ai-msg-icon {
+    background: var(--surface); border: 1px solid var(--border);
+  }
+
+  /* ── Sources ─────────────────────────────────────────── */
+  .ai-sources {
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+    font-size: 0.75em; color: var(--muted);
+  }
+  .ai-sources-toggle {
+    cursor: pointer; color: var(--cyan); font-size: 0.78em;
+    margin-top: 6px; display: inline-block; user-select: none;
+  }
+  .ai-sources-toggle:hover { text-decoration: underline; }
+  .ai-source-list { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .ai-source-tag {
+    background: rgba(0,255,204,0.06); border: 1px solid rgba(0,255,204,0.2);
+    border-radius: 3px; padding: 1px 6px; font-size: 0.78em; color: var(--cyan);
+  }
+
+  /* ── Thinking indicator ──────────────────────────────── */
+  .ai-thinking { display: flex; gap: 10px; align-items: flex-end; }
+  .ai-dots {
+    display: flex; gap: 4px; padding: 10px 14px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 2px 8px 8px 8px;
+  }
+  .ai-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--muted); animation: aiDotPulse 1.2s ease-in-out infinite;
+  }
+  .ai-dot:nth-child(2) { animation-delay: 0.2s; }
+  .ai-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes aiDotPulse {
+    0%, 100% { opacity: 0.3; transform: translateY(0); }
+    50% { opacity: 1; transform: translateY(-3px); }
+  }
+
+  /* ── Markdown rendering in bubbles ──────────────────── */
+  .ai-msg-bubble strong { color: var(--text); }
+  .ai-msg-bubble code {
+    background: rgba(255,255,255,0.06); border-radius: 3px;
+    padding: 1px 4px; font-family: monospace; font-size: 0.9em;
+  }
+  .ai-msg-bubble pre {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 12px; overflow-x: auto; margin: 8px 0;
+  }
+  .ai-msg-bubble pre code { background: none; padding: 0; }
+  .ai-msg-bubble ol, .ai-msg-bubble ul { padding-left: 18px; margin: 6px 0; }
+  .ai-msg-bubble li { margin-bottom: 4px; }
+  .ai-msg-bubble h3 { font-size: 0.95em; margin: 10px 0 4px; color: var(--cyan); }
+  .ai-msg-bubble p { margin: 4px 0; }
+  .ai-msg-bubble hr { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
+
+  /* ── Input area ──────────────────────────────────────── */
+  .ai-input-area {
+    flex-shrink: 0; padding-top: 14px; border-top: 1px solid var(--border);
+  }
+  .ai-input-row {
+    display: flex; gap: 8px; align-items: flex-end;
+  }
+  .ai-input {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; color: var(--text);
+    font-family: inherit; font-size: 0.88em; resize: none; outline: none;
+    line-height: 1.5; max-height: 120px; overflow-y: auto;
+    transition: border-color 0.15s;
+  }
+  .ai-input:focus { border-color: rgba(0,255,204,0.4); }
+  .ai-input::placeholder { color: var(--muted); }
+  .ai-send-btn {
+    width: 40px; height: 40px; border-radius: 8px; border: none;
+    background: rgba(0,255,204,0.15); color: var(--cyan); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1em; transition: background 0.15s; flex-shrink: 0;
+  }
+  .ai-send-btn:hover:not(:disabled) { background: rgba(0,255,204,0.25); }
+  .ai-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .ai-input-meta {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 8px; font-size: 0.7em; color: var(--muted);
+  }
+  .ai-clear-btn {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-size: 0.78em; padding: 0; text-decoration: none;
+  }
+  .ai-clear-btn:hover { color: var(--red); }
+
+  /* ── Unavailable state ───────────────────────────────── */
+  .ai-unavailable-banner {
+    background: rgba(244,67,54,0.08); border: 1px solid rgba(244,67,54,0.3);
+    border-radius: 6px; padding: 12px 16px; margin-bottom: 14px;
+    font-size: 0.85em; color: var(--red); flex-shrink: 0;
+  }
+
+  /* ── Suggested prompts ───────────────────────────────── */
+  .ai-suggestions {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 10px 0 4px; flex-shrink: 0;
+  }
+  .ai-suggest-chip {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 5px 12px; font-size: 0.78em;
+    color: var(--muted); cursor: pointer; transition: border-color 0.15s, color 0.15s;
+    user-select: none; white-space: nowrap; max-width: 260px;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .ai-suggest-chip:hover { border-color: rgba(0,255,204,0.3); color: var(--text); }
+  /* Dynamic chips from LLM suggestions — cyan accent */
+  .ai-suggest-chip.dynamic {
+    border-color: rgba(0,255,204,0.22); color: var(--cyan);
+    background: rgba(0,255,204,0.05);
+  }
+  .ai-suggest-chip.dynamic:hover {
+    border-color: rgba(0,255,204,0.5); background: rgba(0,255,204,0.1); color: var(--text);
+  }
+  .ai-suggestions-label {
+    width: 100%; font-size: 0.68em; color: var(--muted);
+    padding-bottom: 2px; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+
+  /* ── Empty state ─────────────────────────────────────── */
+  .ai-empty {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px;
+    color: var(--muted); text-align: center; padding: 40px;
+  }
+  .ai-empty-icon { font-size: 2.5em; opacity: 0.4; }
+  .ai-empty-msg { font-size: 0.85em; max-width: 320px; line-height: 1.5; }
+
+  /* ── Context selector (system) ───────────────────────── */
+  .ai-system-select {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 8px; color: var(--text);
+    font-size: 0.78em; outline: none; cursor: pointer;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <span>GRC Assistant</span>
+</div>
+
+<div class="ai-wrap">
+
+  {# ── Header ── #}
+  <div class="ai-header">
+    <div class="ai-avatar">🔒</div>
+    <div class="ai-header-info">
+      <div class="ai-title">BLACKSITE Assistant</div>
+      <div class="ai-subtitle">GRC Knowledge Assistant — RMF · Controls · POA&amp;M · Compliance</div>
+    </div>
+    <div id="aiStatusDot" class="ai-status-dot" title="LLM status"></div>
+  </div>
+
+  {# ── Unavailable banner (shown when LLM offline) ── #}
+  <div id="aiUnavailableBanner" class="ai-unavailable-banner" style="display:none">
+    ⚠ GRC Assistant is currently unavailable. Check LLM backend configuration in
+    <code>llm/config/llm_config--model-rag-endpoint-settings.yaml</code>.
+  </div>
+
+  {# ── Context strip ── #}
+  <div class="ai-ctx-strip">
+    <div class="ai-ctx-chip">Role: <span>{{ user_role|default('employee')|replace('_',' ')|title }}</span></div>
+    {% if selected_system %}
+    <div class="ai-ctx-chip">System: <span>{{ selected_system.name }}</span></div>
+    {% if selected_system.overall_impact %}
+    <div class="ai-ctx-chip">Impact: <span>{{ selected_system.overall_impact|upper }}</span></div>
+    {% endif %}
+    {% if selected_system.open_poams is defined %}
+    <div class="ai-ctx-chip">Open POA&amp;Ms: <span>{{ selected_system.open_poams }}</span></div>
+    {% endif %}
+    {% endif %}
+    <div class="ai-ctx-chip">Date: <span>{{ today }}</span></div>
+    {% if systems %}
+    <div style="margin-left:auto">
+      <select class="ai-system-select" id="aiSystemSelect" onchange="changeSystem(this.value)">
+        <option value="">No system context</option>
+        {% for sys in systems %}
+        <option value="{{ sys.id }}" {% if selected_system and selected_system.id == sys.id %}selected{% endif %}>
+          {{ sys.abbreviation|default(sys.name[:8]) }} — {{ sys.name }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Message list ── #}
+  <div class="ai-messages" id="aiMessages">
+    {# Empty state (hidden when there are messages) #}
+    <div class="ai-empty" id="aiEmpty">
+      <div class="ai-empty-icon">🔒</div>
+      <div class="ai-empty-msg">
+        Ask about RMF steps, NIST controls, POA&amp;M workflows,
+        compliance programs, or any BLACKSITE operation.
+      </div>
+    </div>
+  </div>
+
+  {# ── Suggestion chips — populated by JS (static on load, dynamic after each response) ── #}
+  <div class="ai-suggestions" id="aiSuggestions"></div>
+
+  {# ── Input area ── #}
+  <div class="ai-input-area">
+    <div class="ai-input-row">
+      <textarea
+        class="ai-input"
+        id="aiInput"
+        placeholder="{{ placeholder_text|default('Ask about RMF, controls, POA&Ms, BLACKSITE workflows...') }}"
+        rows="1"
+        maxlength="{{ max_query_length|default(2000) }}"
+        onkeydown="handleInputKey(event)"
+        oninput="autoResize(this)"
+      ></textarea>
+      <button class="ai-send-btn" id="aiSendBtn" onclick="sendMessage()" title="Send (Enter)">
+        ↑
+      </button>
+    </div>
+    <div class="ai-input-meta">
+      <span id="aiCharCount" style="opacity:0.5">0 / {{ max_query_length|default(2000) }}</span>
+      <button class="ai-clear-btn" onclick="clearHistory()">Clear history</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const MAX_QUERY = {{ max_query_length|default(2000) }};
+const SHOW_SOURCES = {{ 'true' if show_sources else 'false' }};
+const SYSTEM_ID = "{{ selected_system.id if selected_system else '' }}";
+let history = [];
+let isThinking = false;
+
+// ── Init ────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  sizeChat();
+  checkStatus();
+  showStaticSuggestions();
+  loadHistory();
+  scrollToBottom();
+  document.getElementById('aiInput').focus();
+});
+window.addEventListener('resize', sizeChat);
+
+function sizeChat() {
+  const wrap = document.querySelector('.ai-wrap');
+  if (!wrap) return;
+  // Measure from where the wrap sits on screen to the bottom of the viewport
+  const top = wrap.getBoundingClientRect().top;
+  wrap.style.height = (window.innerHeight - top - 12) + 'px';
+}
+
+// ── Status check ────────────────────────────────────────
+async function checkStatus() {
+  try {
+    const r = await fetch('/api/ai/status');
+    const data = await r.json();
+    const dot = document.getElementById('aiStatusDot');
+    const banner = document.getElementById('aiUnavailableBanner');
+    if (data.available) {
+      dot.classList.add('online');
+      dot.title = `Online — ${data.model || 'LLM ready'}`;
+      banner.style.display = 'none';
+    } else {
+      dot.classList.add('error');
+      dot.title = data.reason || 'Unavailable';
+      banner.style.display = '';
+      document.getElementById('aiSendBtn').disabled = true;
+    }
+  } catch {
+    document.getElementById('aiStatusDot').classList.add('error');
+  }
+}
+
+// ── History persistence ─────────────────────────────────
+function saveHistory() {
+  sessionStorage.setItem('bsv-ai-history', JSON.stringify(history));
+}
+function loadHistory() {
+  const saved = sessionStorage.getItem('bsv-ai-history');
+  if (saved) {
+    try {
+      history = JSON.parse(saved);
+      history.forEach(m => renderMessage(m.role, m.content, m.sources, m.ts, false));
+      if (history.length) {
+        toggleEmpty(false);
+        // Restore last LLM suggestions from the last assistant message
+        const lastAssistant = [...history].reverse().find(m => m.role === 'assistant');
+        if (lastAssistant?.suggestions?.length) {
+          updateSuggestions(lastAssistant.suggestions);
+        } else {
+          showStaticSuggestions();
+        }
+      }
+    } catch {}
+  }
+  scrollToBottom();
+}
+function clearHistory() {
+  history = [];
+  sessionStorage.removeItem('bsv-ai-history');
+  document.getElementById('aiMessages').innerHTML = '<div class="ai-empty" id="aiEmpty"><div class="ai-empty-icon">🔒</div><div class="ai-empty-msg">Ask about RMF steps, NIST controls, POA&amp;M workflows, compliance programs, or any BLACKSITE operation.</div></div>';
+  showStaticSuggestions();
+  toggleEmpty(true);
+}
+
+// ── System context change ───────────────────────────────
+function changeSystem(id) {
+  const url = new URL(window.location);
+  if (id) url.searchParams.set('system_id', id);
+  else url.searchParams.delete('system_id');
+  window.location.href = url.toString();
+}
+
+// ── Suggested prompt ────────────────────────────────────
+function usePrompt(text) {
+  const input = document.getElementById('aiInput');
+  input.value = text;
+  autoResize(input);
+  updateCharCount();
+  sendMessage();
+}
+
+// ── Input helpers ────────────────────────────────────────
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  updateCharCount();
+}
+function updateCharCount() {
+  const len = document.getElementById('aiInput').value.length;
+  const el = document.getElementById('aiCharCount');
+  el.textContent = `${len} / ${MAX_QUERY}`;
+  el.style.opacity = len > MAX_QUERY * 0.85 ? '1' : '0.5';
+  el.style.color = len > MAX_QUERY * 0.95 ? 'var(--red)' : '';
+}
+function handleInputKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+// ── Send message ─────────────────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('aiInput');
+  const query = input.value.trim();
+  if (!query || isThinking) return;
+  if (query.length > MAX_QUERY) {
+    alert(`Query exceeds ${MAX_QUERY} character limit.`); return;
+  }
+
+  // Add user message
+  const ts = new Date().toISOString();
+  history.push({ role: 'user', content: query, ts });
+  renderMessage('user', query, null, ts, true);
+  saveHistory();
+  toggleEmpty(false);
+  document.getElementById('aiSuggestions').style.display = 'none';
+
+  input.value = '';
+  input.style.height = 'auto';
+  updateCharCount();
+  document.getElementById('aiSuggestions').style.display = 'none';
+
+  // Thinking indicator
+  isThinking = true;
+  document.getElementById('aiSendBtn').disabled = true;
+  const thinkEl = showThinking();
+
+  const abortCtrl = new AbortController();
+  const abortTimer = setTimeout(() => abortCtrl.abort(), 90000);
+
+  try {
+    const body = {
+      query,
+      history: history.slice(-12).filter(m => m.role !== 'user' || m.content !== query),
+      system_id: document.getElementById('aiSystemSelect')?.value || SYSTEM_ID || null,
+    };
+    const r = await fetch('/api/ai/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: abortCtrl.signal,
+    });
+    const data = await r.json();
+
+    stopThinking(thinkEl);
+
+    if (data.error) {
+      renderMessage('assistant', `⚠ ${data.error}`, null, new Date().toISOString(), true, true);
+      showStaticSuggestions();
+    } else {
+      const { mainContent, suggestions } = parseSuggestions(data.response || '');
+      history.push({ role: 'assistant', content: mainContent, sources: data.sources, suggestions, ts: new Date().toISOString() });
+      saveHistory();
+      renderMessage('assistant', mainContent, data.sources, new Date().toISOString(), true);
+      updateSuggestions(suggestions);
+    }
+  } catch (err) {
+    stopThinking(thinkEl);
+    if (err.name === 'AbortError') {
+      renderMessage('assistant', '⏱ Request timed out. Try a shorter query.', null, new Date().toISOString(), true, true);
+    } else {
+      renderMessage('assistant', '⚠ Connection error. The GRC assistant may be temporarily unavailable.', null, new Date().toISOString(), true, true);
+    }
+    showStaticSuggestions();
+  } finally {
+    clearTimeout(abortTimer);
+    isThinking = false;
+    document.getElementById('aiSendBtn').disabled = false;
+    input.focus();
+  }
+}
+
+// ── Render ───────────────────────────────────────────────
+function renderMessage(role, content, sources, ts, scroll, isError) {
+  const container = document.getElementById('aiMessages');
+  const empty = document.getElementById('aiEmpty');
+  if (empty) empty.style.display = 'none';
+
+  const msgEl = document.createElement('div');
+  msgEl.className = `ai-msg ${role}`;
+
+  const icon = role === 'user' ? '{{ display_name|default(remote_user)|first|upper }}' : '🔒';
+  const bubbleClass = isError ? 'ai-msg-bubble error-bubble' : 'ai-msg-bubble';
+  const rendered = role === 'assistant' ? renderMarkdown(content) : escapeHtml(content);
+
+  let sourcesHtml = '';
+  if (SHOW_SOURCES && sources && sources.length && role === 'assistant') {
+    const id = 'src' + Date.now();
+    const labels = [...new Set(sources.map(friendlySource))];
+    sourcesHtml = `
+      <div class="ai-sources">
+        <span class="ai-sources-toggle" onclick="toggleSrc('${id}')">▸ References (${labels.length})</span>
+        <div class="ai-source-list" id="${id}" style="display:none">
+          ${labels.map(s => `<span class="ai-source-tag">${escapeHtml(s)}</span>`).join('')}
+        </div>
+      </div>`;
+  }
+
+  msgEl.innerHTML = `
+    <div class="ai-msg-icon">${icon}</div>
+    <div class="${bubbleClass}">
+      ${rendered}
+      ${sourcesHtml}
+    </div>`;
+
+  container.appendChild(msgEl);
+  if (scroll) scrollToBottom();
+}
+
+function scrollToBottom() {
+  const container = document.getElementById('aiMessages');
+  container.scrollTop = container.scrollHeight;
+}
+
+function showThinking() {
+  const container = document.getElementById('aiMessages');
+  const el = document.createElement('div');
+  el.className = 'ai-thinking';
+  el.innerHTML = `
+    <div class="ai-msg-icon">🔒</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="ai-dots">
+        <div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div>
+      </div>
+      <span id="aiElapsed" style="font-size:0.72em;color:var(--muted)">0s</span>
+    </div>`;
+  container.appendChild(el);
+  el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  const start = Date.now();
+  el._timer = setInterval(() => {
+    const e = document.getElementById('aiElapsed');
+    if (e) e.textContent = Math.round((Date.now() - start) / 1000) + 's';
+  }, 1000);
+  return el;
+}
+
+function stopThinking(el) {
+  if (el._timer) clearInterval(el._timer);
+  el.remove();
+}
+
+function toggleEmpty(show) {
+  const empty = document.getElementById('aiEmpty');
+  if (empty) empty.style.display = show ? '' : 'none';
+}
+
+function toggleSrc(id) {
+  const el = document.getElementById(id);
+  const toggle = el.previousElementSibling;
+  if (el.style.display === 'none') {
+    el.style.display = ''; toggle.textContent = toggle.textContent.replace('▸','▾');
+  } else {
+    el.style.display = 'none'; toggle.textContent = toggle.textContent.replace('▾','▸');
+  }
+}
+
+// ── Minimal markdown renderer ─────────────────────────────
+function renderMarkdown(text) {
+  let html = escapeHtml(text);
+  // Code blocks
+  html = html.replace(/```[\w]*\n([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Bold
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  // Italic
+  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  // H3
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  // H2
+  html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+  // HR
+  html = html.replace(/^---$/gm, '<hr>');
+  // Numbered list items
+  html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  // Bullet list items
+  html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+  // Wrap consecutive <li> in <ol> or <ul>
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`);
+  // Paragraphs (double newlines)
+  html = html.replace(/\n\n+/g, '</p><p>');
+  // Single newlines
+  html = html.replace(/\n/g, '<br>');
+  // Wrap in paragraph if not already block-level
+  if (!html.startsWith('<')) html = `<p>${html}</p>`;
+  return html;
+}
+
+// ── Suggestion chips ─────────────────────────────────────
+
+const STATIC_SUGGESTIONS = [
+  "How do I close a POA&M item?",
+  "What's the difference between OTS and N/A?",
+  "Walk me through RMF step 5 (Authorize)",
+  "What controls cover audit log protection?",
+  "How does control inheritance work for FedRAMP?",
+  "What do I do when a user leaves the org?",
+];
+
+function showStaticSuggestions() {
+  const el = document.getElementById('aiSuggestions');
+  el.innerHTML = STATIC_SUGGESTIONS.map(s =>
+    `<div class="ai-suggest-chip" onclick="usePrompt(this.textContent)">${escapeHtml(s)}</div>`
+  ).join('');
+  el.style.display = '';
+}
+
+function updateSuggestions(items) {
+  const el = document.getElementById('aiSuggestions');
+  if (!items || !items.length) { showStaticSuggestions(); return; }
+  el.innerHTML =
+    `<div class="ai-suggestions-label">💡 Suggested next steps</div>` +
+    items.map(s => {
+      // s is e.g. "Review Account Management Procedures — Navigate to Systems > ..."
+      // Display the bold title part, submit the full item as query
+      const label = s.replace(/\s*[—–]\s*.+$/, '').trim() || s;
+      const display = label.length > 48 ? label.slice(0, 47) + '…' : label;
+      return `<div class="ai-suggest-chip dynamic" title="${escapeHtml(s)}" onclick="usePrompt(this.dataset.q)" data-q="${escapeHtml(label)}">${escapeHtml(display)}</div>`;
+    }).join('');
+  el.style.display = '';
+}
+
+function parseSuggestions(text) {
+  // Find the suggestions block — starts with 💡 or "Suggested Next Steps"
+  // Preceded by optional "---" separator
+  const sepIdx = text.search(/\n[-—]+\n💡|\n💡\s*\*?\*?Suggested/i);
+  if (sepIdx === -1) return { mainContent: text, suggestions: [] };
+
+  const mainContent = text.slice(0, sepIdx).trimEnd();
+  const sectionText = text.slice(sepIdx);
+
+  // Extract numbered items: "1. **Title** — description" or "1. Title — ..."
+  const suggestions = [];
+  const lineRe = /^\d+\.\s+\*\*([^*]+)\*\*([^\n]*)|^\d+\.\s+([^\n*]+?)(?:\s*[—–]\s*|\s*$)/gm;
+  let m;
+  while ((m = lineRe.exec(sectionText)) !== null) {
+    // m[1] = bold title, m[2] = " — description", m[3] = plain title
+    const title = (m[1] || m[3] || '').trim();
+    const desc  = (m[2] || '').replace(/^\s*[—–]\s*/, '').trim();
+    if (title) suggestions.push(desc ? `${title} — ${desc}` : title);
+  }
+  return { mainContent, suggestions };
+}
+
+// Map of filename patterns → human-readable reference labels
+// Order matters — first match wins
+const _SOURCE_MAP = [
+  // NIST SP 800-53
+  [/sp800-53r5.*control.famil/i,         "NIST SP 800-53 Rev 5 — Control Families"],
+  [/sp800-53r4/i,                         "NIST SP 800-53 Rev 4 — Security Controls"],
+  [/sp800-53a/i,                          "NIST SP 800-53A — Assessment Procedures"],
+  // NIST other publications
+  [/sp800-37r2|sp800-37.*rmf/i,           "NIST SP 800-37 — Risk Management Framework"],
+  [/sp800-61.*incident/i,                 "NIST SP 800-61 — Incident Response"],
+  [/sp800-34.*bcdr|sp800-34.*conting/i,   "NIST SP 800-34 — Contingency Planning"],
+  [/sp800-30/i,                           "NIST SP 800-30 — Risk Assessment"],
+  [/sp800-171/i,                          "NIST SP 800-171 — CUI Protection"],
+  [/sp800-115/i,                          "NIST SP 800-115 — Security Testing"],
+  [/sp800/i,                              "NIST Special Publication"],
+  [/fips.?199/i,                          "FIPS 199 — System Categorization"],
+  [/fips.?200/i,                          "FIPS 200 — Security Requirements"],
+  // FedRAMP baselines
+  [/fedramp.*high.*baseline|fedramp.*HIGH/i,      "FedRAMP High Baseline"],
+  [/fedramp.*moderate.*baseline|fedramp.*MODERATE/i, "FedRAMP Moderate Baseline"],
+  [/fedramp.*low.*baseline|fedramp.*LOW/i,        "FedRAMP Low Baseline"],
+  // FedRAMP guidance
+  [/fedramp.*program.*guide|fedramp.*requirements/i, "FedRAMP Program Guide"],
+  [/fedramp.*program.*overview|fedramp.*authorization.*process/i, "FedRAMP Authorization Overview"],
+  [/fedramp.*conmon|fedramp.*monitor/i,   "FedRAMP ConMon Guidance"],
+  [/fedramp.*ssp/i,                       "FedRAMP SSP Template"],
+  [/fedramp.*sar/i,                       "FedRAMP SAR Guidance"],
+  [/fedramp/i,                            "FedRAMP Guidance"],
+  // Security domains
+  [/domain1|risk.*manag|governance.*security/i,            "Security & Risk Management"],
+  [/domain5|identity.*access|iam.*security/i,              "Identity & Access Management"],
+  [/domains.*overview|all.*domain/i,                       "Security Domains Overview"],
+  // Compliance frameworks (specific files)
+  [/hipaa.*complete|hipaa.*phi.*safeguard/i, "HIPAA — PHI Safeguards & Breach Requirements"],
+  [/hipaa/i,                              "HIPAA Security Rule"],
+  [/cmmc.*2.*0.*level|cmmc.*dod.*contractor/i, "CMMC 2.0 — Levels & Practices"],
+  [/cmmc/i,                               "CMMC 2.0"],
+  [/soc2.*trust.*service|soc2.*tsc/i,     "SOC 2 — Trust Services Criteria"],
+  [/soc.?2.*complete|soc2.*type/i,        "SOC 2 — Complete Reference"],
+  [/soc.?2/i,                             "SOC 2"],
+  [/iso.?27001.*2022|iso27001.*annex/i,   "ISO 27001:2022 — Controls & ISMS"],
+  [/iso.?27001/i,                         "ISO 27001"],
+  [/pci.?dss.*v4|pci.*12.*requirement/i,  "PCI DSS v4 — 12 Requirements"],
+  [/pci.?dss/i,                           "PCI DSS"],
+  [/gdpr.*complete|gdpr.*article/i,       "GDPR — Articles & Data Subject Rights"],
+  [/gdpr/i,                               "GDPR"],
+  [/fisma.*implementation|fisma.*nist.*csf/i, "FISMA Implementation — NIST CSF & OMB"],
+  [/fisma.*federal.*security/i,           "FISMA — Federal Security Requirements"],
+  [/fisma/i,                              "FISMA"],
+  // BLACKSITE platform
+  [/blacksite.*context|blacksite.*routes|blacksite.*workflow/i, "BLACKSITE Platform Guide"],
+  [/blacksite/i,                          "BLACKSITE Reference"],
+  // Runtime (general — no system data)
+  [/route_map/i,                          "BLACKSITE Navigation Map"],
+  [/audit_vocab/i,                        "BLACKSITE Audit Vocabulary"],
+];
+
+function friendlySource(raw) {
+  // Strip kb:: prefix, runtime/ prefix, and ::N chunk suffix
+  let s = raw.replace(/^kb::/, '').replace(/^runtime\//, '').replace(/::\d+$/, '');
+  // Try known mappings against the full path
+  for (const [pattern, label] of _SOURCE_MAP) {
+    if (pattern.test(s)) return label;
+  }
+  // Fallback: extract the filename, drop extension, clean up separators
+  const filename = s.split('/').pop().replace(/\.[^.]+$/, '');
+  // Remove long hash/id suffixes and chunk descriptors (--detail-description)
+  const cleaned = filename
+    .replace(/--[a-z0-9-]+$/i, '')   // strip --descriptor suffix
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\b(\w)/g, c => c.toUpperCase())
+    .trim();
+  return cleaned || 'GRC Reference';
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+</script>
+{% endblock %}

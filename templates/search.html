@@ -2,6 +2,10 @@
 {% block title %}{{ app_name }} — Search{% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <span>Search</span>
+</div>
+
 {# ── Search bar (large, centered) ─────────────────────────────────────────── #}
 <div style="max-width:700px;margin:0 auto 36px">
   <h1 style="margin:0 0 20px;font-size:1.4em;color:var(--muted);font-weight:400">
@@ -14,7 +18,7 @@
                   border-radius:6px;padding:12px 16px;font-size:1em;font-family:var(--mono)">
     <button type="submit" class="btn btn-primary">Search</button>
     {% if q %}
-    <a href="/search" class="btn btn-ghost" style="color:var(--muted)">✕</a>
+    <a href="/search" class="btn btn-ghost" style="color:var(--muted)" aria-label="Clear search">✕</a>
     {% endif %}
   </form>
 </div>
@@ -170,9 +174,9 @@
 </div>
 {% endif %}
 
-{# ── NIST Controls ───────────────────────────────────────────────────────── #}
+{# ── Controls ────────────────────────────────────────────────────────────── #}
 {% if results.controls %}
-<div class="section-header">NIST Controls ({{ results.controls|length }})</div>
+<div class="section-header">Controls ({{ results.controls|length }})</div>
 <div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">
   <table>
     <tbody>

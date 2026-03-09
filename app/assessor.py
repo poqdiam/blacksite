@@ -238,7 +238,10 @@ def run_assessment(
 
     # Sort: INSUFFICIENT first, then PARTIAL, COMPLETE, NA, NOT_FOUND
     _order = {"INSUFFICIENT": 0, "PARTIAL": 1, "COMPLETE": 2, "NA": 3, "NOT_FOUND": 4}
-    results.sort(key=lambda r: (_order.get(r["grade"], 5), r["control_id"]))
+    def _ctrl_sort_key(cid: str) -> tuple:
+        m = re.match(r'^([a-z]+)-(\d+)(?:\.(\d+))?$', cid.lower())
+        return (m.group(1), int(m.group(2)), int(m.group(3) or 0)) if m else (cid, 0, 0)
+    results.sort(key=lambda r: (_order.get(r["grade"], 5), _ctrl_sort_key(r["control_id"])))
 
     # Compute overall SSP score — exclude NOT_FOUND and NA controls
     scored = [r for r in results if r["grade"] not in ("NOT_FOUND", "NA")]

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Regulations & Mandates{% endblock %}
+
+{% block head %}
+<style>
+.fw-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  padding: 13px 20px; border-bottom: 1px solid var(--border);
+  text-decoration: none; color: inherit; transition: background 0.12s;
+}
+.fw-row:hover { background: rgba(0,255,204,0.04); }
+.fw-row:last-child { border-bottom: none; }
+.fw-row-name { font-size: 0.88em; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.fw-row-desc { font-size: 0.73em; color: var(--muted); line-height: 1.35; }
+.fw-row-meta { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.fw-row-count { font-size: 0.75em; color: var(--muted); white-space: nowrap; }
+.sector-hdr {
+  font-size: 0.6em; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--muted); padding: 10px 20px 6px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,.015);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/controls">Control Catalog</a>
+  <span class="sep">/</span>
+  <span>Regulations &amp; Mandates</span>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:6px">
+  <h1 style="margin:0">Regulations &amp; Mandates</h1>
+</div>
+<p style="color:var(--muted);font-size:0.85em;margin-bottom:24px">
+  Statutory and regulatory compliance programs organized by sector.
+</p>
+
+{% set has_any = namespace(found=false) %}
+{% for sector in sector_order %}
+{% set regs = regs_by_sector.get(sector, []) %}
+{% if regs %}
+{% set has_any.found = true %}
+<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">
+  <div class="sector-hdr">{{ sector_labels.get(sector, sector) }}</div>
+  {% for fw in regs %}
+  <a href="{{ fw.link }}" class="fw-row">
+    <div>
+      <div class="fw-row-name">{{ fw.name }}</div>
+      {% if fw.description %}
+      <div class="fw-row-desc">{{ fw.description[:200] }}{% if fw.description|length > 200 %}…{% endif %}</div>
+      {% endif %}
+    </div>
+    <div class="fw-row-meta">
+      {% if fw.ctrl_count %}<span class="fw-row-count">{{ fw.ctrl_count }} controls</span>{% endif %}
+      <span style="color:var(--cyan);font-size:0.85em">→</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endfor %}
+
+{% if not has_any.found %}
+<div style="padding:48px;text-align:center;color:var(--muted);font-size:0.88em">
+  No regulatory frameworks currently enabled. Enable in
+  <a href="/admin/frameworks" style="color:var(--cyan)">Framework Management</a>.
+</div>
+{% endif %}
+{% endblock %}

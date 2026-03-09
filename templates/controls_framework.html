@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — {{ fw.name }}{% endblock %}
+
+{% block head %}
+<style>
+  .domain-row {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: center;
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.12s;
+  }
+  .domain-row:hover { background: rgba(0,255,204,0.04); }
+  .domain-row:last-child { border-bottom: none; }
+  .domain-name { font-size: 0.9em; font-weight: 600; color: var(--text); }
+  .domain-count { font-size: 0.78em; color: var(--muted); white-space: nowrap; }
+  .fw-meta-strip {
+    display: flex; gap: 20px; flex-wrap: wrap;
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .fw-meta-item { display: flex; flex-direction: column; gap: 2px; }
+  .fw-meta-val  { font-size: 0.92em; font-weight: 700; color: var(--text); }
+  .fw-meta-lbl  { font-size: 0.6em; font-weight: 700; letter-spacing: 1.5px;
+                  text-transform: uppercase; color: var(--muted); }
+  .fw-kind-badge {
+    font-size: 0.6em; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 3px; align-self: flex-start; margin-top: 2px;
+  }
+  .fw-kind-overlay   { background: rgba(0,188,212,0.1);   color: #00bcd4; border: 1px solid rgba(0,188,212,0.2); }
+  .fw-kind-framework { background: rgba(123,97,255,0.1);  color: var(--accent,#7b61ff); border: 1px solid rgba(123,97,255,0.2); }
+  .fw-kind-regulation{ background: rgba(158,158,158,0.1); color: var(--muted); border: 1px solid rgba(158,158,158,0.15); }
+  .fw-kind-catalog   { background: rgba(0,255,204,0.08);  color: var(--cyan); border: 1px solid rgba(0,255,204,0.2); }
+  .fw-kind-baseline  { background: rgba(76,175,80,0.08);  color: var(--green); border: 1px solid rgba(76,175,80,0.2); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/controls">Control Catalog</a>
+  <span class="sep">/</span>
+  <span>{{ fw.name }}</span>
+</div>
+
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap">
+  <h1 style="margin:0">{{ fw.name }}</h1>
+  <span class="fw-kind-badge fw-kind-{{ fw.kind }}">{{ fw.kind }}</span>
+  <span style="font-size:0.72em;background:rgba(128,128,128,0.12);color:var(--muted);
+               border-radius:4px;padding:3px 9px;font-weight:600;letter-spacing:0.5px;
+               text-transform:uppercase">{{ fw.category }}</span>
+</div>
+{% if fw.description %}
+<p style="color:var(--muted);font-size:0.84em;margin-bottom:16px;max-width:720px">{{ fw.description }}</p>
+{% endif %}
+<p style="color:var(--muted);font-size:0.84em;margin-bottom:24px">
+  {{ total_controls }} control{{ 's' if total_controls != 1 else '' }}
+  &nbsp;·&nbsp; {{ domain_list|length }} {{ 'domain' if domain_list|length == 1 else 'domains' }}
+  &nbsp;·&nbsp; Select a domain to browse its controls
+</p>
+
+<div class="card" style="padding:0;overflow:hidden">
+  {% for d in domain_list %}
+  <a href="/controls/framework/{{ fw.short_name }}?domain={{ d.name | urlencode }}" class="domain-row">
+    <div class="domain-name">{{ d.name }}</div>
+    <div class="domain-count">{{ d.count }} control{{ 's' if d.count != 1 else '' }}</div>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

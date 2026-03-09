@@ -2,6 +2,12 @@
 {% block title %}{{ app_name }} — Auditor Dashboard{% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <a href="/dashboard">Dashboard</a>
+  <span class="sep">/</span>
+  <span>Auditor Dashboard</span>
+</div>
+
 <div style="margin-bottom:28px">
   <h1 style="margin:0;margin-bottom:4px">Auditor Dashboard</h1>
   <p class="text-muted" style="font-size:0.88em">Assessment schedule, control gaps, and ATO document review queue</p>
@@ -102,10 +108,10 @@
   {% endif %}
 </div>
 
-{# ── ATO Documents in Review ── #}
+{# ── Auth Documents in Review ── #}
 <div class="card">
   <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
-    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">ATO Documents in Review</div>
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Auth Documents in Review</div>
   </div>
   {% if docs_in_review %}
   <table style="width:100%;border-collapse:collapse;font-size:0.83em">

@@ -1,0 +1,10 @@
+{
+  "snapshot": "version_stamp",
+  "generated_at_utc": "2026-03-01T19:09:24.652736+00:00",
+  "env": "production",
+  "branch": "master",
+  "sha_short": "20a337ab",
+  "sha_full": "20a337ab40de71efdd614f60cdcfb97d13fd3b2d",
+  "build_time_utc": "2026-03-01T19:09:24.652774+00:00",
+  "repo_root": "/home/graycat/projects/blacksite"
+}

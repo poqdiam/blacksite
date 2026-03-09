@@ -1,135 +1,259 @@
 {% extends "base.html" %}
-{% from 'macros.html' import paginate %}
 {% block title %}{{ app_name }} — Control Catalog{% endblock %}
 
 {% block head %}
 <style>
-  /* ── Filter bar ───────────────────────────────────────────── */
-  .filter-bar {
-    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
-    margin-bottom: 20px;
-  }
-  .filter-bar input[type=text] {
-    flex: 1; min-width: 220px; max-width: 360px;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 6px; padding: 7px 12px; color: var(--text); font-size: 0.85em;
-  }
-  .filter-bar select {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 6px; padding: 7px 12px; color: var(--text); font-size: 0.85em;
-    cursor: pointer; min-width: 200px;
-  }
-  .result-count { color: var(--muted); font-size: 0.82em; margin-left: auto; }
+/* ── Section ── */
+.cs-section { margin-bottom: 36px; }
+.cs-section-head {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-bottom: 14px; padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+}
+.cs-section-label {
+  font-size: 0.68em; font-weight: 700; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--cyan);
+}
+.cs-section-sub {
+  font-size: 0.72em; color: var(--muted);
+}
 
-  /* ── Control card row ────────────────────────────────────── */
-  .ctrl-row {
-    padding: 14px 18px;
-    border-bottom: 1px solid var(--border);
-    display: grid;
-    grid-template-columns: 130px 1fr;
-    gap: 14px;
-    align-items: start;
-    cursor: pointer;
-    transition: background 0.12s;
-    text-decoration: none;
-    color: inherit;
-  }
-  .ctrl-row:hover { background: rgba(0,255,204,0.03); }
-  .ctrl-row:last-child { border-bottom: none; }
+/* ── Compact 3-column card grid ── */
+.cs-compact-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+a.cs-compact-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 18px;
+  display: flex; flex-direction: column; gap: 5px;
+  text-decoration: none; color: inherit;
+  transition: border-color .15s, box-shadow .15s;
+}
+a.cs-compact-card:hover {
+  border-color: rgba(0,255,204,.35);
+  box-shadow: 0 2px 12px rgba(0,255,204,.05);
+}
+.cs-compact-name { font-size: 0.87em; font-weight: 700; color: var(--text); line-height: 1.3; }
+.cs-compact-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.cs-compact-count { font-size: 0.72em; color: var(--muted); }
+.cs-compact-desc { font-size: 0.73em; color: var(--muted); line-height: 1.4;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 
-  /* ID + family column — centred */
-  .ctrl-meta {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 4px;
-    padding-top: 2px;
-  }
-  .ctrl-id {
-    font-family: var(--mono);
-    font-size: 1.15em;
-    font-weight: 700;
-    color: var(--cyan);
-    white-space: nowrap;
-    letter-spacing: 0.4px;
-  }
-  .family-name {
-    font-size: 0.65em;
-    color: var(--muted);
-    line-height: 1.25;
-    max-width: 120px;
-  }
+/* ── Sector subgroup within regulations ── */
+.cs-sector-group { margin-bottom: 22px; }
+.cs-sector-label {
+  font-size: 0.62em; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 9px;
+}
 
-  /* Title + summary column */
-  .ctrl-title {
-    font-weight: 600; font-size: 0.88em; line-height: 1.3;
-    margin-bottom: 5px; color: var(--text);
-  }
-  .ctrl-summary {
-    font-size: 0.79em; color: var(--muted); line-height: 1.55;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
+/* ── kind badge ── */
+.cs-kind {
+  font-size: 0.58em; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 3px; white-space: nowrap;
+}
+.cs-kind-catalog    { background: rgba(0,255,204,.08);  color: var(--cyan);           border: 1px solid rgba(0,255,204,.2); }
+.cs-kind-overlay    { background: rgba(0,188,212,.08);  color: #00bcd4;               border: 1px solid rgba(0,188,212,.2); }
+.cs-kind-framework  { background: rgba(123,97,255,.08); color: var(--accent,#7b61ff); border: 1px solid rgba(123,97,255,.2); }
+.cs-kind-regulation { background: rgba(158,158,158,.08);color: var(--muted);          border: 1px solid rgba(158,158,158,.15); }
+.cs-kind-baseline   { background: rgba(76,175,80,.08);  color: var(--green);          border: 1px solid rgba(76,175,80,.2); }
+
+/* ── Primary catalog cards — full width stack ── */
+.cs-primary-stack { display: flex; flex-direction: column; gap: 12px; }
+.cs-primary-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid; grid-template-columns: 2fr 1fr;
+  align-items: stretch;
+  color: inherit; cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+  overflow: hidden;
+}
+.cs-primary-card:hover {
+  border-color: rgba(0,255,204,.4);
+  box-shadow: 0 2px 18px rgba(0,255,204,.07);
+}
+.cs-pc-main {
+  padding: 18px 20px;
+  display: flex; flex-direction: column;
+}
+.cs-pc-baselines {
+  padding: 14px 12px;
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 6px;
+  background: rgba(255,255,255,.01);
+}
+
+.cs-panel-header {
+  font-size: 0.6em; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 4px;
+}
+.cs-cat-name  { font-size: 0.92em; font-weight: 800; color: var(--text); line-height: 1.25; }
+.cs-cat-desc { font-size: 0.76em; color: var(--muted); line-height: 1.45; margin-top: 5px; }
+.cs-cat-stats { display: flex; gap: 14px; font-size: 0.72em; color: var(--muted); }
+.cs-stat-val  { font-weight: 700; color: var(--text); }
+
+/* Baseline rows inside primary card */
+.cs-bl-row {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.76em; font-weight: 700;
+  padding: 6px 8px; border-radius: 4px; gap: 6px;
+  transition: opacity .12s; cursor: pointer;
+}
+.cs-bl-row:hover { opacity: .78; }
+.cs-bl-row-low  { background: rgba(76,175,80,.12);  color: var(--green);  border: 1px solid rgba(76,175,80,.25); }
+.cs-bl-row-mod  { background: rgba(255,193,7,.12);  color: var(--yellow); border: 1px solid rgba(255,193,7,.25); }
+.cs-bl-row-high { background: rgba(244,67,54,.12);  color: var(--red);    border: 1px solid rgba(244,67,54,.25); }
+.cs-bl-row-annex{ background: rgba(0,188,212,.12);  color: #00bcd4;       border: 1px solid rgba(0,188,212,.25); }
+.cs-bl-row-all  { opacity: .6; }
+.cs-bl-row-count { font-size: 0.78em; font-weight: 400; opacity: .65; flex-shrink: 0; }
+
+.cs-card-hint {
+  font-size: 0.68em; color: var(--muted);
+  display: flex; align-items: center; gap: 4px;
+}
+.cs-card-hint-arrow { color: var(--cyan); }
+
+/* ── Section summary cards (overlay / regulations / reference sections) ── */
+a.cs-section-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 18px 22px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  text-decoration: none; color: inherit;
+  transition: border-color .15s, box-shadow .15s;
+}
+a.cs-section-card:hover {
+  border-color: rgba(0,255,204,.35);
+  box-shadow: 0 2px 12px rgba(0,255,204,.05);
+}
+.cs-section-card-title { font-size: 0.9em; font-weight: 800; color: var(--text); }
+.cs-section-card-sub   { font-size: 0.74em; color: var(--muted); margin-top: 3px; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:20px;flex-wrap:wrap">
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const cards = document.querySelectorAll('.cs-primary-card');
+  if (!cards.length) return;
+  const maxH = Math.max(...[...cards].map(c => c.offsetHeight));
+  cards.forEach(c => c.style.minHeight = maxH + 'px');
+});
+</script>
+<div class="breadcrumb"><span>Control Catalog</span></div>
+
+<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:6px">
   <h1 style="margin:0">Control Catalog</h1>
-  <span class="text-muted" style="font-size:0.85em">NIST SP 800-53 Rev 5 &mdash; {{ total }} controls</span>
 </div>
+<p style="color:var(--muted);font-size:0.85em;margin-bottom:20px">
+  Every compliance framework with its control set. Browse a framework's controls, use
+  <strong>Build View</strong> to compare baselines and measure overlay coverage, or open
+  a framework directly to search controls by domain.
+</p>
 
-<form method="get" class="filter-bar">
-  <input type="text" name="q" value="{{ q }}" placeholder="Search ID, title, or description…" autocomplete="off">
-  <select name="family" onchange="this.form.submit()">
-    <option value="">All Families</option>
-    {% for fid, ftitle in families %}
-    <option value="{{ fid }}" {% if family == fid %}selected{% endif %}>{{ fid }} — {{ ftitle }}</option>
-    {% endfor %}
-  </select>
-  <button type="submit" class="btn btn-ghost" style="font-size:0.82em;padding:7px 14px">Filter</button>
-  {% if q or family %}
-  <a href="/controls" class="btn btn-ghost" style="font-size:0.82em;padding:7px 14px;color:var(--muted)">Clear</a>
-  {% endif %}
-  <span class="result-count">
-    {{ filtered_total }} result{{ 's' if filtered_total != 1 else '' }}
-    {% if family or q %}<span style="color:var(--border)"> / {{ total }} total</span>{% endif %}
-  </span>
-</form>
-
-<div class="card" style="padding:0;overflow:hidden">
-  {% if items %}
-  {% for c in items %}
-  <a href="/controls/{{ c.id }}" class="ctrl-row">
-
-    {# Left: ID + family name (centred) #}
-    <div class="ctrl-meta">
-      <div class="ctrl-id">{{ c.id | upper }}</div>
-      {% if c.family_title %}
-      <div class="family-name">{{ c.family_title }}</div>
-      {% endif %}
-    </div>
-
-    {# Right: title + brief summary #}
-    <div>
-      <div class="ctrl-title">{{ c.title }}</div>
-      {% if c.summary %}
-      <div class="ctrl-summary">{{ c.summary }}</div>
-      {% endif %}
-    </div>
-
-  </a>
-  {% endfor %}
-  {% else %}
-  <div style="padding:48px;text-align:center;color:var(--muted)">
-    No controls match your filter.
-    <a href="/controls" style="color:var(--cyan)">Clear filters</a>
+{# ── Section 1: Primary Compliance Frameworks ── #}
+{% if primary_catalogs %}
+<div class="cs-section">
+  <div class="cs-section-head">
+    <span class="cs-section-label">Compliance Frameworks</span>
+    <span class="cs-section-sub">Structured catalogs with baseline profiles</span>
   </div>
-  {% endif %}
-</div>
 
-{% if items %}
-{{ paginate(page, total_pages, per_page, "/controls", "family=" ~ family ~ "&q=" ~ q) }}
+  <div class="cs-primary-stack">
+  {% for fw in primary_catalogs %}
+  {% set bls     = catalog_baselines.get(fw.short_name, []) %}
+  {% set fw_ovls = catalog_overlays.get(fw.short_name, []) %}
+  {% set dest    = '/controls/catalog/' + fw.short_name + '/overlays' if fw_ovls else fw.link %}
+
+  <div class="cs-primary-card"
+       role="button"
+       tabindex="0"
+       onclick="window.location.href='{{ dest }}'">
+
+    {# Left 2/3: info #}
+    <div class="cs-pc-main">
+      <div>
+        <div style="margin-bottom:4px">
+          <div class="cs-cat-name">{{ fw.name }}</div>
+        </div>
+        {% if fw.description %}
+        <div class="cs-cat-desc">{{ fw.description }}</div>
+        {% endif %}
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:10px">
+        <div class="cs-cat-stats">
+          {% if fw.ctrl_count %}<span><span class="cs-stat-val">{{ fw.ctrl_count }}</span> controls</span>{% endif %}
+          {% if fw.domain_count %}<span><span class="cs-stat-val">{{ fw.domain_count }}</span> domains</span>{% endif %}
+        </div>
+        <span class="cs-card-hint">
+          {% if fw_ovls %}Overlays <span class="cs-card-hint-arrow">→</span>{% else %}Browse <span class="cs-card-hint-arrow">→</span>{% endif %}
+        </span>
+      </div>
+    </div>
+
+    {# Right 1/3: baselines #}
+    {% if bls %}
+    <div class="cs-pc-baselines" onclick="event.stopPropagation()">
+      <div class="cs-panel-header">Baselines</div>
+      {% for bl in bls %}
+      <div class="{{ 'cs-bl-row ' + bl.cls }}"
+           role="button"
+           onclick="event.stopPropagation();window.location.href='{% if fw_ovls %}/controls/catalog/{{ fw.short_name }}/overlays?baseline={{ bl.short_name }}{% else %}/controls/build?base={{ bl.short_name }}{% endif %}'">
+        {{ bl.label }}
+        <span class="cs-bl-row-count">{{ bl.ctrl_count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="cs-pc-baselines" style="justify-content:center;align-items:center">
+      <span style="font-size:0.7em;color:var(--muted);text-align:center">No baselines</span>
+    </div>
+    {% endif %}
+
+  </div>
+  {% endfor %}
+  </div><!-- /cs-primary-stack -->
+</div>
 {% endif %}
+
+{# ── Section 2: Overlay & Extension Frameworks — title card #}
+{% if overlay_frameworks %}
+<div class="cs-section">
+  <a href="/controls/overlays" class="cs-section-card">
+    <div>
+      <div class="cs-section-card-title">Overlay &amp; Extension Frameworks</div>
+      <div class="cs-section-card-sub">{{ total_overlay_count }} framework{{ 's' if total_overlay_count != 1 }} · Augment baselines with sector-specific and program-specific requirements</div>
+    </div>
+    <span style="color:var(--cyan);font-size:1.2em;flex-shrink:0">→</span>
+  </a>
+</div>
+{% endif %}
+
+{# ── Section 3: Regulations — title card #}
+{% if regulations_by_sector %}
+<div class="cs-section">
+  <a href="/controls/regulations" class="cs-section-card">
+    <div>
+      <div class="cs-section-card-title">Regulations &amp; Mandates</div>
+      <div class="cs-section-card-sub">{{ total_reg_count }} program{{ 's' if total_reg_count != 1 }} · Statutory and regulatory compliance requirements by sector</div>
+    </div>
+    <span style="color:var(--cyan);font-size:1.2em;flex-shrink:0">→</span>
+  </a>
+</div>
+{% endif %}
+
+{# ── Section 4: Reference Frameworks — title card #}
+{% if reference_frameworks %}
+<div class="cs-section">
+  <a href="/controls/reference" class="cs-section-card">
+    <div>
+      <div class="cs-section-card-title">Reference Frameworks</div>
+      <div class="cs-section-card-sub">{{ total_ref_count }} framework{{ 's' if total_ref_count != 1 }} · Non-prescriptive guidance and best-practice frameworks</div>
+    </div>
+    <span style="color:var(--cyan);font-size:1.2em;flex-shrink:0">→</span>
+  </a>
+</div>
+{% endif %}
+
 {% endblock %}

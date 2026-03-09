@@ -39,11 +39,16 @@
 {% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <a href="/systems">Systems</a>
+  <span class="sep">/</span>
+  <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+  <span class="sep">/</span>
+  <span>Daily Ops</span>
+</div>
+
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
   <div>
-    <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">
-      <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a> / Daily Operations
-    </div>
     <h1 style="font-size:1.3em;margin:0">Daily Ops Hub
       <span style="font-size:0.6em;color:{% if completed_today == task_nums|length %}var(--green){% else %}var(--cyan){% endif %};margin-left:8px">
         {{ completed_today }}/{{ task_nums|length }} tasks
@@ -60,18 +65,18 @@
 
 {# ── Metric Strip ─────────────────────────────────────────────────────────── #}
 <div class="metric-strip">
-  <div class="metric-tile">
+  <a href="/poam?system_id={{ system.id }}" class="metric-tile" style="text-decoration:none;color:inherit">
     <div class="metric-val" style="color:{% if snap_open_poams > 0 %}var(--yellow){% else %}var(--green){% endif %}">{{ snap_open_poams }}</div>
     <div class="metric-lbl">Open POA&Ms</div>
-  </div>
-  <div class="metric-tile">
+  </a>
+  <a href="/poam?system_id={{ system.id }}&overdue=1" class="metric-tile" style="text-decoration:none;color:inherit">
     <div class="metric-val" style="color:{% if snap_overdue_poams > 0 %}var(--red){% else %}var(--green){% endif %}">{{ snap_overdue_poams }}</div>
     <div class="metric-lbl">Overdue POA&Ms</div>
-  </div>
-  <div class="metric-tile">
+  </a>
+  <a href="/risks?system_id={{ system.id }}" class="metric-tile" style="text-decoration:none;color:inherit">
     <div class="metric-val" style="color:{% if snap_open_risks > 0 %}var(--yellow){% else %}var(--green){% endif %}">{{ snap_open_risks }}</div>
     <div class="metric-lbl">Open Risks</div>
-  </div>
+  </a>
   <div class="metric-tile">
     <div class="metric-val" style="color:{% if snap_open_obs > 0 %}var(--yellow){% else %}var(--green){% endif %}">{{ snap_open_obs }}</div>
     <div class="metric-lbl">Open Observations</div>

@@ -90,6 +90,12 @@
 {% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <a href="/dashboard">Dashboard</a>
+  <span class="sep">/</span>
+  <span>SCA Workspace</span>
+</div>
+
 <div class="workspace-header">
   <h1>⊞ Security Control Assessor Workspace</h1>
   <p>Manage assessments, review control implementations, and upload SAR/SAP artifacts.</p>
@@ -198,7 +204,7 @@
     <span class="doc-queue-icon">⊞</span>
     <div class="doc-queue-info">
       <h3>Control Catalog</h3>
-      <p>Browse NIST 800-53r5 controls and review implementation narratives.</p>
+      <p>Browse controls across all frameworks and review implementation narratives.</p>
     </div>
     <a href="/controls" class="btn-sm">Browse →</a>
   </div>

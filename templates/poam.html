@@ -1,12 +1,16 @@
 {% extends "base.html" %}
-{% block title %}{{ app_name }} — POA&M Tracker{% endblock %}
+{% block title %}{{ app_name }} — {{ terms.poam }} Tracker{% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <span>{{ terms.poam }} Tracker</span>
+</div>
+
 {# ── Page header ──────────────────────────────────────────────────────────── #}
 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
   <div>
-    <h1 style="margin:0">POA&amp;M Tracker</h1>
-    <p class="text-muted" style="margin-top:4px;font-size:0.88em">Plan of Action &amp; Milestones · All open items and remediation status</p>
+    <h1 style="margin:0">{{ terms.poam }} Tracker</h1>
+    <p class="text-muted" style="margin-top:4px;font-size:0.88em">{{ terms.poam_full }} · All open items and remediation status</p>
   </div>
   <div style="display:flex;gap:8px;align-items:center">
     <a href="/poam/export" class="btn btn-ghost btn-sm">↓ Export</a>
@@ -25,12 +29,12 @@
 {% set _card_closed  = (status_filter == 'closed' and closed_this_month_filter == '1') %}
 <div class="stats" style="margin-bottom:24px">
   <a href="/poam?status=all" class="stat{% if _card_all %} stat-active{% endif %}" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
-     title="View all POA&amp;M items">
+     title="View all {{ terms.poam_items }}">
     <div class="stat-value">{{ total_all }}</div>
     <div class="stat-label">All Items</div>
   </a>
   <a href="/poam?status=open" class="stat{% if _card_open %} stat-active{% endif %}" style="text-decoration:none;cursor:pointer;transition:background 0.15s"
-     title="View all open POA&amp;M items">
+     title="View all open {{ terms.poam_items }}">
     <div class="stat-value">{{ total_open }}</div>
     <div class="stat-label">Open Items</div>
   </a>
@@ -148,12 +152,18 @@
 </form>
 
 {# ── Items table ───────────────────────────────────────────────────────────── #}
-<div class="section-header" style="display:flex;justify-content:space-between;align-items:center">
-  <span>POA&amp;M Items</span>
-  <span class="text-muted" style="font-size:0.8em;font-weight:400">
-    {{ total_filtered }} item{{ 's' if total_filtered != 1 }}
-    {% if total_pages > 1 %} · Page {{ page }}/{{ total_pages }}{% endif %}
-  </span>
+<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+  <span>{{ terms.poam_items }}</span>
+  <div style="display:flex;align-items:center;gap:10px">
+    <input type="text" id="poamSearch" placeholder="Search this page…"
+           oninput="filterPoam(this.value)"
+           style="background:var(--surface);border:1px solid var(--border);color:var(--text);
+                  border-radius:5px;padding:5px 10px;font-size:0.82em;width:200px">
+    <span class="text-muted" style="font-size:0.8em;font-weight:400;white-space:nowrap">
+      {{ total_filtered }} item{{ 's' if total_filtered != 1 }}
+      {% if total_pages > 1 %} · Page {{ page }}/{{ total_pages }}{% endif %}
+    </span>
+  </div>
 </div>
 <div class="card" style="padding:0;overflow:hidden">
   {% if page_items %}
@@ -161,14 +171,30 @@
   <table>
     <thead>
       <tr>
-        <th>ID</th>
-        <th>System</th>
-        <th>Control</th>
-        <th>Weakness</th>
-        <th>Severity</th>
-        <th>Responsible Party</th>
-        <th>Due Date</th>
-        <th>Status</th>
+        {# Build sort URL preserving all current params, toggling dir on re-click #}
+        {% macro sort_url(col) %}
+          {%- set _d = 'desc' if (sort_field == col and sort_dir == 'asc') else 'asc' -%}
+          {%- set _params = request.query_params | list -%}
+          /poam?sort={{ col }}&amp;dir={{ _d }}
+          {%- if status_filter %}&amp;status={{ status_filter }}{% endif %}
+          {%- if severity_filter %}&amp;severity={{ severity_filter }}{% endif %}
+          {%- if system_filter %}&amp;system_id={{ system_filter }}{% endif %}
+          {%- if crit_high_filter %}&amp;crit_high={{ crit_high_filter }}{% endif %}
+          {%- if overdue_filter %}&amp;overdue={{ overdue_filter }}{% endif %}
+          {%- if due_soon_filter %}&amp;due_soon={{ due_soon_filter }}{% endif %}
+          {%- if closed_this_month_filter %}&amp;closed_this_month={{ closed_this_month_filter }}{% endif %}
+        {%- endmacro %}
+        {% macro sort_icon(col) %}
+          {%- if sort_field == col %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% else %}<span style="opacity:0.3">⇅</span>{% endif %}
+        {%- endmacro %}
+        <th style="cursor:pointer;user-select:none" scope="col"><a href="{{ sort_url('id') }}" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:4px">ID {{ sort_icon('id') }}</a></th>
+        <th scope="col">System</th>
+        <th style="cursor:pointer;user-select:none" scope="col"><a href="{{ sort_url('control') }}" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:4px">Control {{ sort_icon('control') }}</a></th>
+        <th style="cursor:pointer;user-select:none" scope="col"><a href="{{ sort_url('weakness') }}" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:4px">Weakness {{ sort_icon('weakness') }}</a></th>
+        <th style="cursor:pointer;user-select:none" scope="col"><a href="{{ sort_url('severity') }}" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:4px">Severity {{ sort_icon('severity') }}</a></th>
+        <th style="cursor:pointer;user-select:none" scope="col"><a href="{{ sort_url('responsible') }}" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:4px">Responsible Party {{ sort_icon('responsible') }}</a></th>
+        <th style="cursor:pointer;user-select:none" scope="col"><a href="{{ sort_url('due') }}" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:4px">Due Date {{ sort_icon('due') }}</a></th>
+        <th style="cursor:pointer;user-select:none" scope="col"><a href="{{ sort_url('status') }}" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:4px">Status {{ sort_icon('status') }}</a></th>
       </tr>
     </thead>
     <tbody>
@@ -290,7 +316,7 @@
   <div style="padding:60px;text-align:center">
     <div style="font-size:2em;margin-bottom:12px;color:#1e1e30">[ ]</div>
     <div class="text-muted" style="margin-bottom:16px;font-size:0.9em">
-      No POA&amp;M items match the current filter.
+      No {{ terms.poam_items | lower }} match the current filter.
     </div>
     <a href="/poam/new" class="btn btn-primary btn-sm">+ New Item</a>
   </div>
@@ -304,6 +330,14 @@
 
 {% block scripts %}
 <script>
+// POA&M search filter (current page only)
+function filterPoam(q) {
+  var term = q.trim().toLowerCase();
+  document.querySelectorAll('table tbody tr').forEach(function(row) {
+    row.style.display = !term || row.textContent.toLowerCase().indexOf(term) !== -1 ? '' : 'none';
+  });
+}
+
 // POA&M status picker — click badge to open a select, choose new status
 const STATUS_STYLE = {
   'draft':           {bg:'rgba(136,136,136,0.1)',  color:'var(--muted)',   label:'Draft'},

@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block title %}Framework Management — BLACKSITE{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-inner">
+    <div class="ph-breadcrumb">
+      <a href="/admin" class="ph-bc-item">Admin</a>
+      <span class="ph-bc-sep">›</span>
+      <span class="ph-bc-item">Framework Management</span>
+    </div>
+    <h1 class="ph-title">Framework Management</h1>
+    <p class="ph-sub">
+      Enable or disable compliance frameworks at the org level. Disabling a framework immediately
+      suppresses all associated controls across every system and removes that framework's knowledge
+      from the AI assistant. Re-enabling restores all records.
+    </p>
+  </div>
+</div>
+
+<div class="content-area">
+
+  {# ── Framework Enable/Disable Table ── #}
+  <div class="card" style="margin-bottom:1.5rem;">
+    <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; padding:1rem 1.25rem 0.75rem;">
+      <h2 style="font-size:0.9rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:0;">Org-Enabled Frameworks</h2>
+    </div>
+
+    {% set categories = frameworks | map(attribute='fw') | map(attribute='category') | unique | list | sort %}
+    {% for cat in categories %}
+    {% set cat_fws = frameworks | selectattr('fw.category', 'equalto', cat) | list %}
+    <div style="padding:0.25rem 1.25rem 0.5rem;">
+      <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); padding:0.75rem 0 0.5rem; border-top:1px solid var(--border);">{{ cat | title }}</div>
+      <table class="data-table" style="margin-bottom:0.5rem;">
+        <thead>
+          <tr>
+            <th style="width:30%">Framework</th>
+            <th style="width:10%">Kind</th>
+            <th style="width:8%">Status</th>
+            <th style="width:20%">Disabled By / Note</th>
+            <th style="width:32%"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in cat_fws %}
+          {% set fw = item.fw %}
+          <tr>
+            <td>
+              <strong>{{ fw.name }}</strong>
+              {% if fw.short_name %}<br><span style="font-size:0.75rem; color:var(--text-muted);">{{ fw.short_name }}</span>{% endif %}
+            </td>
+            <td><span class="badge badge-neutral">{{ fw.kind }}</span></td>
+            <td>
+              {% if item.enabled %}
+              <span class="badge badge-ok">Enabled</span>
+              {% else %}
+              <span class="badge badge-danger">Disabled</span>
+              {% endif %}
+            </td>
+            <td style="font-size:0.8rem; color:var(--text-muted);">
+              {% if not item.enabled %}
+              {{ item.disabled_by or '—' }}{% if item.disabled_at %} · {{ item.disabled_at.strftime('%Y-%m-%d') if item.disabled_at else '' }}{% endif %}
+              {% if item.disable_note %}<br><em>{{ item.disable_note }}</em>{% endif %}
+              {% else %}—{% endif %}
+            </td>
+            <td style="text-align:right;">
+              {% if item.enabled %}
+              <button class="btn btn-sm btn-danger-outline" onclick="openDisableModal('{{ fw.id }}', '{{ fw.name | replace("'", "\\'") }}')">Disable</button>
+              {% else %}
+              <form method="POST" action="/admin/frameworks/{{ fw.id }}/toggle" style="display:inline">
+                <input type="hidden" name="action" value="enable">
+                <button type="submit" class="btn btn-sm btn-secondary">Re-enable</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# ── Data Attribute Definitions ── #}
+  <div class="card" style="margin-bottom:1.5rem;">
+    <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; padding:1rem 1.25rem 0.75rem;">
+      <h2 style="font-size:0.9rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:0;">Data Attribute Registry</h2>
+      <button class="btn btn-sm btn-primary" onclick="document.getElementById('addAttrModal').style.display='flex'">+ Add Attribute</button>
+    </div>
+    <div style="padding:0 1.25rem 1rem;">
+      <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+        Data attributes replace the old system-level boolean flags. Each attribute can trigger privacy officer review,
+        contracting officer scope, and notification rules. Add new regulatory attributes here without schema changes.
+      </p>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Label</th>
+            <th>Jurisdiction</th>
+            <th>Regulation</th>
+            <th style="text-align:center">Privacy Review</th>
+            <th style="text-align:center">CO Review</th>
+            <th style="text-align:center">Notify</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ad in attr_defs %}
+          <tr>
+            <td><code>{{ ad.key }}</code></td>
+            <td>{{ ad.label }}<br><span style="font-size:0.75rem; color:var(--text-muted);">{{ ad.short_label }}</span></td>
+            <td>{{ ad.jurisdiction or '—' }}</td>
+            <td style="font-size:0.8rem; color:var(--text-muted);">{{ ad.regulation or '—' }}</td>
+            <td style="text-align:center;">{% if ad.triggers_privacy_review %}<span class="badge badge-ok">Yes</span>{% else %}—{% endif %}</td>
+            <td style="text-align:center;">{% if ad.triggers_co_review %}<span class="badge badge-ok">Yes</span>{% else %}—{% endif %}</td>
+            <td style="text-align:center;">{% if ad.triggers_notification %}<span class="badge badge-warn">Yes</span>{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+{# ── Disable Modal ── #}
+<div id="disableModal" role="dialog" aria-modal="true" aria-labelledby="disableModal-heading" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:1000; align-items:center; justify-content:center;">
+  <div class="card" style="width:480px; padding:1.75rem;">
+    <h3 id="disableModal-heading" style="margin-bottom:1rem;">Disable Framework</h3>
+    <p id="disableModalBody" style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:1rem;"></p>
+    <div style="padding:0.75rem; background:rgba(244,67,54,.08); border:1px solid rgba(244,67,54,.25); border-radius:6px; margin-bottom:1.25rem; font-size:0.85rem; color:var(--text-secondary);">
+      <strong>Immediate effects:</strong> All SystemControl records for this framework will be suppressed across every system.
+      POA&amp;M items remain. The AI assistant will no longer reference this framework's knowledge base.
+      All effects are fully reversed on re-enable.
+    </div>
+    <form method="POST" id="disableModalForm">
+      <input type="hidden" name="action" value="disable">
+      <div class="form-group">
+        <label class="form-label">Reason / Note <span style="color:var(--text-muted); font-weight:400;">(optional)</span></label>
+        <input type="text" name="note" class="form-control" placeholder="e.g. Client does not use CMMC frameworks">
+      </div>
+      <div style="display:flex; gap:0.75rem; justify-content:flex-end; margin-top:1rem;">
+        <button type="button" class="btn btn-secondary" onclick="closeDisableModal()">Cancel</button>
+        <button type="submit" class="btn btn-danger">Disable Framework</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ── Add Attribute Modal ── #}
+<div id="addAttrModal" role="dialog" aria-modal="true" aria-labelledby="addAttrModal-heading" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:1000; align-items:center; justify-content:center;">
+  <div class="card" style="width:520px; padding:1.75rem; max-height:90vh; overflow-y:auto;">
+    <h3 id="addAttrModal-heading" style="margin-bottom:1rem;">Add Data Attribute</h3>
+    <form method="POST" action="/admin/data-attributes">
+      <div class="form-group">
+        <label class="form-label">Key <span class="req" aria-hidden="true">*</span></label>
+        <input type="text" name="key" class="form-control" required aria-required="true" placeholder="e.g. ferpa, coppa, lgpd">
+        <small style="color:var(--text-muted);">Lowercase, underscores allowed. Must be unique.</small>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+        <div class="form-group">
+          <label class="form-label">Label <span class="req" aria-hidden="true">*</span></label>
+          <input type="text" name="label" class="form-control" required aria-required="true" placeholder="Full regulatory name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Short Label <span class="req" aria-hidden="true">*</span></label>
+          <input type="text" name="short_label" class="form-control" required aria-required="true" placeholder="e.g. FERPA" maxlength="12">
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+        <div class="form-group">
+          <label class="form-label">Jurisdiction</label>
+          <input type="text" name="jurisdiction" class="form-control" placeholder="US, EU, CA, global…">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Regulation</label>
+          <input type="text" name="regulation" class="form-control" placeholder="Cite the regulation">
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+        <label style="display:flex; align-items:center; gap:0.5rem; font-size:0.875rem; cursor:pointer;">
+          <input type="checkbox" name="triggers_privacy_review"> Privacy Review
+        </label>
+        <label style="display:flex; align-items:center; gap:0.5rem; font-size:0.875rem; cursor:pointer;">
+          <input type="checkbox" name="triggers_co_review"> CO Review
+        </label>
+        <label style="display:flex; align-items:center; gap:0.5rem; font-size:0.875rem; cursor:pointer;">
+          <input type="checkbox" name="triggers_notification" checked> Notify
+        </label>
+      </div>
+      <div style="display:flex; gap:0.75rem; justify-content:flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('addAttrModal').style.display='none'">Cancel</button>
+        <button type="submit" class="btn btn-primary">Add Attribute</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+var _adminFwLastFocus = null;
+function openDisableModal(fwId, fwName) {
+  _adminFwLastFocus = document.activeElement;
+  document.getElementById('disableModalBody').textContent =
+    'You are about to disable "' + fwName + '". This will suppress all associated controls immediately.';
+  document.getElementById('disableModalForm').action = '/admin/frameworks/' + fwId + '/toggle';
+  var modal = document.getElementById('disableModal');
+  modal.style.display = 'flex';
+  var focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+  if (focusable.length) focusable[0].focus();
+}
+function closeDisableModal() {
+  document.getElementById('disableModal').style.display = 'none';
+  if (_adminFwLastFocus) _adminFwLastFocus.focus();
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    if (document.getElementById('disableModal').style.display === 'flex') closeDisableModal();
+    if (document.getElementById('addAttrModal').style.display === 'flex') {
+      document.getElementById('addAttrModal').style.display = 'none';
+      if (_adminFwLastFocus) _adminFwLastFocus.focus();
+    }
+  }
+});
+</script>
+{% endblock %}

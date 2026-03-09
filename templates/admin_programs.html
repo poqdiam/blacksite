@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Deployment Profiles{% endblock %}
+
+{% block head %}
+<style>
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+.profile-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color .15s;
+}
+.profile-card.is-active {
+  border-color: rgba(0,255,204,.4);
+  box-shadow: 0 0 18px rgba(0,255,204,.06);
+}
+.profile-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 12px;
+}
+.profile-name   { font-size: 0.92em; font-weight: 800; color: var(--text); }
+.profile-desc   { font-size: 0.78em; color: var(--muted); line-height: 1.45; padding: 0 20px 12px; }
+.profile-meta   {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  background: rgba(255,255,255,.02);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+}
+.profile-meta-item { display: flex; flex-direction: column; gap: 2px; }
+.meta-label { font-size: 0.58em; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.meta-val   { font-size: 0.78em; color: var(--text); font-weight: 600; }
+.profile-fws {
+  padding: 10px 20px;
+  border-top: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; gap: 5px;
+}
+.fw-chip {
+  font-size: 0.64em; font-weight: 700; padding: 2px 7px; border-radius: 3px;
+  background: rgba(0,255,204,.06); color: var(--cyan); border: 1px solid rgba(0,255,204,.15);
+}
+.profile-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.status-active {
+  font-size: 0.68em; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 3px;
+  background: rgba(0,255,204,.1); color: var(--cyan); border: 1px solid rgba(0,255,204,.25);
+}
+.status-inactive {
+  font-size: 0.68em; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 3px;
+  background: rgba(158,158,158,.08); color: var(--muted); border: 1px solid var(--border);
+}
+.info-bar {
+  background: rgba(0,255,204,.04); border: 1px solid rgba(0,255,204,.15);
+  border-radius: 6px; padding: 12px 16px; margin-bottom: 24px;
+  font-size: 0.82em; color: var(--muted); line-height: 1.5;
+}
+.info-bar strong { color: var(--text); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/admin">Admin</a>
+  <span class="sep">/</span>
+  <span>Deployment Profiles</span>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:6px">
+  <h1 style="margin:0">Deployment Profiles</h1>
+</div>
+<p style="color:var(--muted);font-size:0.85em;margin-bottom:16px">
+  Pre-configured compliance program bundles. Activating a profile enables its framework set
+  in the org framework catalog and sets the recommended workflow terminology.
+  Multiple profiles can be active simultaneously for multi-framework deployments.
+</p>
+
+<div class="info-bar">
+  <strong>How it works:</strong>
+  Activating a profile enables its frameworks in
+  <a href="/admin/frameworks" style="color:var(--cyan)">Framework Management</a>
+  so they appear in the Control Catalog and system selection menus.
+  It does <em>not</em> disable other active frameworks — you can combine profiles freely.
+  Deactivating only marks the profile inactive; it does not disable frameworks.
+</div>
+
+<div class="profile-grid">
+{% for pd in profile_data %}
+{% set p = pd.profile %}
+<div class="profile-card{% if p.is_active %} is-active{% endif %}">
+
+  <div class="profile-header">
+    <div>
+      <div class="profile-name">{{ p.name }}</div>
+      {% if p.activated_by and p.is_active %}
+      <div style="font-size:0.68em;color:var(--muted);margin-top:3px">
+        Activated by {{ p.activated_by }}{% if p.activated_at %} on {{ p.activated_at.strftime('%Y-%m-%d') }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    <span class="{% if p.is_active %}status-active{% else %}status-inactive{% endif %}">
+      {% if p.is_active %}Active{% else %}Inactive{% endif %}
+    </span>
+  </div>
+
+  <div class="profile-desc">{{ p.description }}</div>
+
+  <div class="profile-meta">
+    <div class="profile-meta-item">
+      <span class="meta-label">Default Catalog</span>
+      <span class="meta-val">{{ p.primary_catalog or '—' }}</span>
+    </div>
+    <div class="profile-meta-item">
+      <span class="meta-label">Corrective Action Term</span>
+      <span class="meta-val">{{ pd.terms.get('poam', 'POA&M') }}</span>
+    </div>
+    <div class="profile-meta-item">
+      <span class="meta-label">Finding Label</span>
+      <span class="meta-val">{{ pd.terms.get('weakness', 'Weakness') }}</span>
+    </div>
+    <div class="profile-meta-item">
+      <span class="meta-label">Frameworks in Bundle</span>
+      <span class="meta-val">{{ pd.total_sns }}</span>
+    </div>
+  </div>
+
+  {% if pd.framework_sns %}
+  <div class="profile-fws">
+    {% for sn in pd.framework_sns %}
+    <span class="fw-chip">{{ sn }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if pd.roles %}
+  <div style="padding:8px 20px 10px;border-top:1px solid var(--border)">
+    <div class="meta-label" style="margin-bottom:5px">Suggested Roles</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px">
+      {% for role in pd.roles %}
+      <span style="font-size:0.65em;font-weight:700;padding:2px 6px;border-radius:3px;
+                   background:rgba(123,97,255,.08);color:var(--accent,#7b61ff);
+                   border:1px solid rgba(123,97,255,.15)">{{ role }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="profile-footer">
+    <div style="font-size:0.72em;color:var(--muted)">
+      {% if p.is_builtin %}Built-in preset{% else %}Custom{% endif %}
+    </div>
+    <div style="display:flex;gap:8px">
+      {% if p.is_active %}
+      <form method="POST" action="/admin/programs/{{ p.id }}/deactivate" style="margin:0">
+        <button type="submit" class="btn btn-ghost btn-sm"
+                style="color:var(--muted);border-color:var(--border)"
+                onclick="return confirm('Deactivate {{ p.name }}? This will not disable any frameworks.')">
+          Deactivate
+        </button>
+      </form>
+      {% else %}
+      <form method="POST" action="/admin/programs/{{ p.id }}/activate" style="margin:0">
+        <button type="submit" class="btn btn-primary btn-sm">
+          Activate
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endfor %}
+</div>
+
+{% if not profile_data %}
+<div class="card" style="padding:40px;text-align:center;color:var(--muted);font-size:0.88em">
+  No deployment profiles found. Restart the server to seed built-in profiles.
+</div>
+{% endif %}
+
+{% endblock %}

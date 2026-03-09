@@ -1,0 +1,201 @@
+Repo: /home/graycat/projects/blacksite
+SHA: 20a337ab40de71efdd614f60cdcfb97d13fd3b2d
+Generated: 2026-03-01T18:50:43Z
+
+Top priority sources
+- app/main.py
+- config.yaml
+- app/models.py
+- app/updater.py
+- app/mailer.py
+
+Runtime snapshots to capture
+- version_stamp: branch, sha, build_time_utc for deployed instance
+- route_map: effective routes plus methods plus tags plus auth guard names
+- effective_config_redacted: effective config values with secrets removed
+- job_status: scheduled jobs plus last-run plus last-status plus last-error
+- db_schema: tables, columns, indexes, foreign keys
+- audit_vocab: event types, resource types, action codes, UI mapping rules
+
+Sources list
+- .gitignore |  | employee
+- app/__init__.py | python | employee
+- app/assessor.py | assessment,python,scoring | employee
+- app/mailer.py | email,notifications,python | secret
+- app/main.py | api,entrypoint,python,routes,ui | admin
+- app/models.py | db,python,schema | admin
+- app/parser.py | parser,python,ssp | employee
+- app/quiz.py | python | employee
+- app/remediation.py | python,remediation | employee
+- app/rss_feed.py | python | employee
+- app/scorer.py | python | employee
+- app/updater.py | feeds,jobs,nist,python | employee
+- config.yaml | config | admin
+- docs/ATO_ALERTS_SPEC.md | docs | employee
+- docs/AUDIT_REPORT.md | docs | employee
+- docs/AUTOFAIL_SCHEDULER_SPEC.md | docs | employee
+- docs/CHANGELOG.md | docs | employee
+- docs/DEPLOY_VERIFY.md | docs | employee
+- docs/DESIGN_MEMO_MULTI_NODE.md | docs | employee
+- docs/ERROR_500_ROOT_CAUSE_SSP_ANALYZER.txt | docs | employee
+- docs/EVIDENCE_INDEX.md | docs | employee
+- docs/FEED_SOURCES_SPEC.txt | docs | employee
+- docs/FIXLIST.md | docs | employee
+- docs/ISSUE_SUMMARY.md | docs | employee
+- docs/ISSUE_SUMMARY_LIST4.txt | docs | employee
+- docs/NAV_CLEANUP_PLAN.txt | docs | employee
+- docs/PERF_SHELL_PERSISTENCE_NOTES.txt | docs | employee
+- docs/RBAC_RUN_SUMMARY.md | docs | employee
+- docs/RELEASE_PROCESS.md | docs | employee
+- docs/REPO_REMOTES.md | docs | employee
+- docs/RMF_BLACKSITE.md | docs | employee
+- docs/SSP_DESIGN_SYSTEM.md | docs | employee
+- docs/TEST_NOTES.md | docs | employee
+- docs/TEST_NOTES_LIST4.txt | docs | employee
+- docs/UPDATE_WCMC_ROOT_CAUSE.md | docs | employee
+- docs/WORKLOG.md | docs | employee
+- docs/role_workflow.csv | docs | employee
+- docs/system_metrics.md | docs | employee
+- requirements.txt |  | employee
+- run.bat |  | employee
+- run.sh |  | employee
+- scripts/bsv_rbac_run | ops,scripts | employee
+- scripts/clean_seed_data.py | ops,python,scripts | employee
+- scripts/generate_aamf_data.py | ops,python,scripts | employee
+- scripts/ingest_pt_controls.py | ops,python,scripts | employee
+- scripts/seed_test_data.py | ops,python,scripts | employee
+- scripts/xylock.py | ops,python,scripts | employee
+- scripts/xylok_scrape_controls.py | ops,python,scripts | employee
+- static/admin-chat.css | static,ui | employee
+- static/admin-chat.js | static,ui | employee
+- static/feed_cache/bleeping.json | static,ui | employee
+- static/feed_cache/cisa_alerts.json | static,ui | employee
+- static/feed_cache/darkreading.json | static,ui | employee
+- static/feed_cache/google.json | static,ui | employee
+- static/feed_cache/krebs.json | static,ui | employee
+- static/feed_cache/nist.json | static,ui | employee
+- static/feed_cache/sans-isc.json | static,ui | employee
+- static/feed_cache/sans.json | static,ui | employee
+- static/feed_cache/thn.json | static,ui | employee
+- static/vendor/chart.umd.min.js | static,ui | employee
+- templates/admin.html | templates,ui | employee
+- templates/admin_autofail.html | templates,ui | employee
+- templates/admin_feeds.html | templates,ui | employee
+- templates/admin_ingest.html | templates,ui | employee
+- templates/admin_ingest_preview.html | templates,ui | employee
+- templates/admin_ssp_review.html | templates,ui | employee
+- templates/admin_ssp_upload.html | templates,ui | employee
+- templates/admin_system_settings.html | templates,ui | employee
+- templates/admin_user_reservations.html | templates,ui | employee
+- templates/admin_users.html | templates,ui | employee
+- templates/ao_decisions.html | templates,ui | employee
+- templates/archived_systems.html | templates,ui | employee
+- templates/artifacts.html | templates,ui | employee
+- templates/assessment_procedures.json | templates,ui | employee
+- templates/ato_dashboard.html | templates,ui | employee
+- templates/ato_document.html | templates,ui | employee
+- templates/ato_system.html | templates,ui | employee
+- templates/audit_log.html | templates,ui | employee
+- templates/auditor_dashboard.html | templates,ui | employee
+- templates/base.html | templates,ui | employee
+- templates/bcdr_dashboard.html | templates,ui | employee
+- templates/ccis.json | templates,ui | employee
+- templates/chat_popup.html | templates,ui | employee
+- templates/ciso_dashboard.html | templates,ui | employee
+- templates/confirm_remove.html | templates,ui | employee
+- templates/connections.html | templates,ui | employee
+- templates/control_detail.html | templates,ui | employee
+- templates/controls.csv | templates,ui | employee
+- templates/controls.html | templates,ui | employee
+- templates/controls.json | templates,ui | employee
+- templates/daily_quiz.html | templates,ui | employee
+- templates/dashboard.html | templates,ui | employee
+- templates/data_owner_dashboard.html | templates,ui | employee
+- templates/eis_assessment.html | templates,ui | employee
+- templates/error_pdf.html | templates,ui | employee
+- templates/errors/403.html | templates,ui | employee
+- templates/errors/404.html | templates,ui | employee
+- templates/errors/500.html | templates,ui | employee
+- templates/gate_quiz.html | templates,ui | employee
+- templates/help_center.html | templates,ui | employee
+- templates/incident_responder_dashboard.html | templates,ui | employee
+- templates/index.html | templates,ui | employee
+- templates/inventory.html | templates,ui | employee
+- templates/issm_daily_portfolio.html | templates,ui | employee
+- templates/issm_dashboard.html | templates,ui | employee
+- templates/macros.html | templates,ui | employee
+- templates/notifications.html | templates,ui | employee
+- templates/observation_detail.html | templates,ui | employee
+- templates/observations.html | templates,ui | employee
+- templates/odp_labels.json | templates,ui | employee
+- templates/pen_tester_dashboard.html | templates,ui | employee
+- templates/pmo_dashboard.html | templates,ui | employee
+- templates/poam.html | templates,ui | employee
+- templates/poam_export.html | templates,ui | employee
+- templates/poam_import.html | templates,ui | employee
+- templates/poam_item.html | templates,ui | employee
+- templates/posture.html | templates,ui | employee
+- templates/print_report.html | templates,ui | employee
+- templates/profile.html | templates,ui | employee
+- templates/profile_feeds.html | templates,ui | employee
+- templates/provision_user.html | templates,ui | employee
+- templates/quiz.html | templates,ui | employee
+- templates/reports.html | templates,ui | employee
+- templates/results.html | templates,ui | employee
+- templates/risk_form.html | templates,ui | employee
+- templates/risks.html | templates,ui | employee
+- templates/risks_export.html | templates,ui | employee
+- templates/rmf.html | templates,ui | employee
+- templates/rmf_system.html | templates,ui | employee
+- templates/sca_dashboard.html | templates,ui | employee
+- templates/sca_workspace.html | templates,ui | employee
+- templates/search.html | templates,ui | employee
+- templates/shadow_users.html | templates,ui | employee
+- templates/siem.html | templates,ui | employee
+- templates/ssp_export.html | templates,ui | employee
+- templates/ssp_mode_select.html | templates,ui | employee
+- templates/status.html | templates,ui | employee
+- templates/submission_detail.html | templates,ui | employee
+- templates/submission_form.html | templates,ui | employee
+- templates/submissions.html | templates,ui | employee
+- templates/system_control_detail.html | templates,ui | employee
+- templates/system_controls.html | templates,ui | employee
+- templates/system_daily.html | templates,ui | employee
+- templates/system_daily_access_spotcheck.html | templates,ui | employee
+- templates/system_daily_backup_check.html | templates,ui | employee
+- templates/system_daily_change_review.html | templates,ui | employee
+- templates/system_daily_history.html | templates,ui | employee
+- templates/system_daily_logbook.html | templates,ui | employee
+- templates/system_dataflows.html | templates,ui | employee
+- templates/system_detail.html | templates,ui | employee
+- templates/system_form.html | templates,ui | employee
+- templates/system_interconnections.html | templates,ui | employee
+- templates/system_owner_dashboard.html | templates,ui | employee
+- templates/system_parameters.html | templates,ui | employee
+- templates/system_privacy_assessments.html | templates,ui | employee
+- templates/system_report.html | templates,ui | employee
+- templates/system_reports.html | templates,ui | employee
+- templates/system_restore_tests.html | templates,ui | employee
+- templates/system_rotation.html | templates,ui | employee
+- templates/system_rotation_calendar.html | templates,ui | employee
+- templates/system_rotation_history.html | templates,ui | employee
+- templates/system_vendors.html | templates,ui | employee
+- templates/systems.html | templates,ui | employee
+- templates/xylok_reference_bundle.json | templates,ui | employee
+- tests/__init__.py | python,tests | employee
+- tests/rbac/README.md | docs,tests | employee
+- tests/rbac/__init__.py | python,tests | employee
+- tests/rbac/config/curated_flows.yaml | tests | employee
+- tests/rbac/config/fixtures.yaml | tests | employee
+- tests/rbac/config/roles.yaml | tests | employee
+- tests/rbac/discovery.py | python,tests | employee
+- tests/rbac/executor.py | python,tests | employee
+- tests/rbac/fixtures.py | python,tests | employee
+- tests/rbac/notifier.py | python,tests | employee
+- tests/rbac/personas.py | python,tests | employee
+- tests/rbac/reporter.py | python,tests | employee
+- tests/rbac/runner.py | python,tests | employee
+- tests/rbac/systemd/bsv-rbac-runner.service | tests | employee
+- tests/rbac/systemd/bsv-rbac-runner.timer | tests | employee
+- update-controls.bat |  | employee
+- update-controls.sh |  | employee

@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}{{ app_name }} — {% if item %}{{ item.poam_id or item.weakness_name }}{% else %}New POA&M Item{% endif %}{% endblock %}
+{% block title %}{{ app_name }} — {% if item %}{{ item.poam_id or item.weakness_name }}{% else %}New {{ terms.poam_item }}{% endif %}{% endblock %}
 
 {% block content %}
-{% set title = item.weakness_name if item else "New POA&M Item" %}
+{% set title = item.weakness_name if item else ("New " + terms.poam_item) %}
 
 {# ── Breadcrumb ──────────────────────────────────────────────────────────── #}
 <div class="breadcrumb">
-  <a href="/poam">POA&amp;M Tracker</a>
+  <a href="/poam">{{ terms.poam }} Tracker</a>
   <span class="sep">/</span>
   <span>{{ title }}</span>
 </div>
@@ -59,15 +59,15 @@
     </div>
     {% if item.poam_id %}
     <div style="text-align:right">
-      <div style="font-size:0.62em;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">POA&M ID</div>
+      <div style="font-size:0.62em;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">{{ terms.poam }} ID</div>
       <div class="mono" style="font-size:1.15em;font-weight:900;color:var(--cyan);letter-spacing:1px">{{ item.poam_id }}</div>
     </div>
     {% endif %}
   </div>
 {% else %}
   <div style="margin-bottom:24px">
-    <h1 style="margin:0">New POA&amp;M Item</h1>
-    <p class="text-muted" style="margin-top:4px;font-size:0.88em">Document a control weakness and remediation plan</p>
+    <h1 style="margin:0">New {{ terms.poam_item }}</h1>
+    <p class="text-muted" style="margin-top:4px;font-size:0.88em">Document a control {{ terms.weakness | lower }} and remediation plan</p>
   </div>
 {% endif %}
 
@@ -77,13 +77,57 @@
 
     {# ── Section: Identification ── #}
     <div style="margin-bottom:28px">
-      <div class="section-header" style="margin-bottom:18px">Identification</div>
+      <div class="section-header" style="margin-bottom:18px">Identification
+        {% if item %}
+        <span style="font-size:0.65em;font-weight:400;letter-spacing:0;text-transform:none;
+                     color:var(--muted);margin-left:8px">
+          🔒 locked after creation
+        </span>
+        {% endif %}
+      </div>
 
+      {% if item %}
+      {# Locked read-only display for existing items #}
       <div class="form-group">
-        <label for="weakness_name">Weakness Name <span style="color:var(--red)">*</span></label>
+        <label>{{ terms.weakness }} Name</label>
+        <div style="padding:9px 12px;background:var(--surface);border:1px solid var(--border);
+                    border-radius:4px;font-size:0.9em;color:var(--text)">{{ item.weakness_name }}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label>System</label>
+          <div style="padding:9px 12px;background:var(--surface);border:1px solid var(--border);
+                      border-radius:4px;font-size:0.9em;color:var(--text)">
+            {{ linked_system.name if linked_system else (item.system_id or '—') }}
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Control ID</label>
+          <div style="padding:9px 12px;background:var(--surface);border:1px solid var(--border);
+                      border-radius:4px;font-size:0.9em;color:var(--cyan);font-family:var(--mono)">
+            {{ item.control_id or '—' }}
+          </div>
+        </div>
+      </div>
+
+      {% if item.assessment_id %}
+      <div class="form-group" style="margin-top:16px;margin-bottom:0">
+        <label>Assessment ID</label>
+        <div style="padding:9px 12px;background:var(--surface);border:1px solid var(--border);
+                    border-radius:4px;font-size:0.9em;color:var(--muted);font-family:var(--mono)">
+          {{ item.assessment_id }}
+        </div>
+      </div>
+      {% endif %}
+
+      {% else %}
+      {# New item — editable fields #}
+      <div class="form-group">
+        <label for="weakness_name">{{ terms.weakness }} Name <span style="color:var(--red)">*</span></label>
         <input type="text" id="weakness_name" name="weakness_name" required
                value="{{ item.weakness_name if item else '' }}"
-               placeholder="Brief, descriptive name for the identified weakness">
+               placeholder="Brief, descriptive name for the identified {{ terms.weakness | lower }}">
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -93,8 +137,7 @@
             <option value="">— No System —</option>
             {% for sys in systems %}
             <option value="{{ sys.id }}"
-              {% if item and item.system_id == sys.id %}selected
-              {% elif linked_system and linked_system.id == sys.id %}selected{% endif %}>
+              {% if linked_system and linked_system.id == sys.id %}selected{% endif %}>
               {{ sys.name }}{% if sys.abbreviation %} ({{ sys.abbreviation }}){% endif %}
             </option>
             {% endfor %}
@@ -105,7 +148,7 @@
           <label for="control_id">Control ID <span style="color:var(--red)">*</span></label>
           <div style="position:relative;display:flex;gap:6px">
             <input type="text" id="control_id" name="control_id"
-                   value="{{ item.control_id if item else (control_id or '') }}"
+                   value="{{ control_id or '' }}"
                    placeholder="e.g. ac-2 or ac-2, si-3"
                    autocomplete="off"
                    required
@@ -129,20 +172,55 @@
       <div class="form-group" style="margin-top:16px">
         <label for="assessment_id">Assessment ID</label>
         <input type="text" id="assessment_id" name="assessment_id"
-               value="{{ item.assessment_id if item else '' }}"
+               value=""
                placeholder="Optional — link to source assessment">
       </div>
       {% endif %}
+      {% endif %}{# end if item #}
     </div>
 
-    {# ── Section: Weakness Details ── #}
+    {# ── Section: Weakness / Nonconformity / Finding Details ── #}
     <div style="margin-bottom:28px">
-      <div class="section-header" style="margin-bottom:18px">Weakness Details</div>
+      <div class="section-header" style="margin-bottom:18px">{{ terms.weakness }} Details
+        {% if item %}
+        <span style="font-size:0.65em;font-weight:400;letter-spacing:0;text-transform:none;
+                     color:var(--muted);margin-left:8px">
+          🔒 locked after creation
+        </span>
+        {% endif %}
+      </div>
 
+      {% if item %}
+      {# Locked read-only for existing items #}
+      <div class="form-group">
+        <label>Description</label>
+        <div style="padding:9px 12px;background:var(--surface);border:1px solid var(--border);
+                    border-radius:4px;font-size:0.9em;color:var(--text);white-space:pre-wrap;
+                    min-height:60px">{{ item.weakness_description or '—' }}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Detection Source</label>
+          <div style="padding:9px 12px;background:var(--surface);border:1px solid var(--border);
+                      border-radius:4px;font-size:0.9em;color:var(--text)">
+            {{ (item.detection_source or '—') | replace('_',' ') | title }}
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Severity</label>
+          <div style="padding:9px 12px;background:var(--surface);border:1px solid var(--border);
+                      border-radius:4px;font-size:0.9em;font-weight:600;color:{{ sev_color }}">
+            {{ item.severity or '—' }}
+          </div>
+        </div>
+      </div>
+
+      {% else %}
+      {# New item — editable fields #}
       <div class="form-group">
         <label for="weakness_description">Description</label>
         <textarea id="weakness_description" name="weakness_description"
-                  rows="4" placeholder="Describe the nature and scope of the weakness…">{{ item.weakness_description if item else '' }}</textarea>
+                  rows="4" placeholder="Describe the nature and scope of the {{ terms.weakness | lower }}…"></textarea>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -150,10 +228,7 @@
           <label for="detection_source">Detection Source</label>
           <select id="detection_source" name="detection_source">
             {% for src in ['assessment', 'scan', 'audit', 'pentest', 'self_report'] %}
-            <option value="{{ src }}"
-              {% if item and item.detection_source == src %}selected{% endif %}>
-              {{ src | replace('_', ' ') | title }}
-            </option>
+            <option value="{{ src }}">{{ src | replace('_', ' ') | title }}</option>
             {% endfor %}
           </select>
         </div>
@@ -169,14 +244,14 @@
                 ('Informational','#9e9e9e'),
             ] %}
             <option value="{{ sev_opt }}" data-color="{{ sev_col }}"
-              {% if item and item.severity == sev_opt %}selected
-              {% elif not item and sev_opt == 'Moderate' %}selected{% endif %}>
+              {% if sev_opt == 'Moderate' %}selected{% endif %}>
               {{ sev_opt }}
             </option>
             {% endfor %}
           </select>
         </div>
       </div>
+      {% endif %}{# end if item #}
     </div>
 
     {# ── Section: Remediation ── #}
@@ -190,16 +265,62 @@
                placeholder="Team or individual accountable for remediation">
       </div>
 
+      {# Remediation Plan — append-only log for existing items, plain textarea for new #}
       <div class="form-group">
+        {% if item %}
+        <label>Remediation Plan
+          <span style="font-size:0.75em;font-weight:400;color:var(--muted);margin-left:6px">append-only log</span>
+        </label>
+        {% if item.remediation_plan %}
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;
+                    padding:10px 12px;font-size:0.82em;color:var(--text);white-space:pre-wrap;
+                    max-height:200px;overflow-y:auto;font-family:var(--mono);margin-bottom:8px;
+                    line-height:1.6">{{ item.remediation_plan }}</div>
+        {% else %}
+        <div style="padding:10px 12px;background:var(--surface);border:1px solid var(--border);
+                    border-radius:4px;font-size:0.82em;color:var(--muted);margin-bottom:8px">
+          No remediation plan entries yet.
+        </div>
+        {% endif %}
+        <label for="remediation_plan_append" style="font-size:0.8em;color:var(--muted)">
+          Add new entry
+        </label>
+        <textarea id="remediation_plan_append" name="remediation_plan_append"
+                  rows="3" placeholder="Describe steps added to the remediation plan…"></textarea>
+        {% else %}
         <label for="remediation_plan">Remediation Plan</label>
         <textarea id="remediation_plan" name="remediation_plan"
-                  rows="4" placeholder="Describe specific steps, tools, and procedures to remediate this weakness…">{{ item.remediation_plan if item else '' }}</textarea>
+                  rows="4" placeholder="Describe specific steps, tools, and procedures to remediate this weakness…"></textarea>
+        {% endif %}
       </div>
 
+      {# Resources Required — append-only log for existing items, plain textarea for new #}
       <div class="form-group">
+        {% if item %}
+        <label>Resources Required
+          <span style="font-size:0.75em;font-weight:400;color:var(--muted);margin-left:6px">append-only log</span>
+        </label>
+        {% if item.resources_required %}
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;
+                    padding:10px 12px;font-size:0.82em;color:var(--text);white-space:pre-wrap;
+                    max-height:160px;overflow-y:auto;font-family:var(--mono);margin-bottom:8px;
+                    line-height:1.6">{{ item.resources_required }}</div>
+        {% else %}
+        <div style="padding:10px 12px;background:var(--surface);border:1px solid var(--border);
+                    border-radius:4px;font-size:0.82em;color:var(--muted);margin-bottom:8px">
+          No resource entries yet.
+        </div>
+        {% endif %}
+        <label for="resources_required_append" style="font-size:0.8em;color:var(--muted)">
+          Add new entry
+        </label>
+        <textarea id="resources_required_append" name="resources_required_append"
+                  rows="2" placeholder="Additional budget, personnel, tools, or other resources needed…"></textarea>
+        {% else %}
         <label for="resources_required">Resources Required</label>
         <textarea id="resources_required" name="resources_required"
-                  rows="2" placeholder="Budget, personnel, tools, or other resources needed…">{{ item.resources_required if item else '' }}</textarea>
+                  rows="2" placeholder="Budget, personnel, tools, or other resources needed…"></textarea>
+        {% endif %}
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -396,12 +517,30 @@
     <div style="margin-bottom:28px">
       <div class="section-header" style="margin-bottom:18px">Required Fields</div>
       <div class="form-group">
-        <label for="root_cause">Root Cause Summary</label>
-        <textarea id="root_cause" name="root_cause" rows="3"
+        <label for="root_cause">Root Cause Summary <span style="color:var(--red)">*</span>
+          {% if item and item.root_cause %}
+          <span style="font-size:0.75em;font-weight:400;color:var(--muted);margin-left:6px">
+            🔒 locked after first entry
+          </span>
+          {% endif %}
+        </label>
+        {% if item and item.root_cause %}
+        {# Locked — show read-only once set #}
+        <div style="padding:10px 12px;background:var(--surface);border:1px solid var(--border);
+                    border-radius:4px;font-size:0.9em;color:var(--text);white-space:pre-wrap;
+                    min-height:48px">{{ item.root_cause }}</div>
+        <input type="hidden" name="root_cause" value="">
+        {% else %}
+        <textarea id="root_cause" name="root_cause" rows="3" required
                   placeholder="Concise root cause: configuration gap, missing process, tool limitation…">{{ (item.root_cause or '') if item else '' }}</textarea>
+        {% endif %}
       </div>
       <div class="form-group" style="margin-bottom:0">
-        <label for="closure_evidence">Closure Evidence</label>
+        <label for="closure_evidence">Closure Evidence
+          <span style="font-size:0.75em;font-weight:400;color:var(--muted);margin-left:6px">
+            required before Closed Verified
+          </span>
+        </label>
         <textarea id="closure_evidence" name="closure_evidence" rows="3"
                   placeholder="Required before marking Closed Verified: artifact names, screenshot paths, scan results…">{{ (item.closure_evidence or '') if item else '' }}</textarea>
       </div>
@@ -474,7 +613,7 @@
     <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)">
       <a href="/poam" class="btn btn-ghost btn-sm">← Cancel</a>
       <button type="submit" class="btn btn-primary">
-        {% if item %}Save Changes{% else %}Create POA&amp;M Item{% endif %}
+        {% if item %}Save Changes{% else %}Create {{ terms.poam_item }}{% endif %}
       </button>
     </div>
 

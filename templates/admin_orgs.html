@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Organizations{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Organizations</h1>
+    <p class="page-sub">Manage tenant workspaces. Each organization is a fully isolated boundary — systems, users, and data do not cross org lines.</p>
+  </div>
+  <div>
+    <button class="btn btn-sm btn-primary" onclick="document.getElementById('create-org-modal').style.display='flex'">
+      + New Organization
+    </button>
+  </div>
+</div>
+
+{% if orgs %}
+<div class="table-responsive">
+  <table class="table table-hover">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Slug</th>
+        <th>Systems</th>
+        <th>Members</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for org in orgs %}
+      <tr>
+        <td>
+          <strong>{{ org.name }}</strong>
+          {% if org.id == "00000000-0000-0000-0000-000000000001" %}
+          <span class="badge bg-secondary ms-1" style="font-size:0.7em">default</span>
+          {% endif %}
+          {% if org.description %}
+          <div style="font-size:0.8em;color:var(--muted);margin-top:2px">{{ org.description }}</div>
+          {% endif %}
+        </td>
+        <td><code style="font-size:0.8em">{{ org.slug or "—" }}</code></td>
+        <td>
+          <a href="/systems?org_id={{ org.id }}" style="color:var(--text)">
+            {{ org_stats[org.id].systems }}
+          </a>
+        </td>
+        <td>{{ org_stats[org.id].members }}</td>
+        <td>
+          {% if org.is_active %}
+          <span class="badge bg-success">Active</span>
+          {% else %}
+          <span class="badge bg-secondary">Inactive</span>
+          {% endif %}
+        </td>
+        <td style="font-size:0.8em;color:var(--muted)">{{ org.created_at | datetimeformat if org.created_at else "—" }}</td>
+        <td style="text-align:right;white-space:nowrap">
+          {# Scan feature toggle #}
+          {% set scan_on = org_settings.get(org.id, {}).get('scan_enabled') == 'true' %}
+          <form method="post" action="/admin/orgs/{{ org.id }}/settings" style="display:inline">
+            <input type="hidden" name="key" value="scan_enabled">
+            <input type="hidden" name="value" value="{{ 'false' if scan_on else 'true' }}">
+            <button type="submit"
+                    style="font-size:0.72em;padding:2px 8px;border-radius:4px;border:1px solid;
+                           background:{% if scan_on %}rgba(0,200,100,0.1){% else %}var(--bg2){% endif %};
+                           color:{% if scan_on %}var(--green){% else %}var(--muted){% endif %};
+                           border-color:{% if scan_on %}rgba(0,200,100,0.3){% else %}var(--border){% endif %};
+                           cursor:pointer"
+                    title="{{ 'Disable' if scan_on else 'Enable' }} SCAP scanning for {{ org.name }}">
+              {% if scan_on %}Scans ✓{% else %}Scans ✗{% endif %}
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-info">No organizations yet. Create the first one above.</div>
+{% endif %}
+
+{# Create org modal #}
+<div id="create-org-modal"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);
+            z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;
+              padding:2rem;width:100%;max-width:480px">
+    <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:1.5rem">New Organization</h2>
+    <form method="post" action="/admin/orgs/create">
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Name <span style="color:var(--red)">*</span></label>
+        <input type="text" name="name" class="form-control" required placeholder="Acme Defense LLC">
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Slug <span style="color:var(--muted);font-weight:400">(optional, url-safe)</span></label>
+        <input type="text" name="slug" class="form-control" placeholder="acme-defense"
+               pattern="[a-z0-9\-]+" title="lowercase letters, numbers, hyphens only">
+        <div class="form-text">Used in URLs. Leave blank to auto-generate.</div>
+      </div>
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Description <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+        <textarea name="description" class="form-control" rows="2"
+                  placeholder="Short description of this client or program"></textarea>
+      </div>
+      <div style="display:flex;gap:1rem;justify-content:flex-end">
+        <button type="button" class="btn btn-outline"
+                onclick="document.getElementById('create-org-modal').style.display='none'">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-primary">Create Organization</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# Add member inline form at page bottom (quick add) #}
+<div class="card mt-4">
+  <div class="card-header"><strong>Add User to Organization</strong></div>
+  <div class="card-body">
+    <form method="post" action="/admin/orgs/{{ orgs[0].id if orgs else '' }}/add-member"
+          id="add-member-form" class="row g-2 align-items-end">
+      <div class="col-12 col-md-4">
+        <label class="form-label fw-semibold">Organization</label>
+        <select name="_org_id_select" class="form-select form-select-sm"
+                onchange="document.getElementById('add-member-form').action='/admin/orgs/'+this.value+'/add-member'">
+          {% for org in orgs %}
+          <option value="{{ org.id }}">{{ org.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label fw-semibold">Username</label>
+        <input type="text" name="remote_user" class="form-control form-control-sm"
+               placeholder="authelia username" required>
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label fw-semibold">Role</label>
+        <select name="org_role" class="form-select form-select-sm">
+          <option value="member">Member</option>
+          <option value="org_admin">Org Admin</option>
+          <option value="viewer">Viewer</option>
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <button type="submit" class="btn btn-sm btn-primary w-100">Add</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

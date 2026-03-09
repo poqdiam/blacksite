@@ -1,9 +1,19 @@
 {% extends "base.html" %}
 {% block title %}{{ doc_meta.name }} — {{ system.name }} — BLACKSITE{% endblock %}
 {% block content %}
+<div class="breadcrumb">
+  <a href="/systems">Systems</a>
+  <span class="sep">/</span>
+  <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+  <span class="sep">/</span>
+  <a href="/ato/{{ system.id }}">Auth Package</a>
+  <span class="sep">/</span>
+  <span>{{ doc_meta.name }}</span>
+</div>
+
 <div class="page-header">
   <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-    <a href="/ato/{{ system.id }}" style="color:var(--muted);font-size:.85rem;text-decoration:none">← {{ system.name }} ATO Package</a>
+    <a href="/ato/{{ system.id }}" style="color:var(--muted);font-size:.85rem;text-decoration:none">← {{ system.name }} Auth Package</a>
   </div>
   <div style="display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;margin-top:.5rem">
     <h1 class="page-title" style="margin:0">{{ doc_meta.name }}</h1>
@@ -87,18 +97,38 @@
 <!-- ── Right: workflow panel ── -->
 <div style="display:flex;flex-direction:column;gap:1rem">
 
+  <!-- Error banner (prereq block redirect) -->
+  {% if error_msg %}
+  <div style="background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.35);border-radius:6px;padding:.75rem 1rem;font-size:.82rem;color:var(--danger)">
+    <strong style="display:block;margin-bottom:.25rem">⚠ Action blocked</strong>
+    {{ error_msg }}
+  </div>
+  {% endif %}
+
   <!-- Workflow actions -->
   <div class="card">
     <div style="font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:.75rem">Workflow Actions</div>
 
     {% if can_submit %}
-    <form method="post" action="/ato/{{ system.id }}/{{ doc_type }}/action" style="margin-bottom:.75rem">
-      <input type="hidden" name="action" value="submit">
-      <div class="form-group">
-        <textarea name="comment" class="form-control" rows="2" placeholder="Submit note (optional)"></textarea>
+      {% if submit_prereq_blocks %}
+      <div style="background:rgba(255,179,0,0.08);border:1px solid rgba(255,179,0,0.25);border-radius:5px;padding:.6rem .75rem;margin-bottom:.75rem;font-size:.8rem;color:var(--warn)">
+        <strong style="display:block;margin-bottom:.35rem">Prerequisites not met for submit:</strong>
+        {% for b in submit_prereq_blocks %}
+        <div style="margin-bottom:.2rem">
+          • <span class="mono" style="font-size:.9em">{{ b.prereq_doc }}</span> must be <strong>{{ b.needed_status }}</strong> (currently: {{ b.actual_status or 'not started' }}){% if b.note %} — {{ b.note }}{% endif %}
+        </div>
+        {% endfor %}
       </div>
-      <button type="submit" class="btn btn-primary btn-full">Submit for Review →</button>
-    </form>
+      <button class="btn btn-primary btn-full" disabled style="opacity:.4;cursor:not-allowed">Submit for Review →</button>
+      {% else %}
+      <form method="post" action="/ato/{{ system.id }}/{{ doc_type }}/action" style="margin-bottom:.75rem">
+        <input type="hidden" name="action" value="submit">
+        <div class="form-group">
+          <textarea name="comment" class="form-control" rows="2" placeholder="Submit note (optional)"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Submit for Review →</button>
+      </form>
+      {% endif %}
     {% endif %}
 
     {% if can_approve %}
@@ -122,13 +152,25 @@
     {% endif %}
 
     {% if can_finalize %}
-    <form method="post" action="/ato/{{ system.id }}/{{ doc_type }}/action" style="margin-bottom:.5rem">
-      <input type="hidden" name="action" value="finalize">
-      <div class="form-group">
-        <textarea name="comment" class="form-control" rows="2" placeholder="ATO authorization note"></textarea>
+      {% if finalize_prereq_blocks %}
+      <div style="background:rgba(255,179,0,0.08);border:1px solid rgba(255,179,0,0.25);border-radius:5px;padding:.6rem .75rem;margin-bottom:.5rem;font-size:.8rem;color:var(--warn)">
+        <strong style="display:block;margin-bottom:.35rem">Prerequisites not met for finalize:</strong>
+        {% for b in finalize_prereq_blocks %}
+        <div style="margin-bottom:.2rem">
+          • <span class="mono" style="font-size:.9em">{{ b.prereq_doc }}</span> must be <strong>{{ b.needed_status }}</strong> (currently: {{ b.actual_status or 'not started' }}){% if b.note %} — {{ b.note }}{% endif %}
+        </div>
+        {% endfor %}
       </div>
-      <button type="submit" class="btn btn-accent btn-full" onclick="return confirm('Finalize this document as part of the ATO package?')">Finalize (ATO) ⊕</button>
-    </form>
+      <button class="btn btn-accent btn-full" disabled style="opacity:.4;cursor:not-allowed">Finalize (ATO) ⊕</button>
+      {% else %}
+      <form method="post" action="/ato/{{ system.id }}/{{ doc_type }}/action" style="margin-bottom:.5rem">
+        <input type="hidden" name="action" value="finalize">
+        <div class="form-group">
+          <textarea name="comment" class="form-control" rows="2" placeholder="ATO authorization note"></textarea>
+        </div>
+        <button type="submit" class="btn btn-accent btn-full" onclick="return confirm('Finalize this document as part of the ATO package?')">Finalize (ATO) ⊕</button>
+      </form>
+      {% endif %}
     {% endif %}
 
     {% if can_revise %}

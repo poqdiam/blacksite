@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Build Control View{% endblock %}
+
+{% block head %}
+<style>
+  .builder-form {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  .builder-field { display: flex; flex-direction: column; gap: 5px; }
+  .builder-label {
+    font-size: 0.65em; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .builder-field select {
+    background: var(--card); border: 1px solid var(--border);
+    color: var(--text); border-radius: 6px; padding: 7px 10px;
+    font-size: 0.84em; min-width: 200px;
+  }
+  .builder-field select[multiple] { min-width: 260px; height: 140px; }
+  .builder-field select option { padding: 4px 8px; }
+
+  .ctrl-table { width: 100%; border-collapse: collapse; font-size: 0.84em; }
+  .ctrl-table th {
+    background: var(--surface); padding: 8px 12px; text-align: left;
+    font-size: 0.68em; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--muted); border-bottom: 2px solid var(--border); white-space: nowrap;
+    cursor: pointer; user-select: none;
+  }
+  .ctrl-table th:hover { color: var(--text); }
+  .ctrl-table td { padding: 9px 12px; border-bottom: 1px solid rgba(30,30,48,0.7); vertical-align: top; }
+  .ctrl-table tr.filter-row th { padding: 4px 6px; cursor: default; }
+  .ctrl-table tr.filter-row th:hover { color: var(--muted); }
+  .col-filter {
+    width: 100%; box-sizing: border-box;
+    background: var(--card); border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text); font-size: 0.82em; padding: 4px 7px;
+    font-family: inherit; font-weight: 400; letter-spacing: 0; text-transform: none;
+  }
+  .col-filter:focus { outline: none; border-color: rgba(0,255,204,.4); }
+  .sort-ind { font-size: 0.8em; opacity: 0.5; margin-left: 3px; }
+  .table-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; border-top: 1px solid var(--border);
+    font-size: 0.76em; color: var(--muted); flex-wrap: wrap; gap: 8px;
+  }
+  .missing-section {
+    margin-top: 28px; border: 1px solid rgba(244,67,54,.25);
+    border-radius: 8px; overflow: hidden;
+  }
+  .missing-hdr {
+    display: flex; align-items: center; gap: 12px; justify-content: space-between;
+    background: rgba(244,67,54,.06); padding: 12px 18px;
+    border-bottom: 1px solid rgba(244,67,54,.2);
+  }
+  .missing-hdr-title { font-size: 0.75em; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--red); }
+  .ctrl-table tr:hover td { background: rgba(255,255,255,.015); }
+  .ctrl-id {
+    font-family: var(--mono); font-size: 0.88em; font-weight: 700;
+    color: var(--cyan); white-space: nowrap;
+  }
+  .ctrl-title { font-size: 0.85em; color: var(--text); }
+  .ctrl-domain { font-size: 0.75em; color: var(--muted); }
+  .ovl-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .ovl-chip {
+    font-size: 0.68em; font-weight: 700; padding: 2px 6px; border-radius: 3px;
+    white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ovl-chip-direct {
+    background: rgba(0,200,160,0.12); color: var(--cyan);
+    border: 1px solid rgba(0,200,160,0.25);
+  }
+  .ovl-chip-equiv {
+    background: rgba(128,128,128,0.1); color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .coverage-badge {
+    font-size: 0.65em; font-weight: 700; letter-spacing: 0.5px;
+    padding: 2px 7px; border-radius: 3px; white-space: nowrap;
+  }
+  .coverage-yes { background: rgba(0,200,160,0.1); color: var(--cyan); border: 1px solid rgba(0,200,160,0.2); }
+  .coverage-no  { background: rgba(158,158,158,0.07); color: var(--border); border: 1px solid rgba(158,158,158,0.12); }
+  .summary-strip {
+    display: flex; gap: 20px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 20px; margin-bottom: 20px;
+  }
+  .sum-item { display: flex; flex-direction: column; gap: 2px; }
+  .sum-val { font-size: 1.1em; font-weight: 700; }
+  .sum-lbl { font-size: 0.6em; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/controls">Control Catalog</a>
+  <span class="sep">/</span>
+  <span>Build Control View</span>
+</div>
+
+<div style="margin-bottom:20px">
+  <h1 style="margin:0 0 4px">Build Control View</h1>
+  <p style="color:var(--muted);font-size:0.85em;margin:0">
+    Select a baseline and one or more overlays to see the combined control set with overlay coverage annotated.
+  </p>
+</div>
+
+<form method="get" class="builder-form">
+  <div class="builder-field">
+    <label class="builder-label" for="build-base">Baseline</label>
+    <select name="base" id="build-base" onchange="this.form.submit()" aria-label="Baseline (auto-applies on change)">
+      <option value="">— select —</option>
+      {% for bl in baselines %}
+      <option value="{{ bl.short_name }}" {% if bl.short_name == selected_base %}selected{% endif %}>
+        {{ bl.name }} ({{ bl.ctrl_count }} controls)
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  {% if selected_base %}
+  <div class="builder-field">
+    <label class="builder-label">Overlays / Extensions</label>
+    <select name="ovl" multiple>
+      {% for ov in available_overlays %}
+      <option value="{{ ov.short_name }}" {% if ov.short_name in selected_ovl_sns %}selected{% endif %}>
+        {{ ov.name }}{% if ov.ctrl_count %} ({{ ov.ctrl_count }}){% endif %}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <button type="submit" class="btn btn-primary" style="align-self:flex-end">Apply</button>
+  {% if selected_ovl_sns %}
+  <a href="/controls/build?base={{ selected_base }}" class="btn btn-ghost" style="align-self:flex-end;font-size:0.82em">Clear overlays</a>
+  {% endif %}
+  {% endif %}
+</form>
+
+{% if controls %}
+{# Summary strip #}
+{% set covered = controls | selectattr('ovl_controls') | list | length %}
+<div class="summary-strip">
+  <div class="sum-item">
+    <span class="sum-val">{{ controls | length }}</span>
+    <span class="sum-lbl">Baseline Controls</span>
+  </div>
+  {% if selected_ovl_sns %}
+  <div class="sum-item">
+    <span class="sum-val" style="color:var(--cyan)">{{ covered }}</span>
+    <span class="sum-lbl">Overlay Coverage</span>
+  </div>
+  <div class="sum-item">
+    <span class="sum-val" style="color:var(--muted)">{{ controls | length - covered }}</span>
+    <span class="sum-lbl">No Match</span>
+  </div>
+  {% if missing_controls %}
+  <div class="sum-item" style="border-left:1px solid var(--border);padding-left:20px">
+    <span class="sum-val" style="color:var(--red)">{{ missing_controls | length }}</span>
+    <span class="sum-lbl">Missing Controls</span>
+  </div>
+  {% endif %}
+  {% for ov_sn in selected_ovl_sns %}
+  {% set ov_info = overlay_info.get(ov_sn, {}) %}
+  <div class="sum-item" style="border-left:1px solid var(--border);padding-left:20px">
+    <span class="sum-val" style="color:var(--cyan)">{{ ov_info.covered_count or 0 }}</span>
+    <span class="sum-lbl">{{ ov_info.name or ov_sn }}</span>
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+
+{# Serialize data for JS table #}
+<script id="ctrl-data" type="application/json">{{ controls | tojson }}</script>
+<script id="missing-data" type="application/json">{{ missing_controls | tojson }}</script>
+
+{# Controls table — JS rendered #}
+<div class="card" style="padding:0;overflow:hidden;margin-bottom:4px">
+<div style="overflow-x:auto">
+<table class="ctrl-table" id="ctrl-table">
+  <thead>
+    <tr>
+      <th data-col="control_id" style="width:120px">Control ID<span class="sort-ind">⇅</span></th>
+      <th data-col="title">Title<span class="sort-ind">⇅</span></th>
+      <th data-col="domain" style="width:150px">Domain<span class="sort-ind">⇅</span></th>
+      {% if selected_ovl_sns %}
+      <th style="width:200px;cursor:default">Overlay Coverage</th>
+      {% endif %}
+    </tr>
+    <tr class="filter-row">
+      <th><input class="col-filter" id="filter-control_id" placeholder="Filter ID…"></th>
+      <th><input class="col-filter" id="filter-title" placeholder="Filter title…"></th>
+      <th><input class="col-filter" id="filter-domain" placeholder="Filter domain…"></th>
+      {% if selected_ovl_sns %}<th></th>{% endif %}
+    </tr>
+  </thead>
+  <tbody id="ctrl-tbody"></tbody>
+</table>
+</div>
+<div class="table-footer">
+  <span id="ctrl-table-count" style="color:var(--muted)"></span>
+  <button id="ctrl-table-more" class="btn btn-ghost" style="font-size:0.78em;padding:4px 12px;display:none">Show more</button>
+</div>
+</div>
+
+{% if missing_controls %}
+{# Missing controls section #}
+<div class="missing-section">
+  <div class="missing-hdr">
+    <div>
+      <div class="missing-hdr-title">⚠ Missing Required Controls</div>
+      <div style="font-size:0.76em;color:var(--muted);margin-top:3px">
+        Overlay controls with no matching baseline control — these represent gaps in your current baseline.
+      </div>
+    </div>
+    <span style="font-size:0.78em;color:var(--muted);white-space:nowrap">{{ missing_controls | length }} control{{ 's' if missing_controls | length != 1 }}</span>
+  </div>
+  <div style="overflow-x:auto">
+  <table class="ctrl-table" id="missing-table">
+    <thead>
+      <tr>
+        <th data-col="control_id" style="width:120px">Control ID<span class="sort-ind">⇅</span></th>
+        <th data-col="title">Title<span class="sort-ind">⇅</span></th>
+        <th data-col="domain" style="width:150px">Domain<span class="sort-ind">⇅</span></th>
+        <th data-col="framework" style="width:160px">Overlay<span class="sort-ind">⇅</span></th>
+      </tr>
+      <tr class="filter-row">
+        <th><input class="col-filter" id="missing-filter-control_id" placeholder="Filter ID…"></th>
+        <th><input class="col-filter" id="missing-filter-title" placeholder="Filter title…"></th>
+        <th><input class="col-filter" id="missing-filter-domain" placeholder="Filter domain…"></th>
+        <th><input class="col-filter" id="missing-filter-framework" placeholder="Filter overlay…"></th>
+      </tr>
+    </thead>
+    <tbody id="missing-tbody"></tbody>
+  </table>
+  </div>
+  <div class="table-footer">
+    <span id="missing-table-count" style="color:var(--muted)"></span>
+    <button id="missing-table-more" class="btn btn-ghost" style="font-size:0.78em;padding:4px 12px;display:none">Show more</button>
+  </div>
+</div>
+{% endif %}
+
+<script>
+(function(){
+  const PAGE = 20;
+  const HAS_OVL = {{ 'true' if selected_ovl_sns else 'false' }};
+  const rawCtrl    = JSON.parse(document.getElementById('ctrl-data').textContent);
+  const rawMissing = JSON.parse(document.getElementById('missing-data').textContent);
+
+  function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function ovlChips(arr){
+    if(!arr||!arr.length) return '<span style="font-size:.7em;color:rgba(158,158,158,.3)">—</span>';
+    return '<div class="ovl-chips">'+arr.map(oc=>
+      `<span class="ovl-chip ${oc.confidence==='high'?'ovl-chip-direct':'ovl-chip-equiv'}"
+             title="${esc(oc.framework)} — ${esc(oc.title)}">${esc(oc.control_id)}</span>`
+    ).join('')+'</div>';
+  }
+
+  function makeTable(opts){
+    // opts: {data, tbodyId, countId, moreBtnId, cols, filterIds, hasOvl, isMissing}
+    let sortCol=null, sortDir=1, shown=PAGE;
+    const filters={};
+    opts.filterIds.forEach(id=>{ filters[id]=''; });
+
+    function getFiltered(){
+      return opts.data.filter(row=>{
+        for(const[id,val] of Object.entries(filters)){
+          if(val && !(row[id]||'').toLowerCase().includes(val.toLowerCase())) return false;
+        }
+        return true;
+      });
+    }
+    function getSorted(arr){
+      if(!sortCol) return arr;
+      return [...arr].sort((a,b)=>{
+        const av=(a[sortCol]||'').toLowerCase(), bv=(b[sortCol]||'').toLowerCase();
+        return av<bv?-sortDir:av>bv?sortDir:0;
+      });
+    }
+    function render(){
+      const display = getSorted(getFiltered());
+      const tbody   = document.getElementById(opts.tbodyId);
+      const n       = Math.min(shown, display.length);
+      let html='';
+      for(let i=0;i<n;i++){
+        const r=display[i];
+        html+='<tr>';
+        html+=`<td><span class="ctrl-id">${esc(r.control_id.toUpperCase())}</span></td>`;
+        html+=`<td class="ctrl-title">${esc(r.title)}</td>`;
+        html+=`<td class="ctrl-domain">${esc(r.domain||'—')}</td>`;
+        if(opts.isMissing) html+=`<td class="ctrl-domain">${esc(r.framework||'')}</td>`;
+        if(opts.hasOvl)    html+=`<td>${ovlChips(r.ovl_controls)}</td>`;
+        html+='</tr>';
+      }
+      tbody.innerHTML=html;
+      const cntEl=document.getElementById(opts.countId);
+      if(cntEl) cntEl.textContent=`Showing ${n} of ${display.length}`;
+      const moreBtn=document.getElementById(opts.moreBtnId);
+      if(moreBtn){
+        const rem=display.length-n;
+        if(rem<=0){ moreBtn.style.display='none'; }
+        else{
+          moreBtn.style.display='';
+          moreBtn.textContent=`Show ${Math.min(PAGE,rem)} more (${rem} remaining)`;
+        }
+      }
+      // update sort indicators
+      opts.sortableThs.forEach(th=>{
+        const ind=th.querySelector('.sort-ind');
+        if(!ind) return;
+        if(th.dataset.col===sortCol) ind.textContent=sortDir===1?' ▲':' ▼';
+        else ind.textContent='⇅';
+      });
+    }
+    // Sort click
+    opts.sortableThs = [...document.querySelectorAll('#'+opts.tableId+' thead th[data-col]')];
+    opts.sortableThs.forEach(th=>{
+      th.addEventListener('click',()=>{
+        if(sortCol===th.dataset.col) sortDir*=-1;
+        else{ sortCol=th.dataset.col; sortDir=1; }
+        shown=PAGE;
+        render();
+      });
+    });
+    // Filters
+    opts.filterIds.forEach(fid=>{
+      const inp=document.getElementById(opts.filterPrefix+fid);
+      if(inp) inp.addEventListener('input',function(){ filters[fid]=this.value; shown=PAGE; render(); });
+    });
+    // Show more
+    const mBtn=document.getElementById(opts.moreBtnId);
+    if(mBtn) mBtn.addEventListener('click',()=>{ shown+=PAGE; render(); });
+    render();
+  }
+
+  makeTable({
+    data: rawCtrl, tableId:'ctrl-table', tbodyId:'ctrl-tbody',
+    countId:'ctrl-table-count', moreBtnId:'ctrl-table-more',
+    filterIds:['control_id','title','domain'], filterPrefix:'filter-',
+    hasOvl: HAS_OVL, isMissing: false,
+  });
+
+  if(rawMissing.length){
+    makeTable({
+      data: rawMissing, tableId:'missing-table', tbodyId:'missing-tbody',
+      countId:'missing-table-count', moreBtnId:'missing-table-more',
+      filterIds:['control_id','title','domain','framework'], filterPrefix:'missing-filter-',
+      hasOvl: false, isMissing: true,
+    });
+  }
+})();
+</script>
+
+{% elif selected_base %}
+<div class="card" style="padding:40px;text-align:center;color:var(--muted);font-size:0.88em">
+  No controls found for the selected baseline.
+</div>
+{% else %}
+<div class="card" style="padding:40px;text-align:center;color:var(--muted);font-size:0.88em">
+  Select a baseline above to get started.
+</div>
+{% endif %}
+
+{% endblock %}

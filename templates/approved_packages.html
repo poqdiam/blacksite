@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% from 'macros.html' import paginate %}
+{% block title %}{{ app_name }} — Approved Packages{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/submissions">Authorization Submissions</a>
+  <span>Approved Packages</span>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+  <div>
+    <h1 style="margin:0">Approved Packages</h1>
+    <p class="text-muted" style="margin:4px 0 0;font-size:0.85em">Decided authorization packages — authorized, denied, and withdrawn</p>
+  </div>
+  <a href="/submissions" class="btn btn-ghost" style="font-size:0.82em">← Active Submissions</a>
+</div>
+
+{% set status_colors = {
+  'authorized': 'var(--green)',
+  'denied':     'var(--red)',
+  'withdrawn':  'var(--muted)',
+} %}
+{% set status_icons = {
+  'authorized': '✓',
+  'denied':     '✗',
+  'withdrawn':  '—',
+} %}
+
+{# Summary counts #}
+{% set auth_ct     = submissions | selectattr('status','eq','authorized') | list | length %}
+{% set denied_ct   = submissions | selectattr('status','eq','denied')     | list | length %}
+{% set withdrawn_ct= submissions | selectattr('status','eq','withdrawn')   | list | length %}
+<div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+  <div class="stat" style="flex:1;min-width:110px;padding:12px 16px">
+    <div class="stat-value" style="color:var(--green)">{{ total }}</div>
+    <div class="stat-label">Total Decided</div>
+  </div>
+  <div class="stat" style="flex:1;min-width:110px;padding:12px 16px">
+    <div class="stat-value" style="color:var(--green)">{{ submissions | selectattr('status','eq','authorized') | list | length }}</div>
+    <div class="stat-label">Authorized</div>
+  </div>
+  <div class="stat" style="flex:1;min-width:110px;padding:12px 16px">
+    <div class="stat-value" style="color:var(--red)">{{ submissions | selectattr('status','eq','denied') | list | length }}</div>
+    <div class="stat-label">Denied</div>
+  </div>
+  <div class="stat" style="flex:1;min-width:110px;padding:12px 16px">
+    <div class="stat-value" style="color:var(--muted)">{{ submissions | selectattr('status','eq','withdrawn') | list | length }}</div>
+    <div class="stat-label">Withdrawn</div>
+  </div>
+</div>
+
+<div class="card" style="padding:0;overflow:hidden">
+  {% if submissions %}
+  <table>
+    <thead>
+      <tr>
+        <th>System</th>
+        <th>Type</th>
+        <th>Submitted</th>
+        <th>Decision</th>
+        <th>Decided By</th>
+        <th>Expiry</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in submissions %}
+      {% set sys = sys_map.get(s.system_id) %}
+      <tr>
+        <td style="font-weight:600">
+          {% if sys %}<a href="/systems/{{ sys.id }}" style="color:var(--text)">{{ sys.name }}</a>
+          {% else %}{{ s.system_id[:8] }}{% endif %}
+        </td>
+        <td class="text-muted" style="font-size:0.82em">{{ s.submission_type | replace('_',' ') | title }}</td>
+        <td class="text-muted" style="font-size:0.8em;white-space:nowrap">
+          {{ s.submitted_at.strftime('%Y-%m-%d') if s.submitted_at else '—' }}
+        </td>
+        <td>
+          <span style="font-size:0.7em;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+                       padding:3px 10px;border-radius:3px;
+                       background:{{ status_colors.get(s.status,'var(--muted)') }}1a;
+                       border:1px solid {{ status_colors.get(s.status,'var(--muted)') }}44;
+                       color:{{ status_colors.get(s.status,'var(--muted)') }}">
+            {{ status_icons.get(s.status,'') }} {{ s.status | replace('_',' ') | title }}
+          </span>
+        </td>
+        <td style="font-size:0.82em;color:var(--muted)">{{ s.reviewer or '—' }}</td>
+        <td style="font-size:0.8em;color:var(--muted);white-space:nowrap">
+          {% if s.ato_expiry %}
+            {% set today = now.date().isoformat() if now is defined else '' %}
+            {% if s.ato_expiry < today %}
+              <span style="color:var(--red)">{{ s.ato_expiry }} (expired)</span>
+            {% else %}
+              {{ s.ato_expiry }}
+            {% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap">
+          <a href="/submissions/{{ s.id }}" class="btn btn-ghost btn-sm">View →</a>
+          {% if sys %}
+          <a href="/systems/{{ sys.id }}/export/ato-letter" class="btn btn-ghost btn-sm" style="font-size:0.72em">Letter</a>
+          <a href="/systems/{{ sys.id }}/export/package" class="btn btn-ghost btn-sm" style="font-size:0.72em">Package</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:48px;text-align:center;color:var(--muted)">
+    No decided packages yet.
+    <a href="/submissions" style="color:var(--cyan)">View active submissions →</a>
+  </div>
+  {% endif %}
+</div>
+{% if submissions %}
+{{ paginate(page, total_pages, per_page, "/submissions/approved") }}
+{% endif %}
+{% endblock %}

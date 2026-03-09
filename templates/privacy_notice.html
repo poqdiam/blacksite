@@ -1,0 +1,428 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Privacy Notice{% endblock %}
+
+{% block content %}
+<div style="max-width:860px;margin:0 auto;padding:24px 16px">
+
+  <h1 style="font-family:var(--mono);font-size:1.4em;color:var(--cyan);
+             letter-spacing:1px;margin-bottom:4px">Privacy Notice</h1>
+  <p style="color:var(--muted);font-size:0.85em;margin-bottom:32px">
+    Effective date: 2026-03-09 &nbsp;·&nbsp; Last reviewed: 2026-03-09 &nbsp;·&nbsp; Next review: 2027-03-09
+  </p>
+
+  {# ── 1. Who We Are ────────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      1. Who We Are and What This Platform Is
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0 0 10px">
+      BLACKSITE is a Governance, Risk, and Compliance (GRC) platform designed for security practitioners
+      managing compliance programs under frameworks such as NIST SP 800-53, FedRAMP, FISMA, CMMC, HIPAA,
+      and related standards. The platform is operated by a small development team and serves federal, state,
+      local, tribal, and commercial organizations.
+    </p>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      This notice applies to all individuals who access BLACKSITE, including registered users,
+      organizational administrators, and demo visitors. It describes how we collect, process, store,
+      and share personal data.
+    </p>
+  </div>
+
+  {# ── 2. Personal Data We Collect ──────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      2. Personal Data We Collect
+    </h2>
+    <p style="color:var(--muted);font-size:0.85em;margin:0 0 14px">
+      We collect the following categories of personal information when you use the platform.
+    </p>
+
+    <h3 style="font-size:0.9em;color:var(--cyan);margin:0 0 8px;font-weight:700">
+      Account Data
+    </h3>
+    <table style="width:100%;border-collapse:collapse;font-size:0.85em;margin-bottom:18px">
+      <thead>
+        <tr style="background:var(--surface)">
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Data Element</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Description</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Required</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Full name</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Display name for the account</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Yes</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Email address</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Account identification and notifications</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Yes</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Username</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Unique identifier used for login</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Yes</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Password hash</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Bcrypt hash only; plaintext is never stored</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Yes</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Role and access level</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Admin, staff, or read-only designation</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Yes</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Last login timestamp</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Date and time of most recent successful authentication</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Automatic</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">IP address</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Collected on login events for audit trail and anomaly detection</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Automatic</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="font-size:0.9em;color:var(--cyan);margin:0 0 8px;font-weight:700">
+      Activity and Audit Data
+    </h3>
+    <p style="color:var(--text);font-size:0.88em;line-height:1.7;margin:0 0 14px">
+      BLACKSITE maintains an immutable audit log. The following events are recorded with user, timestamp,
+      IP address, and action details: login and logout events; record creation, modification, and deletion;
+      administrative actions; AI assistant queries; compliance workflow events.
+    </p>
+
+    <h3 style="font-size:0.9em;color:var(--cyan);margin:0 0 8px;font-weight:700">
+      Session and Visitor Data
+    </h3>
+    <p style="color:var(--text);font-size:0.88em;line-height:1.7;margin:0 0 14px">
+      A session cookie (required for authentication) is set on login. It is a server-side token
+      containing no personal data client-side. For demo or unauthenticated visitors, the IP address
+      and browser user-agent string may be collected for aggregate analytics.
+    </p>
+
+    <h3 style="font-size:0.9em;color:var(--cyan);margin:0 0 8px;font-weight:700">
+      Compliance Workflow Data
+    </h3>
+    <p style="color:var(--text);font-size:0.88em;line-height:1.7;margin:0">
+      Users may enter personal data about other individuals (e.g., ISSO names, system owner names,
+      contractor information) as part of compliance documentation. Users are responsible for ensuring
+      they have appropriate authority to enter such data.
+    </p>
+  </div>
+
+  {# ── 3. How We Use It ─────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      3. How We Use Your Data
+    </h2>
+    <table style="width:100%;border-collapse:collapse;font-size:0.85em">
+      <thead>
+        <tr style="background:var(--surface)">
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Data</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Account data</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Authentication, authorization, account management</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Audit log</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Security monitoring, compliance evidence, incident investigation</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">IP address (authenticated)</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Audit trail, anomalous login detection</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">IP address (visitor/demo)</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Demo analytics (country-level aggregate only)</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Session data</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Maintaining login state across requests</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">AI query text</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Forwarded to Groq API to generate compliance assistant responses</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="color:var(--muted);font-size:0.82em;margin:12px 0 0;line-height:1.6">
+      BLACKSITE does not use personal data for advertising, profiling, resale, or any purpose
+      outside of platform operations.
+    </p>
+  </div>
+
+  {# ── 4. Third-Party Processors ────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      4. Third-Party Processors
+    </h2>
+
+    <h3 style="font-size:0.9em;color:var(--cyan);margin:0 0 8px;font-weight:700">
+      Groq API — AI Compliance Assistant
+    </h3>
+    <p style="color:var(--text);font-size:0.88em;line-height:1.7;margin:0 0 10px">
+      When a user submits a query to the BLACKSITE AI compliance assistant, the query text is transmitted
+      to <strong>Groq, Inc.</strong> for processing via the <code>llama-3.3-70b-versatile</code> model.
+    </p>
+    <ul style="margin:0 0 14px;padding:0 0 0 20px;color:var(--text);font-size:0.88em;line-height:1.8">
+      <li><strong>What is sent:</strong> The user's query text and a system prompt defining the assistant's role.</li>
+      <li><strong>What is NOT sent:</strong> Usernames, email addresses, account identifiers, SSP content, or any platform data beyond the explicit query.</li>
+      <li><strong>Policy:</strong> Users must not include personally identifiable information (PII) or protected health information (PHI) in AI assistant queries.</li>
+      <li><a href="https://groq.com/privacy-policy/" target="_blank" rel="noopener"
+             style="color:var(--cyan)">Groq Privacy Policy</a></li>
+    </ul>
+
+    <h3 style="font-size:0.9em;color:var(--cyan);margin:0 0 8px;font-weight:700">
+      ip-api.com — Geo-IP Lookup (Demo Analytics Only)
+    </h3>
+    <p style="color:var(--text);font-size:0.88em;line-height:1.7;margin:0 0 10px">
+      Visitor IP addresses may be sent to <strong>ip-api.com</strong> to determine the approximate
+      geographic origin (country/region) for demo visitor analytics.
+    </p>
+    <ul style="margin:0;padding:0 0 0 20px;color:var(--text);font-size:0.88em;line-height:1.8">
+      <li><strong>What is sent:</strong> Visitor IP address only.</li>
+      <li><strong>What is NOT sent:</strong> Account data, credentials, or session identifiers.</li>
+      <li><strong>Note:</strong> This service is used only for unauthenticated demo visitor tracking. Authenticated user IPs are not sent to this service.</li>
+    </ul>
+  </div>
+
+  {# ── 5. Data Retention ────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      5. Data Retention
+    </h2>
+    <table style="width:100%;border-collapse:collapse;font-size:0.85em">
+      <thead>
+        <tr style="background:var(--surface)">
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Data Category</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Retention Period</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">User account data</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Duration of account + 1 year post-offboarding</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Immutable audit logs</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">3 years (FISMA requirement)</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Assessment / SSP content</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">6 years (federal records guidance)</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">AI chat logs (local)</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">90 days</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Session data</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">30 days or until logout, whichever is sooner</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Demo visitor logs</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">90 days</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  {# ── 6. Your Rights ───────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      6. Your Rights
+    </h2>
+    <table style="width:100%;border-collapse:collapse;font-size:0.85em;margin-bottom:14px">
+      <thead>
+        <tr style="background:var(--surface)">
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Right</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">How to Exercise</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>Access</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Contact the platform administrator to request a copy of your account data and audit records</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>Correction</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Update name and email via account settings, or contact the administrator for other corrections</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>Deletion</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">
+            Submit a deletion request via <a href="/privacy/my-data" style="color:var(--cyan)">My Data &amp; Privacy</a>.
+            Note: audit log entries tied to your account actions are retained per the retention obligations above.
+          </td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>Portability</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Request a JSON or CSV export of your account data via <a href="/privacy/my-data" style="color:var(--cyan)">My Data &amp; Privacy</a></td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>Objection / Restriction</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Contact the administrator to discuss concerns about specific processing activities</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="color:var(--muted);font-size:0.82em;margin:0">
+      Requests will be acknowledged within 5 business days and fulfilled within 30 days.
+    </p>
+  </div>
+
+  {# ── Do Not Sell ──────────────────────────────────────────────────────────── #}
+  <div style="background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.25);
+              border-left:4px solid var(--cyan);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--cyan);margin:0 0 10px;font-weight:700">
+      Do Not Sell or Share My Personal Information
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      <strong>BLACKSITE does not sell, rent, or share personal information with third parties
+      for their own marketing purposes.</strong> We do not sell consumer personal information as
+      defined under the California Consumer Privacy Act (CCPA/CPRA) or any other applicable law.
+      No opt-out action is required — this platform has never engaged in the sale or sharing of
+      personal data for commercial purposes.
+    </p>
+  </div>
+
+  {# ── 7. California Residents ──────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      7. California Residents — CCPA/CPRA Rights
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0 0 10px">
+      If you are a California resident, you have the following rights under the California Consumer
+      Privacy Act (CCPA) as amended by the California Privacy Rights Act (CPRA):
+    </p>
+    <ul style="margin:0 0 10px;padding:0 0 0 20px;color:var(--text);font-size:0.88em;line-height:1.8">
+      <li><strong>Right to Know:</strong> You may request disclosure of the categories and specific pieces of personal information we collect, use, disclose, and sell.</li>
+      <li><strong>Right to Delete:</strong> You may request deletion of personal information we hold about you, subject to certain exceptions.</li>
+      <li><strong>Right to Correct:</strong> You may request correction of inaccurate personal information.</li>
+      <li><strong>Right to Opt-Out of Sale/Sharing:</strong> We do not sell or share personal information. No opt-out action is required.</li>
+      <li><strong>Right to Non-Discrimination:</strong> We will not discriminate against you for exercising any CCPA rights.</li>
+      <li><strong>Right to Limit Use of Sensitive Personal Information:</strong> We do not use sensitive personal information beyond the purposes specified in this notice.</li>
+    </ul>
+    <p style="color:var(--text);font-size:0.88em;line-height:1.7;margin:0">
+      To submit a CCPA request, contact the platform administrator via
+      <a href="/privacy/my-data" style="color:var(--cyan)">My Data &amp; Privacy</a>
+      or the contact information in Section 10 below. We will verify your identity before processing requests.
+    </p>
+  </div>
+
+  {# ── 8. GDPR / EU Residents ───────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      8. GDPR and EU / EEA Residents
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0 0 10px">
+      For users located in the European Union or European Economic Area, BLACKSITE processes personal
+      data on the following legal bases under GDPR Article 6:
+    </p>
+    <ul style="margin:0 0 10px;padding:0 0 0 20px;color:var(--text);font-size:0.88em;line-height:1.8">
+      <li><strong>Article 6(1)(b) — Contractual necessity:</strong> Account data, session data, and audit logs are necessary to deliver the platform service.</li>
+      <li><strong>Article 6(1)(f) — Legitimate interests:</strong> Security monitoring and audit logging are in the legitimate interest of the operator and all users to prevent unauthorized access.</li>
+      <li><strong>Article 6(1)(c) — Legal obligation:</strong> Retention of audit logs for 3 years is required for federally connected systems under FISMA.</li>
+    </ul>
+    <p style="color:var(--text);font-size:0.88em;line-height:1.7;margin:0">
+      EU residents have the rights described in Section 6, as well as the right to lodge a complaint
+      with your national supervisory authority. A Data Processing Agreement (DPA) is available on
+      request for enterprise customers. Contact the administrator for details.
+    </p>
+  </div>
+
+  {# ── 9. Children's Privacy ────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      9. Children's Privacy (COPPA)
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      BLACKSITE is a professional compliance management platform intended exclusively for use by
+      authorized personnel within organizational security programs. It is not directed at, marketed to,
+      or designed for use by persons under the age of 18. We do not knowingly collect personal data
+      from minors. If it is discovered that a minor has registered an account, that account will be
+      deleted upon discovery and any associated data removed in accordance with applicable law
+      (Children's Online Privacy Protection Act — COPPA, 15 U.S.C. §§ 6501–6506).
+    </p>
+  </div>
+
+  {# ── 10. Cookies and Tracking ─────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      10. Cookies and Tracking
+    </h2>
+    <ul style="margin:0;padding:0 0 0 20px;color:var(--text);font-size:0.88em;line-height:1.9">
+      <li><strong>Session cookies:</strong> Required for maintaining login state. These are server-side session tokens. No personal data is stored client-side in the cookie itself.</li>
+      <li><strong>Preference cookies:</strong> Non-identifying user interface preferences (theme, font size) may be stored as cookies.</li>
+      <li><strong>No third-party tracking cookies:</strong> No analytics platforms (Google Analytics, etc.) are embedded in the platform.</li>
+      <li><strong>No persistent fingerprinting:</strong> The platform does not implement browser fingerprinting or cross-session tracking beyond the server-side session.</li>
+    </ul>
+  </div>
+
+  {# ── 11. Changes to This Notice ───────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      11. Changes to This Notice
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      This notice is reviewed annually (next review: 2027-03-09) and updated whenever material changes
+      occur to data processing practices. Registered users will be notified of material changes via
+      the platform or email. The effective date at the top of this page reflects the most recent revision.
+    </p>
+  </div>
+
+  {# ── 12. Contact ──────────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      12. Contact and How to Exercise Your Rights
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0 0 10px">
+      For privacy inquiries, data subject requests, or concerns, contact the
+      <strong>BLACKSITE Platform Administrator</strong> via the platform's designated contact channel
+      or the email address provided at contract or onboarding.
+    </p>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0 0 10px">
+      To exercise access, deletion, or export rights, use the
+      <a href="/privacy/my-data" style="color:var(--cyan)">My Data &amp; Privacy</a> page
+      (requires authentication).
+    </p>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      For urgent privacy concerns (e.g., suspected data breach affecting your account), reference
+      the platform's Incident Response procedures and contact the administrator directly.
+    </p>
+  </div>
+
+  <p style="color:var(--muted);font-size:0.78em;text-align:center;padding:8px 0 16px">
+    <a href="/terms" style="color:var(--muted);text-decoration:none"
+       onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Terms of Use</a>
+    &nbsp;·&nbsp;
+    <a href="/accessibility" style="color:var(--muted);text-decoration:none"
+       onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Accessibility</a>
+    &nbsp;·&nbsp;
+    <a href="/compliance-info" style="color:var(--muted);text-decoration:none"
+       onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Platform Compliance</a>
+  </p>
+
+</div>
+{% endblock %}

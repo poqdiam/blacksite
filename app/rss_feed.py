@@ -24,7 +24,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET  # replaces xml.etree.ElementTree — safe against XXE
 
 log = logging.getLogger("blacksite.rss")
 
@@ -61,7 +61,7 @@ def _item_dedup_key(item: dict) -> str:
     if link:
         return link
     title = (item.get("title") or "").strip()
-    return "title:" + hashlib.sha1(title.encode("utf-8", errors="replace")).hexdigest()
+    return "title:" + hashlib.sha1(title.encode("utf-8", errors="replace")).hexdigest()  # nosec B303 — dedup hash, not security
 
 
 def _fetch_feed(url: str) -> list[dict]:
@@ -71,7 +71,7 @@ def _fetch_feed(url: str) -> list[dict]:
             url,
             headers={"User-Agent": "BLACKSITE-GRC/1.0 (security advisory monitor)"},
         )
-        with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT) as resp:  # nosec B310 — URLs come from admin-controlled allowlist
             raw = resp.read(2 * 1024 * 1024)  # cap at 2 MB
     except Exception as e:
         log.warning("Feed fetch failed %s: %s", url, e)

@@ -1,0 +1,1411 @@
+{
+  "snapshot": "route_map",
+  "generated_at_utc": "2026-03-01T19:09:24.791430+00:00",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/",
+      "endpoint": "index",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/help",
+      "endpoint": "help_center",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/logout",
+      "endpoint": "logout",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/switch-view",
+      "endpoint": "switch_view",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/switch-role-view",
+      "endpoint": "switch_role_view",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/exit-shell",
+      "endpoint": "exit_shell",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/upload",
+      "endpoint": "upload_page",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/upload",
+      "endpoint": "upload",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/status/{assessment_id}",
+      "endpoint": "status_page",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/status/{assessment_id}",
+      "endpoint": "status_api",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/results/{assessment_id}",
+      "endpoint": "results_page",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/results/{assessment_id}/proctor",
+      "endpoint": "save_proctor_note",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/results/{assessment_id}/link-system",
+      "endpoint": "link_system",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/results/{assessment_id}/controls/{ctrl_id}/edit",
+      "endpoint": "edit_control",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/quiz/{assessment_id}",
+      "endpoint": "quiz_page",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/quiz/{assessment_id}/submit",
+      "endpoint": "quiz_submit",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin",
+      "endpoint": "admin_page",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/audit",
+      "endpoint": "admin_audit",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/view-as/{username}",
+      "endpoint": "admin_view_as",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/download/{assessment_id}/json",
+      "endpoint": "download_json",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/download/{assessment_id}/original",
+      "endpoint": "download_original",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/download/{assessment_id}/print",
+      "endpoint": "print_report",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/forward/{assessment_id}",
+      "endpoint": "forward_to_employee",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/dashboard",
+      "endpoint": "employee_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/dashboard/quiz",
+      "endpoint": "daily_quiz_page",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/dashboard/quiz/submit",
+      "endpoint": "daily_quiz_submit",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/profile/feeds",
+      "endpoint": "profile_feeds",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/profile/feeds",
+      "endpoint": "profile_feeds_save",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/feeds/user",
+      "endpoint": "api_user_feeds",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/profile",
+      "endpoint": "profile_page",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/profile",
+      "endpoint": "profile_save",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/profile/avatar",
+      "endpoint": "profile_avatar_upload",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/profile/avatar/{username}",
+      "endpoint": "serve_avatar",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems",
+      "endpoint": "systems_list",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/new",
+      "endpoint": "system_new_form",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems",
+      "endpoint": "system_create",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}",
+      "endpoint": "system_detail",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/report",
+      "endpoint": "system_report",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/edit",
+      "endpoint": "system_edit_form",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/edit",
+      "endpoint": "system_update",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/delete",
+      "endpoint": "system_delete",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/systems/archived",
+      "endpoint": "admin_systems_archived",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/systems/{system_id}/restore",
+      "endpoint": "admin_system_restore",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/systems/{system_id}/purge",
+      "endpoint": "admin_system_purge",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/assign",
+      "endpoint": "assign_system",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/unassign",
+      "endpoint": "unassign_system",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/assignments",
+      "endpoint": "list_assignments",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/poam",
+      "endpoint": "poam_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/poam/export",
+      "endpoint": "poam_export",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/poam/import/template",
+      "endpoint": "poam_import_template",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/poam/import",
+      "endpoint": "poam_import_form",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/poam/import",
+      "endpoint": "poam_import_csv",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/poam/new",
+      "endpoint": "poam_new_form",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/poam",
+      "endpoint": "poam_create",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/poam/{item_id}",
+      "endpoint": "poam_item_detail",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/poam/{item_id}/update",
+      "endpoint": "poam_update",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/poam/{item_id}/status",
+      "endpoint": "poam_quick_status",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/poam/{item_id}/evidence",
+      "endpoint": "poam_evidence_upload",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/poam/{item_id}/evidence/{ev_id}",
+      "endpoint": "poam_evidence_download",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/poam/auto/{assessment_id}",
+      "endpoint": "poam_auto_create",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/risks",
+      "endpoint": "risks_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/risks/export",
+      "endpoint": "risks_export",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/risks/new",
+      "endpoint": "risk_new_form",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/risks",
+      "endpoint": "risk_create",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/risks/{risk_id}",
+      "endpoint": "risk_detail",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/risks/{risk_id}/update",
+      "endpoint": "risk_update",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/ssp/{assessment_id}",
+      "endpoint": "ssp_document",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/ssp/{assessment_id}/oscal",
+      "endpoint": "ssp_oscal",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/review/{assessment_id}",
+      "endpoint": "api_review",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/update-controls",
+      "endpoint": "trigger_update",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "endpoint": "health",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/version",
+      "endpoint": "api_version",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/posture",
+      "endpoint": "posture_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/search",
+      "endpoint": "global_search",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/search/suggest",
+      "endpoint": "search_suggest",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/controls",
+      "endpoint": "controls_catalog",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/controls/{ctrl_id}",
+      "endpoint": "control_detail",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/controls",
+      "endpoint": "system_controls_page",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/controls/{ctrl_id}",
+      "endpoint": "update_system_control",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/workspace/{ctrl_id}",
+      "endpoint": "isso_control_workspace_get",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/workspace/{ctrl_id}",
+      "endpoint": "isso_control_workspace_post",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/import-controls",
+      "endpoint": "import_controls_from_assessment",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/submit",
+      "endpoint": "submission_form",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/submit",
+      "endpoint": "create_submission",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/submissions",
+      "endpoint": "submissions_list",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/submissions/{sub_id}",
+      "endpoint": "submission_detail",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/submissions/{sub_id}/update",
+      "endpoint": "update_submission",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications",
+      "endpoint": "api_notifications",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/notifications/{notif_id}/read",
+      "endpoint": "api_notification_read",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/notifications/read-all",
+      "endpoint": "api_notifications_read_all",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/notifications",
+      "endpoint": "notifications_page",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/heartbeat",
+      "endpoint": "api_heartbeat",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/preferences",
+      "endpoint": "api_preferences",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/alerts",
+      "endpoint": "api_alerts",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/alerts/ato-expiry",
+      "endpoint": "api_ato_expiry_alerts",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/alerts/poam-overdue",
+      "endpoint": "api_poam_overdue_alerts",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/alerts/audit-check",
+      "endpoint": "api_audit_check",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/feeds",
+      "endpoint": "api_feeds",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ticker",
+      "endpoint": "api_ticker",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/quiz/status",
+      "endpoint": "api_quiz_status",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/rmf",
+      "endpoint": "rmf_overview",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/rmf/{system_id}",
+      "endpoint": "rmf_system",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/rmf/{system_id}/step/{step}",
+      "endpoint": "rmf_update_step",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/users",
+      "endpoint": "admin_users",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/add",
+      "endpoint": "admin_add_user",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/users/provision",
+      "endpoint": "admin_provision_page",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/provision",
+      "endpoint": "admin_provision_user",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/users/provision/credential",
+      "endpoint": "admin_provision_credential",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{username}/role",
+      "endpoint": "admin_set_role",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/bulk-role",
+      "endpoint": "admin_bulk_role",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/bulk-freeze",
+      "endpoint": "admin_bulk_freeze",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{username}/freeze",
+      "endpoint": "admin_freeze_user",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{username}/unfreeze",
+      "endpoint": "admin_unfreeze_user",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/users/{username}/remove",
+      "endpoint": "admin_remove_confirm_page",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{username}/remove/confirm",
+      "endpoint": "admin_remove_user",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{username}/restore",
+      "endpoint": "admin_restore_user",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/users/reservations",
+      "endpoint": "admin_user_reservations",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/reservations/{resv_id}/override",
+      "endpoint": "admin_reservation_override",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/users/shadow",
+      "endpoint": "admin_shadow_users",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/siem",
+      "endpoint": "admin_siem",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/system-settings",
+      "endpoint": "admin_system_settings",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/system-settings",
+      "endpoint": "admin_system_settings_save",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/feeds",
+      "endpoint": "admin_feeds_index",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/feeds/{key}/toggle",
+      "endpoint": "admin_feeds_toggle",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/feeds/{key}/test",
+      "endpoint": "admin_feeds_test",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/feeds/reorder",
+      "endpoint": "admin_feeds_reorder",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/ssp",
+      "endpoint": "admin_ssp_index",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/ssp/upload",
+      "endpoint": "admin_ssp_upload",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/ssp/review/{review_id}",
+      "endpoint": "admin_ssp_review",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/ssp/review/{review_id}/pdf",
+      "endpoint": "admin_ssp_pdf",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/audit/export",
+      "endpoint": "audit_export",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/bundle/daily",
+      "endpoint": "admin_bundle_daily",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/reports",
+      "endpoint": "reports_center",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/ato",
+      "endpoint": "ato_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/ato/{system_id}",
+      "endpoint": "ato_system",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/ato/{system_id}/{doc_type}",
+      "endpoint": "ato_document",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/ato/{system_id}/{doc_type}/save",
+      "endpoint": "ato_save",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/ato/{system_id}/{doc_type}/action",
+      "endpoint": "ato_workflow_action",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/ato/{system_id}/{doc_type}/generate",
+      "endpoint": "ato_generate",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/ato/{system_id}/{doc_type}/upload",
+      "endpoint": "ato_upload",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/issm/dashboard",
+      "endpoint": "issm_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/ciso/dashboard",
+      "endpoint": "ciso_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{username}/max-packages",
+      "endpoint": "set_max_packages",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/sca/workspace",
+      "endpoint": "sca_workspace",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/ao/decisions",
+      "endpoint": "ao_decisions",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/ao/decisions/{system_id}",
+      "endpoint": "ao_record_decision",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/system-owner/dashboard",
+      "endpoint": "system_owner_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/bcdr/dashboard",
+      "endpoint": "bcdr_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/bcdr/events",
+      "endpoint": "bcdr_create_event",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/bcdr/events/{event_id}/signoff",
+      "endpoint": "bcdr_signoff",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/teams",
+      "endpoint": "list_system_teams",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/teams",
+      "endpoint": "create_system_team",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/teams/{team_id}/members",
+      "endpoint": "add_team_member",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "DELETE",
+      "path": "/systems/{system_id}/teams/{team_id}/members/{member_user}",
+      "endpoint": "remove_team_member",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/observations",
+      "endpoint": "observations_list",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/observations/new",
+      "endpoint": "observation_new_form",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/observations",
+      "endpoint": "observation_create",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/observations/{obs_id}",
+      "endpoint": "observation_detail",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/observations/{obs_id}/update",
+      "endpoint": "observation_update",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/observations/{obs_id}/promote",
+      "endpoint": "observation_promote",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/observations/summary",
+      "endpoint": "observations_api_summary",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/inventory",
+      "endpoint": "system_inventory",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/inventory",
+      "endpoint": "inventory_add",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/inventory/{item_id}/delete",
+      "endpoint": "inventory_delete",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/connections",
+      "endpoint": "system_connections",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/connections",
+      "endpoint": "connection_add",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/connections/{conn_id}/delete",
+      "endpoint": "connection_delete",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/artifacts",
+      "endpoint": "system_artifacts",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/artifacts",
+      "endpoint": "artifact_create",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/artifacts/{art_id}/approve",
+      "endpoint": "artifact_approve",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/artifacts/{art_id}/download",
+      "endpoint": "artifact_download",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/eis-assessment",
+      "endpoint": "eis_assessment_form",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/eis-assessment",
+      "endpoint": "eis_assessment_submit",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "WEBSOCKET",
+      "path": "/ws/admin-chat",
+      "endpoint": "ws_admin_chat",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin-chat/history/{room:path}",
+      "endpoint": "api_chat_history",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin-chat/unread",
+      "endpoint": "api_chat_unread",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/profile/theme",
+      "endpoint": "api_set_theme",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin-chat/status",
+      "endpoint": "api_chat_status",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin-chat/users",
+      "endpoint": "api_chat_users",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/view-as/{username}",
+      "endpoint": "view_as_user",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/exit-view-as",
+      "endpoint": "exit_view_as",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/chat/popup/{room:path}",
+      "endpoint": "chat_popup",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/pen-tester/dashboard",
+      "endpoint": "pen_tester_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/sca/dashboard",
+      "endpoint": "sca_role_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/auditor/dashboard",
+      "endpoint": "auditor_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/incident-responder/dashboard",
+      "endpoint": "incident_responder_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/data-owner/dashboard",
+      "endpoint": "data_owner_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/pmo/dashboard",
+      "endpoint": "pmo_dashboard",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/ingest",
+      "endpoint": "admin_ingest_home",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/ingest/upload",
+      "endpoint": "admin_ingest_upload",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/ingest/preview/{job_id}",
+      "endpoint": "admin_ingest_preview",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/ingest/commit/{job_id}",
+      "endpoint": "admin_ingest_commit",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/ingest/template/{ingest_type}",
+      "endpoint": "admin_ingest_template_download",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/feeds/nist/ingest",
+      "endpoint": "admin_nist_ingest",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/feeds/nvd/ingest",
+      "endpoint": "admin_nvd_ingest",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/parameters",
+      "endpoint": "system_parameters",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/parameters",
+      "endpoint": "system_parameter_upsert",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/autofail/evaluate",
+      "endpoint": "admin_autofail_evaluate",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/autofail",
+      "endpoint": "admin_autofail_view",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/daily",
+      "endpoint": "system_daily_hub",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/daily/save",
+      "endpoint": "system_daily_save",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/daily/history",
+      "endpoint": "system_daily_history",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/daily/logbook/{log_date}",
+      "endpoint": "system_daily_logbook_view",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/daily/change-review",
+      "endpoint": "system_change_review_get",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/daily/change-review",
+      "endpoint": "system_change_review_post",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/daily/backup-check",
+      "endpoint": "system_backup_check_get",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/daily/backup-check",
+      "endpoint": "system_backup_check_post",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/daily/access-spotcheck",
+      "endpoint": "system_access_spotcheck_get",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/daily/access-spotcheck",
+      "endpoint": "system_access_spotcheck_post",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/rotation",
+      "endpoint": "system_rotation",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/rotation/complete",
+      "endpoint": "system_rotation_complete",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/rotation/pause",
+      "endpoint": "system_rotation_pause",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/rotation/resume",
+      "endpoint": "system_rotation_resume",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/rotation/history",
+      "endpoint": "system_rotation_history",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/rotation/calendar",
+      "endpoint": "system_rotation_calendar",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/vendors",
+      "endpoint": "system_vendors",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/vendors",
+      "endpoint": "system_vendors_post",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/vendors/{vid}",
+      "endpoint": "system_vendor_update",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/interconnections",
+      "endpoint": "system_interconnections",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/interconnections",
+      "endpoint": "system_interconnections_post",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/dataflows",
+      "endpoint": "system_dataflows",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/dataflows",
+      "endpoint": "system_dataflows_post",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/privacy-assessments",
+      "endpoint": "system_privacy_assessments",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/privacy-assessments",
+      "endpoint": "system_privacy_assessments_post",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/restore-tests",
+      "endpoint": "system_restore_tests",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/restore-tests",
+      "endpoint": "system_restore_tests_post",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/reports",
+      "endpoint": "system_reports",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/systems/{system_id}/reports/generate",
+      "endpoint": "system_reports_generate",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/systems/{system_id}/reports/{rid}/download",
+      "endpoint": "system_report_download",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/issm/daily",
+      "endpoint": "issm_daily_portfolio",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/chat",
+      "endpoint": "ai_chat_page",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/ai/ask",
+      "endpoint": "ai_ask",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ai/status",
+      "endpoint": "ai_status",
+      "auth_guard": "Remote-User header required"
+    },
+    {
+      "method": "POST",
+      "path": "/api/ai/reload",
+      "endpoint": "ai_reload_knowledge",
+      "auth_guard": "Remote-User header required"
+    }
+  ],
+  "route_count": 234
+}

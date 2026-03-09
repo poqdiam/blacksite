@@ -175,7 +175,7 @@
 <div class="cred-banner" id="cred-banner">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
     <span style="color:var(--cyan);font-weight:700;font-size:0.9em">NEW USER CREDENTIALS — SHOWN ONCE</span>
-    <button onclick="document.getElementById('cred-banner').remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1em">✕</button>
+    <button onclick="document.getElementById('cred-banner').remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1em" aria-label="Dismiss credentials banner">✕</button>
   </div>
   <p style="font-size:0.8em;color:var(--muted);margin-bottom:12px">
     Copy and securely deliver these credentials to the user. This banner will not appear again.
@@ -322,9 +322,8 @@ function copyField(id, btn) {
         <th class="sortable" data-col="0" onclick="sortTable(this)" title="Sort by username" style="cursor:pointer;user-select:none">Username <span class="sort-icon">⇅</span></th>
         <th class="sortable" data-col="1" onclick="sortTable(this)" title="Sort by display name" style="cursor:pointer;user-select:none">Display Name <span class="sort-icon">⇅</span></th>
         <th class="sortable" data-col="2" onclick="sortTable(this)" title="Sort by role" style="cursor:pointer;user-select:none">Role <span class="sort-icon">⇅</span></th>
-        <th class="sortable" data-col="3" onclick="sortTable(this)" title="Sort by email" style="cursor:pointer;user-select:none">Email <span class="sort-icon">⇅</span></th>
-        <th class="sortable" data-col="4" onclick="sortTable(this)" title="Sort by last login" style="cursor:pointer;user-select:none">Last Login <span class="sort-icon">⇅</span></th>
-        <th class="sortable" data-col="5" onclick="sortTable(this)" title="Sort by systems" style="cursor:pointer;user-select:none;text-align:center">Systems <span class="sort-icon">⇅</span></th>
+        <th class="sortable" data-col="3" onclick="sortTable(this)" title="Sort by last login" style="cursor:pointer;user-select:none">Last Login <span class="sort-icon">⇅</span></th>
+        <th class="sortable" data-col="4" onclick="sortTable(this)" title="Sort by systems" style="cursor:pointer;user-select:none;text-align:center">Systems <span class="sort-icon">⇅</span></th>
         <th>Actions</th>
       </tr>
     </thead>
@@ -342,17 +341,16 @@ function copyField(id, btn) {
           {% if pstatus == 'frozen' %}style="opacity:0.75;background:rgba(255,107,0,0.04)"{% endif %}>
         {% if is_admin %}<td style="padding:8px"><input type="checkbox" class="row-chk" value="{{ profile.remote_user }}" {% if is_config_admin %}disabled{% endif %}></td>{% endif %}
         <td>
-          <span class="mono" style="font-size:0.88em">{{ profile.remote_user }}</span>
+          <a href="/admin/users/{{ profile.remote_user }}" class="mono" style="font-size:0.88em;color:var(--text);text-decoration:none" onmouseover="this.style.color='var(--cyan)'" onmouseout="this.style.color='var(--text)'">{{ profile.remote_user }}</a>
           {% if is_config_admin %}
             <span class="config-managed">(config-managed)</span>
           {% endif %}
           {% if pstatus == 'frozen' %}<span class="status-frozen" style="margin-left:6px">frozen</span>{% endif %}
         </td>
-        <td style="color:var(--text)">{{ profile.display_name | title if profile.display_name else (profile.remote_user | replace('.', ' ') | replace('_', ' ') | title) }}</td>
+        <td style="color:var(--text)">{{ (profile.display_name or profile.remote_user) | human }}</td>
         <td>
-          <span class="role-badge role-{{ eff_role }}">{{ eff_role }}</span>
+          <span class="role-badge role-{{ eff_role }}">{{ eff_role | human }}</span>
         </td>
-        <td style="color:var(--muted);font-size:0.85em">{{ profile.email or '—' }}</td>
         <td style="font-size:0.82em;
           {% if age_days > 30 %}color:var(--red)
           {% elif age_days > 7 %}color:var(--yellow)
@@ -366,20 +364,21 @@ function copyField(id, btn) {
           {% if not is_config_admin %}
           {% if is_admin %}
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap">
+            {% set _btn = "font-size:0.74em;padding:0 10px;white-space:nowrap;min-width:64px;text-align:center;flex-shrink:0;height:26px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;border-radius:4px" %}
             <a href="/view-as/{{ profile.remote_user }}" class="btn btn-sm"
-               style="font-size:0.74em;background:rgba(118,255,3,0.08);color:#76ff03;border:1px solid rgba(118,255,3,0.25);padding:4px 10px;white-space:nowrap;min-width:64px;text-align:center;flex-shrink:0"
+               style="{{ _btn }};background:rgba(118,255,3,0.08);color:#76ff03;border:1px solid rgba(118,255,3,0.25)"
                title="View dashboard as this user">View</a>
             {% if pstatus == 'frozen' %}
-            <form method="post" action="/admin/users/{{ profile.remote_user }}/unfreeze" style="flex-shrink:0">
-              <button class="btn btn-sm" style="font-size:0.74em;background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.3);padding:4px 10px;white-space:nowrap;min-width:64px">Unfreeze</button>
+            <form method="post" action="/admin/users/{{ profile.remote_user }}/unfreeze" style="flex-shrink:0;margin:0;display:flex">
+              <button class="btn btn-sm" style="{{ _btn }};background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.3)">Unfreeze</button>
             </form>
             {% else %}
-            <form method="post" action="/admin/users/{{ profile.remote_user }}/freeze" style="flex-shrink:0">
-              <button class="btn btn-sm" style="font-size:0.74em;background:rgba(255,107,0,0.1);color:#ff8c42;border:1px solid rgba(255,107,0,0.3);padding:4px 10px;white-space:nowrap;min-width:64px">Freeze</button>
+            <form method="post" action="/admin/users/{{ profile.remote_user }}/freeze" style="flex-shrink:0;margin:0;display:flex">
+              <button class="btn btn-sm" style="{{ _btn }};background:rgba(255,107,0,0.1);color:#ff8c42;border:1px solid rgba(255,107,0,0.3)">Freeze</button>
             </form>
             {% endif %}
             <a href="/admin/users/{{ profile.remote_user }}/remove" class="btn btn-sm"
-               style="font-size:0.74em;background:rgba(244,67,54,0.1);color:var(--red);border:1px solid rgba(244,67,54,0.3);padding:4px 10px;white-space:nowrap;min-width:64px;text-align:center;flex-shrink:0">Remove</a>
+               style="{{ _btn }};background:rgba(244,67,54,0.1);color:var(--red);border:1px solid rgba(244,67,54,0.3)">Remove</a>
           </div>
           {% endif %}
           {% else %}
@@ -448,7 +447,7 @@ function copyField(id, btn) {
   <span id="bulk-count" style="font-size:0.82em;color:var(--cyan);font-weight:700;white-space:nowrap">0 selected</span>
   <span style="font-size:0.75em;color:var(--muted)">To change roles, use View → profile page</span>
   <button onclick="bulkFreeze()" class="btn btn-sm" style="background:rgba(255,107,0,0.1);color:#ff8c42;border:1px solid rgba(255,107,0,0.3)">Freeze Selected</button>
-  <button onclick="clearSelection()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1em">✕</button>
+  <button onclick="clearSelection()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1em" aria-label="Clear selection">✕</button>
 </div>
 {% endif %}
 
@@ -590,13 +589,13 @@ function sortTable(th) {
     const tdA = a.querySelectorAll('td')[tdIdx];
     const tdB = b.querySelectorAll('td')[tdIdx];
     if (!tdA || !tdB) return 0;
-    // For systems column (logCol 5), sort numerically
+    // For systems column (logCol 4), sort numerically
     let valA = tdA.textContent.trim();
     let valB = tdB.textContent.trim();
     let cmp;
-    if (logCol === 5) {
+    if (logCol === 4) {
       cmp = (parseFloat(valA) || 0) - (parseFloat(valB) || 0);
-    } else if (logCol === 4) {
+    } else if (logCol === 3) {
       // Last Login: "Never" sorts to end; otherwise date string (DD/MM/YY)
       const neverA = valA === 'Never', neverB = valB === 'Never';
       if (neverA && neverB) cmp = 0;

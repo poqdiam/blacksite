@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — {{ fw.name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/controls">Controls Catalog</a>
+  <span class="sep">/</span>
+  <span>{{ fw.name }}</span>
+</div>
+
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:28px;flex-wrap:wrap">
+  <div>
+    <h1 style="margin:0;margin-bottom:6px">{{ fw.name }}</h1>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span style="font-size:0.62em;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+                   background:rgba(255,179,0,0.12);color:var(--yellow);
+                   border:1px solid rgba(255,179,0,0.25);border-radius:3px;padding:2px 8px">
+        {% if demo_mode %}Demo{% else %}Licensed Content{% endif %}
+      </span>
+      {% if fw.version %}
+      <span style="font-size:0.78em;color:var(--muted)">v{{ fw.version }}</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card" style="max-width:760px">
+  <div style="display:flex;gap:20px;align-items:flex-start;padding:4px 0 24px">
+    <div style="font-size:2.4em;flex-shrink:0;line-height:1">🔒</div>
+    <div>
+
+      {% if demo_mode %}
+      {# ── Demo restricted message ── #}
+      <div style="font-size:1.05em;font-weight:700;color:var(--text);margin-bottom:8px">
+        {{ fw.name }} — Demo Instance
+      </div>
+      <p style="font-size:0.88em;color:var(--muted);line-height:1.65;margin:0 0 16px">
+        Control descriptions are not available in the demo. This view demonstrates how the
+        platform organizes and presents compliance frameworks — full control text, implementation
+        guidance, and assessment procedures are available in licensed deployments.
+      </p>
+      <p style="font-size:0.88em;color:var(--muted);line-height:1.65;margin:0 0 20px">
+        All GRC workflows — risk assessments, POA&amp;M tracking, SSP authoring, evidence linking,
+        Statements of Applicability, and control narrative management — are fully functional with
+        your own deployment.
+      </p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <a href="mailto:{{ contact_email | default('dan@borisov.network') }}"
+           class="btn" style="font-size:0.82em">
+          Request a Live Walkthrough
+        </a>
+        <a href="/controls" class="btn btn-outline" style="font-size:0.82em">
+          Back to Controls Catalog
+        </a>
+      </div>
+
+      {% else %}
+      {# ── License-gated message (production, ISO/CIS) ── #}
+      <div style="font-size:1.05em;font-weight:700;color:var(--text);margin-bottom:8px">
+        {{ fw.name }} Control Catalog — Licensed Content
+      </div>
+      <p style="font-size:0.88em;color:var(--muted);line-height:1.65;margin:0 0 16px">
+        The <strong style="color:var(--text)">{{ fw.name }}</strong> standard is published under
+        a commercial copyright. Displaying verbatim control text requires a redistribution license
+        from the standard body — separate from purchasing a copy of the standard.
+      </p>
+      <p style="font-size:0.88em;color:var(--muted);line-height:1.65;margin:0 0 20px">
+        All GRC workflows are fully supported — risk assessments, Statements of Applicability,
+        control implementation narratives, evidence linking, and POA&amp;M tracking — but verbatim
+        control descriptions require your organization to hold a valid license.
+      </p>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;
+                  padding:16px 20px;margin-bottom:20px">
+        <div style="font-size:0.68em;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+                    color:var(--muted);margin-bottom:12px">What You Can Still Do</div>
+        <ul style="margin:0;padding:0 0 0 18px;font-size:0.85em;color:var(--text);
+                   line-height:1.8;list-style:disc">
+          <li>Track implementation status for every control in this framework</li>
+          <li>Write and store control narratives in your own words</li>
+          <li>Link evidence files and closure documentation</li>
+          <li>Track open POA&amp;M items by control ID</li>
+          <li>Generate a Statement of Applicability (SoA)</li>
+          <li>Cross-reference controls with NIST 800-53 mappings</li>
+          <li>View coverage analytics on the system frameworks page</li>
+        </ul>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <a href="/controls" class="btn btn-outline" style="font-size:0.82em">
+          Back to Controls Catalog
+        </a>
+      </div>
+
+      {% if is_admin %}
+      <div style="margin-top:20px;padding:12px 16px;background:rgba(0,255,204,0.05);
+                  border:1px solid rgba(0,255,204,0.15);border-radius:8px;font-size:0.82em">
+        <strong style="color:var(--cyan)">Admin:</strong>
+        <span style="color:var(--muted)">
+          If your organization holds a valid license for this content, enable it under
+        </span>
+        <a href="/admin/system-settings" style="color:var(--cyan)">
+          System Settings → Licensed Content
+        </a>
+        <span style="color:var(--muted)">
+          — description fields will become editable for your team to populate from your licensed documents.
+        </span>
+      </div>
+      {% endif %}
+
+      {% endif %}{# end demo_mode / license gate #}
+
+    </div>
+  </div>
+</div>
+
+{# ── Control ID index (IDs and domains only — no descriptions) ──────────── #}
+{% if fw_controls %}
+<div style="margin-top:28px">
+  <div style="font-size:0.68em;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+              color:var(--muted);margin-bottom:12px">
+    Control Index — {{ fw_controls | length }} Controls
+    <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);margin-left:8px">
+      (IDs only — descriptions not shown)
+    </span>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse;font-size:0.82em">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border)">
+          <th style="padding:10px 16px;text-align:left;color:var(--muted);font-weight:600;font-size:0.85em;text-transform:uppercase;letter-spacing:0.5px">Control ID</th>
+          <th style="padding:10px 16px;text-align:left;color:var(--muted);font-weight:600;font-size:0.85em;text-transform:uppercase;letter-spacing:0.5px">Domain</th>
+          <th style="padding:10px 16px;text-align:left;color:var(--muted);font-weight:600;font-size:0.85em;text-transform:uppercase;letter-spacing:0.5px">Title</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ctrl in fw_controls %}
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:9px 16px"><span class="mono" style="color:var(--cyan);font-size:0.92em">{{ ctrl.control_id }}</span></td>
+          <td style="padding:9px 16px;color:var(--muted)">{{ ctrl.domain or '—' }}</td>
+          <td style="padding:9px 16px;color:var(--muted);font-style:italic">🔒 Restricted</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

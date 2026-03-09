@@ -1,0 +1,7021 @@
+{
+  "snapshot": "db_schema",
+  "generated_at_utc": "2026-03-01T19:09:24.762981+00:00",
+  "db_path": "/home/graycat/projects/blacksite/blacksite.db",
+  "tables": {
+    "access_spot_checks": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "check_date",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "records_sampled",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "anomaly_found",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "terminated_user_found",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "anomaly_description",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_access_spot_checks_sys",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "ix_access_spot_checks_remote_user",
+          "unique": false,
+          "columns": [
+            "remote_user"
+          ]
+        },
+        {
+          "name": "ix_access_spot_checks_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_access_spot_checks_1",
+          "unique": true,
+          "columns": [
+            "remote_user",
+            "system_id",
+            "check_date"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "admin_chat_messages": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "room",
+          "type": "VARCHAR(120)",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "from_user",
+          "type": "VARCHAR(120)",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "body",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "sent_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_admin_chat_messages_room",
+          "unique": false,
+          "columns": [
+            "room"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "row_count": 2
+    },
+    "admin_chat_receipts": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "room",
+          "type": "VARCHAR(120)",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "username",
+          "type": "VARCHAR(120)",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "last_read_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [],
+      "row_count": 1
+    },
+    "artifacts": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "control_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "artifact_type",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "title",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "description",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "file_path",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "source",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "integrity_hash",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "collected_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "freshness_days",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "owner",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "approval_status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "approved_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 14,
+          "name": "approved_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 15,
+          "name": "created_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 16,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_artifacts_control_id",
+          "unique": false,
+          "columns": [
+            "control_id"
+          ]
+        },
+        {
+          "name": "ix_artifacts_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_artifacts_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 43
+    },
+    "assessments": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "candidate_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "filename",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "file_path",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "uploaded_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "total_controls_found",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "controls_complete",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "controls_partial",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "controls_insufficient",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "controls_not_found",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "ssp_score",
+          "type": "FLOAT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "quiz_score",
+          "type": "FLOAT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "combined_score",
+          "type": "FLOAT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 14,
+          "name": "is_allstar",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 15,
+          "name": "email_sent",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 16,
+          "name": "error_message",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 17,
+          "name": "submitted_by",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 18,
+          "name": "system_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_assessments_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_assessments_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "candidate_id",
+          "table": "candidates",
+          "to": "id"
+        },
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 43
+    },
+    "ato_document_versions": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "document_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "version",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "content_snap",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "from_status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "to_status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "changed_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "changed_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "change_note",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_ato_doc_versions_document_id",
+          "unique": false,
+          "columns": [
+            "document_id"
+          ]
+        },
+        {
+          "name": "ix_ato_document_versions_document_id",
+          "unique": false,
+          "columns": [
+            "document_id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ato_document_versions_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "document_id",
+          "table": "ato_documents",
+          "to": "id"
+        }
+      ],
+      "row_count": 2
+    },
+    "ato_documents": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "doc_type",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "title",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "version",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "content",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "assigned_to",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "due_date",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "created_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "file_path",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "file_size",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 14,
+          "name": "source_type",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_ato_documents_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ato_documents_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 18
+    },
+    "ato_workflow_events": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "document_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "from_status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "to_status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "actor",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "actor_role",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "comment",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "timestamp",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_ato_workflow_events_document_id",
+          "unique": false,
+          "columns": [
+            "document_id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ato_workflow_events_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "document_id",
+          "table": "ato_documents",
+          "to": "id"
+        }
+      ],
+      "row_count": 2
+    },
+    "audit_log": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "timestamp",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "action",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "resource_type",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "resource_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "details",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "remote_ip",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "outcome",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "'ok'",
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_audit_log_outcome",
+          "unique": false,
+          "columns": [
+            "outcome"
+          ]
+        },
+        {
+          "name": "ix_audit_log_resource_type",
+          "unique": false,
+          "columns": [
+            "resource_type"
+          ]
+        },
+        {
+          "name": "ix_audit_log_action",
+          "unique": false,
+          "columns": [
+            "action"
+          ]
+        },
+        {
+          "name": "ix_audit_log_remote_user",
+          "unique": false,
+          "columns": [
+            "remote_user"
+          ]
+        },
+        {
+          "name": "ix_audit_log_timestamp",
+          "unique": false,
+          "columns": [
+            "timestamp"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "row_count": 7912
+    },
+    "auto_fail_events": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "trigger_type",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "control_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "resource_type",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "resource_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "title",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "details",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "severity",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "poam_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "resolved_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "resolved_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 14,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_auto_fail_events_trigger_type",
+          "unique": false,
+          "columns": [
+            "trigger_type"
+          ]
+        },
+        {
+          "name": "ix_auto_fail_events_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "poam_id",
+          "table": "poam_items",
+          "to": "id"
+        },
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "backup_check_records": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "check_date",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "result",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "ephi_systems",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "job_health",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "issue_raised",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_backup_checks_sys",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "ix_backup_check_records_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "ix_backup_check_records_remote_user",
+          "unique": false,
+          "columns": [
+            "remote_user"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_backup_check_records_1",
+          "unique": true,
+          "columns": [
+            "remote_user",
+            "system_id",
+            "check_date"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "bcdr_events": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "team_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "event_type",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "title",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "triggered_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "triggered_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "target_rto",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "target_rpo",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "closed_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [
+        {
+          "from": "team_id",
+          "table": "system_teams",
+          "to": "id"
+        },
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 21
+    },
+    "bcdr_signoffs": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "event_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "role_in_team",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "required",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "signed_off",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "signed_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "notes",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [
+        {
+          "from": "event_id",
+          "table": "bcdr_events",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "candidates": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "name",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "email",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_candidates_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "row_count": 22
+    },
+    "change_review_records": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "review_date",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "ticket_refs",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "high_risk_count",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "all_approved",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "backout_exists",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "untracked_found",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "obs_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "uq_change_review_user_sys_date",
+          "unique": true,
+          "columns": [
+            "remote_user",
+            "system_id",
+            "review_date"
+          ]
+        },
+        {
+          "name": "ix_change_review_sys_date",
+          "unique": false,
+          "columns": [
+            "system_id",
+            "review_date"
+          ]
+        },
+        {
+          "name": "ix_change_review_records_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "ix_change_review_records_remote_user",
+          "unique": false,
+          "columns": [
+            "remote_user"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "obs_id",
+          "table": "observations",
+          "to": "id"
+        },
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "control_edits": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "control_result_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "assessment_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "field",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "old_value",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "new_value",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "edited_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [
+        {
+          "from": "assessment_id",
+          "table": "assessments",
+          "to": "id"
+        },
+        {
+          "from": "control_result_id",
+          "table": "control_results",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "control_parameters": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "control_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "parameter_key",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "required_value",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "current_value",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "source",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "last_checked",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "drift_detected",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "created_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_control_parameters_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_control_parameters_1",
+          "unique": true,
+          "columns": [
+            "system_id",
+            "control_id",
+            "parameter_key"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "control_results": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "assessment_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "control_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "control_family",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "control_title",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "found_in_ssp",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "implementation_status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "responsible_role",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "narrative_excerpt",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "ai_score",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "ai_grade",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "ai_issues",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "ai_elements_covered",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "proctor_assessment",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 14,
+          "name": "proctor_score",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 15,
+          "name": "is_na",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": "0",
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_control_results_assessment_id",
+          "unique": false,
+          "columns": [
+            "assessment_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "assessment_id",
+          "table": "assessments",
+          "to": "id"
+        }
+      ],
+      "row_count": 1391
+    },
+    "controls_meta": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "revision",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "last_updated",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "source_url",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "total_controls",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "git_sha",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [],
+      "row_count": 0
+    },
+    "daily_logbooks": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "log_date",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "task_flags",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "snap_open_poams",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "snap_overdue_poams",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "snap_open_risks",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "snap_open_obs",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "snap_open_incidents",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_daily_logbooks_user_sys",
+          "unique": false,
+          "columns": [
+            "remote_user",
+            "system_id"
+          ]
+        },
+        {
+          "name": "ix_daily_logbooks_sys_date",
+          "unique": false,
+          "columns": [
+            "system_id",
+            "log_date"
+          ]
+        },
+        {
+          "name": "ix_daily_logbooks_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "ix_daily_logbooks_remote_user",
+          "unique": false,
+          "columns": [
+            "remote_user"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_daily_logbooks_1",
+          "unique": true,
+          "columns": [
+            "remote_user",
+            "system_id",
+            "log_date"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "daily_quiz_activity": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "quiz_date",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "score",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "passed",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "completed_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [],
+      "row_count": 90
+    },
+    "data_flow_records": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "integration_name",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "auth_method",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "encrypted_in_transit",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "encrypted_at_rest",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "logging_confirmed",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "termination_steps",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "data_types",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "last_reviewed",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "reviewed_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_data_flows_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "ix_data_flow_records_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "deep_work_completions": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "rotation_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "rotation_day",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "completed_date",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "evidence_path",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "evidence_name",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "uq_dw_completion_day_date",
+          "unique": true,
+          "columns": [
+            "rotation_id",
+            "rotation_day",
+            "completed_date"
+          ]
+        },
+        {
+          "name": "ix_dw_completions_user_sys",
+          "unique": false,
+          "columns": [
+            "remote_user",
+            "system_id"
+          ]
+        },
+        {
+          "name": "ix_dw_completions_rotation",
+          "unique": false,
+          "columns": [
+            "rotation_id"
+          ]
+        },
+        {
+          "name": "ix_deep_work_completions_remote_user",
+          "unique": false,
+          "columns": [
+            "remote_user"
+          ]
+        },
+        {
+          "name": "ix_deep_work_completions_rotation_id",
+          "unique": false,
+          "columns": [
+            "rotation_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        },
+        {
+          "from": "rotation_id",
+          "table": "deep_work_rotations",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "deep_work_rotations": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "role_variant",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "current_day",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "last_work_date",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "paused",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "quarterly_overrides",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_deep_work_rotations_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "ix_deep_work_rotations_remote_user",
+          "unique": false,
+          "columns": [
+            "remote_user"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_deep_work_rotations_1",
+          "unique": true,
+          "columns": [
+            "remote_user",
+            "system_id",
+            "role_variant"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 9
+    },
+    "duty_assignments": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "duty",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "assigned_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "assigned_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "active",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "expires_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "note",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_duty_assignments_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "ix_duty_assignments_remote_user",
+          "unique": false,
+          "columns": [
+            "remote_user"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_duty_assignments_1",
+          "unique": true,
+          "columns": [
+            "remote_user",
+            "duty",
+            "system_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        },
+        {
+          "from": "remote_user",
+          "table": "user_profiles",
+          "to": "remote_user"
+        }
+      ],
+      "row_count": 6
+    },
+    "feed_sources": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "key",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "name",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "url",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "enabled",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "sort_order",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "last_fetched",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "last_error",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "item_count",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "error_count",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_feed_sources_2",
+          "unique": true,
+          "columns": [
+            "url"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_feed_sources_1",
+          "unique": true,
+          "columns": [
+            "key"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "row_count": 14
+    },
+    "generated_reports": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "report_type",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "filename",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "file_path",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "file_size",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "error_msg",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "generated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_generated_reports_sys_status",
+          "unique": false,
+          "columns": [
+            "system_id",
+            "status"
+          ]
+        },
+        {
+          "name": "ix_generated_reports_remote_user",
+          "unique": false,
+          "columns": [
+            "remote_user"
+          ]
+        },
+        {
+          "name": "ix_generated_reports_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "ingest_jobs": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "ingest_type",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "filename",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "row_count",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "error_count",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "unknown_fields",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "data_json",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "created_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "committed_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "committed_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "commit_results",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_ingest_jobs_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "row_count": 2
+    },
+    "interconnection_records": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "partner_name",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "data_types",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "isa_exists",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "isa_expiry",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "monitoring_confirmed",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "encrypted_in_transit",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "auth_method",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "last_reviewed",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "reviewed_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_interconnections_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "ix_interconnection_records_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "inventory_items": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "item_type",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "name",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "vendor",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "version",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "quantity",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "location",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "ip_address",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "serial_number",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "added_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "added_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_inventory_items_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "nist_publications": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "doc_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "title",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "series",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "pub_date",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "url",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "raw_json",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "last_fetched",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_nist_publications_doc_id",
+          "unique": true,
+          "columns": [
+            "doc_id"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "row_count": 0
+    },
+    "notifications": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "notif_type",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "title",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "body",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "action_url",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "related_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "related_type",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "is_read",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "read_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_notifications_remote_user",
+          "unique": false,
+          "columns": [
+            "remote_user"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "remote_user",
+          "table": "user_profiles",
+          "to": "remote_user"
+        }
+      ],
+      "row_count": 210
+    },
+    "nvd_cves": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "cve_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "description",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "cvss_score",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "cvss_vector",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "cvss_severity",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "affected_products",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "published_date",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "modified_date",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "patched_date",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "raw_json",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "last_fetched",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_nvd_cves_cve_id",
+          "unique": true,
+          "columns": [
+            "cve_id"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "row_count": 0
+    },
+    "observations": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "title",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "source",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "obs_type",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "severity",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "description",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "control_ids",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "scope_tags",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "promoted_to_poam",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "assigned_to",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "due_date",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "created_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 14,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 15,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_observations_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_observations_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "promoted_to_poam",
+          "table": "poam_items",
+          "to": "id"
+        },
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "poam_evidence": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "poam_item_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "filename",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "file_path",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "file_size",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "uploaded_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "uploaded_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "description",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_poam_evidence_poam_item_id",
+          "unique": false,
+          "columns": [
+            "poam_item_id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_poam_evidence_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "poam_item_id",
+          "table": "poam_items",
+          "to": "id"
+        }
+      ],
+      "row_count": 1
+    },
+    "poam_items": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "assessment_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "control_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "weakness_name",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "weakness_description",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "detection_source",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "severity",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "responsible_party",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "resources_required",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "scheduled_completion",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "remediation_plan",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "completion_date",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 14,
+          "name": "comments",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 15,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 16,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 17,
+          "name": "created_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 18,
+          "name": "root_cause",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 19,
+          "name": "closure_evidence",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 20,
+          "name": "waiver_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 21,
+          "name": "risk_accept_review",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 22,
+          "name": "poam_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 23,
+          "name": "approval_stage",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 24,
+          "name": "residual_risk",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 25,
+          "name": "blocker_category",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 26,
+          "name": "blocker_owner",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 27,
+          "name": "unblock_plan",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 28,
+          "name": "verifier",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 29,
+          "name": "verification_date",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 30,
+          "name": "verification_method",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 31,
+          "name": "waiver_start",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 32,
+          "name": "waiver_end",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 33,
+          "name": "monitoring_checkpoints",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 34,
+          "name": "compensating_controls",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 35,
+          "name": "non_applicability_rationale",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 36,
+          "name": "signoff_trail",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 37,
+          "name": "system_generated",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "pk": false
+        },
+        {
+          "cid": 38,
+          "name": "auto_fail_event_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_poam_items_poam_id",
+          "unique": true,
+          "columns": [
+            "poam_id"
+          ]
+        },
+        {
+          "name": "ix_poam_items_assessment_id",
+          "unique": false,
+          "columns": [
+            "assessment_id"
+          ]
+        },
+        {
+          "name": "ix_poam_items_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_poam_items_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "assessment_id",
+          "table": "assessments",
+          "to": "id"
+        },
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 3508
+    },
+    "privacy_assessments": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "assess_type",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "data_elements",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "purpose",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "disclosures",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "retention_policy",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "access_controls",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "last_reviewed",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "reviewer",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_privacy_assessments_sys",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "ix_privacy_assessments_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "program_role_assignments": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "program_role",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "requested_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "requested_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "approved_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "approved_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "revoked_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "revoked_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "note",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_program_role_assignments_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "ix_program_role_assignments_remote_user",
+          "unique": false,
+          "columns": [
+            "remote_user"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_program_role_assignments_1",
+          "unique": true,
+          "columns": [
+            "remote_user",
+            "program_role",
+            "system_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        },
+        {
+          "from": "remote_user",
+          "table": "user_profiles",
+          "to": "remote_user"
+        }
+      ],
+      "row_count": 60
+    },
+    "quiz_responses": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "assessment_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "question_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "selected_answer",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "is_correct",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "completed_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [
+        {
+          "from": "assessment_id",
+          "table": "assessments",
+          "to": "id"
+        }
+      ],
+      "row_count": 20
+    },
+    "removed_user_reservations": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "username",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "email",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "removed_at",
+          "type": "DATETIME",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "hold_until",
+          "type": "DATETIME",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "removed_by",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "override_granted",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "override_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "override_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "override_reason",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_ruv_hold",
+          "unique": false,
+          "columns": [
+            "hold_until"
+          ]
+        },
+        {
+          "name": "idx_ruv_email",
+          "unique": false,
+          "columns": [
+            "email"
+          ]
+        },
+        {
+          "name": "idx_ruv_username",
+          "unique": false,
+          "columns": [
+            "username"
+          ]
+        },
+        {
+          "name": "ix_removed_user_reservations_username",
+          "unique": false,
+          "columns": [
+            "username"
+          ]
+        },
+        {
+          "name": "ix_removed_user_reservations_email",
+          "unique": false,
+          "columns": [
+            "email"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "row_count": 0
+    },
+    "restore_test_records": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "test_date",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "scope",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "result",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "time_to_restore_min",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "validated_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "evidence_path",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "created_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_restore_tests_sys",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "ix_restore_test_records_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "risks": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "poam_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "risk_name",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "risk_description",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "threat_source",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "threat_event",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "vulnerability",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "likelihood",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "impact",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "risk_score",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "risk_level",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "treatment",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "treatment_plan",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 14,
+          "name": "residual_likelihood",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 15,
+          "name": "residual_impact",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 16,
+          "name": "residual_score",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 17,
+          "name": "residual_level",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 18,
+          "name": "owner",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 19,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 20,
+          "name": "review_date",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 21,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 22,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 23,
+          "name": "created_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_risks_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_risks_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "poam_id",
+          "table": "poam_items",
+          "to": "id"
+        },
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 2054
+    },
+    "rmf_records": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "step",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "owner",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "target_date",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "actual_date",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "evidence",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "artifacts",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "created_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_rmf_records_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_rmf_records_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 322
+    },
+    "security_events": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "timestamp",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "event_type",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "severity",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "remote_ip",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "method",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "path",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "status_code",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "user_agent",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "details",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_security_events_remote_user",
+          "unique": false,
+          "columns": [
+            "remote_user"
+          ]
+        },
+        {
+          "name": "ix_security_events_event_type",
+          "unique": false,
+          "columns": [
+            "event_type"
+          ]
+        },
+        {
+          "name": "ix_security_events_timestamp",
+          "unique": false,
+          "columns": [
+            "timestamp"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "row_count": 1417
+    },
+    "ssp_reviews": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "filename",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "file_path",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "uploaded_by",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "uploaded_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "system_name",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "impact_level",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "error_message",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "overall_score",
+          "type": "FLOAT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "total_controls",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "adequate",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "medium_gap",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "high_gap",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 14,
+          "name": "critical_gap",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 15,
+          "name": "not_found",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 16,
+          "name": "analysis_json",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_ssp_reviews_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "row_count": 2
+    },
+    "submissions": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "submission_type",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "package_notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "submitted_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "submitted_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "reviewer",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "reviewed_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "decision",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "decision_date",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "ato_expiry",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "controls_total",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "controls_impl",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 14,
+          "name": "controls_na",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 15,
+          "name": "controls_gap",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 16,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 17,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 18,
+          "name": "created_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 19,
+          "name": "authorization_type",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "'ATO'",
+          "pk": false
+        },
+        {
+          "cid": 20,
+          "name": "term_months",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 21,
+          "name": "term_expires_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 22,
+          "name": "extension_used",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": "0",
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_submissions_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 81
+    },
+    "system_assignments": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "assigned_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "assigned_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "note",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_system_assignments_remote_user",
+          "unique": false,
+          "columns": [
+            "remote_user"
+          ]
+        },
+        {
+          "name": "ix_system_assignments_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 2181
+    },
+    "system_connections": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "conn_type",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "name",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "description",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "remote_system",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "data_types",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "protocol",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "port",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "direction",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "has_isa",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "isa_doc_id",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "added_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "added_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_system_connections_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "system_controls": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "control_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "control_family",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "control_title",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "implementation_type",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "narrative",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "responsible_role",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "inherited_from",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "inherited_narrative",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "last_updated_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "last_updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 14,
+          "name": "created_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_sysctl_system_ctrl",
+          "unique": true,
+          "columns": [
+            "system_id",
+            "control_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "inherited_from",
+          "table": "systems",
+          "to": "id"
+        },
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 39297
+    },
+    "system_settings": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "key",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "value",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "updated_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_system_settings_1",
+          "unique": true,
+          "columns": [
+            "key"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "row_count": 201
+    },
+    "system_teams": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "name",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "team_type",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "description",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "created_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "systems": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "name",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "abbreviation",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "system_type",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "environment",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "owner_name",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "owner_email",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "description",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "purpose",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "boundary",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "confidentiality_impact",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "integrity_impact",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "availability_impact",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "overall_impact",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 14,
+          "name": "auth_status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 15,
+          "name": "auth_date",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 16,
+          "name": "auth_expiry",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 17,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 18,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 19,
+          "name": "created_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 20,
+          "name": "ato_decision",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 21,
+          "name": "is_eis",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": "0",
+          "pk": false
+        },
+        {
+          "cid": 22,
+          "name": "deleted_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 23,
+          "name": "deleted_by",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 24,
+          "name": "inventory_number",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 25,
+          "name": "has_pii",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": "0",
+          "pk": false
+        },
+        {
+          "cid": 26,
+          "name": "has_phi",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": "0",
+          "pk": false
+        },
+        {
+          "cid": 27,
+          "name": "has_ephi",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": "0",
+          "pk": false
+        },
+        {
+          "cid": 28,
+          "name": "has_financial_data",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": "0",
+          "pk": false
+        },
+        {
+          "cid": 29,
+          "name": "is_public_facing",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": "0",
+          "pk": false
+        },
+        {
+          "cid": 30,
+          "name": "has_cui",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": "0",
+          "pk": false
+        },
+        {
+          "cid": 31,
+          "name": "connects_to_federal",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": "0",
+          "pk": false
+        },
+        {
+          "cid": 32,
+          "name": "categorization_status",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "'draft'",
+          "pk": false
+        },
+        {
+          "cid": 33,
+          "name": "categorization_approved_by",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 34,
+          "name": "categorization_note",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 35,
+          "name": "ato_duration",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 36,
+          "name": "ato_notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 37,
+          "name": "ato_signed_by",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 38,
+          "name": "ato_signed_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_systems_1",
+          "unique": true,
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "row_count": 1108
+    },
+    "team_memberships": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "team_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "role_in_team",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "assigned_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "assigned_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [],
+      "foreign_keys": [
+        {
+          "from": "team_id",
+          "table": "system_teams",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    },
+    "user_feed_subscriptions": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "feed_key",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "enabled",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_user_feed_subscriptions_remote_user",
+          "unique": false,
+          "columns": [
+            "remote_user"
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_user_feed_subscriptions_1",
+          "unique": true,
+          "columns": [
+            "remote_user",
+            "feed_key"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "row_count": 0
+    },
+    "user_profiles": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "remote_user",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "display_name",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "email",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "department",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "notifications_email",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "notifications_quiz",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "quiz_domains",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "role",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "'employee'",
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "max_packages",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "10",
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "last_login",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "status",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "'active'",
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "removed_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 14,
+          "name": "removed_by",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 15,
+          "name": "removal_reason",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "NULL",
+          "pk": false
+        },
+        {
+          "cid": 16,
+          "name": "company_tier",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "'analyst'",
+          "pk": false
+        },
+        {
+          "cid": 17,
+          "name": "avatar_url",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 18,
+          "name": "pref_font_size",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "'14px'",
+          "pk": false
+        },
+        {
+          "cid": 19,
+          "name": "pref_density",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "'comfortable'",
+          "pk": false
+        },
+        {
+          "cid": 20,
+          "name": "pref_rows_per_page",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "25",
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_user_profiles_1",
+          "unique": true,
+          "columns": [
+            "remote_user"
+          ]
+        }
+      ],
+      "foreign_keys": [],
+      "row_count": 119
+    },
+    "vendors": {
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "pk": true
+        },
+        {
+          "cid": 1,
+          "name": "system_id",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 2,
+          "name": "name",
+          "type": "VARCHAR",
+          "notnull": true,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 3,
+          "name": "service_type",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 4,
+          "name": "handles_ephi",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 5,
+          "name": "has_baa",
+          "type": "BOOLEAN",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 6,
+          "name": "baa_expiry",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 7,
+          "name": "contact_name",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 8,
+          "name": "contact_email",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 9,
+          "name": "status",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 10,
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 11,
+          "name": "created_by",
+          "type": "VARCHAR",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 12,
+          "name": "created_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        },
+        {
+          "cid": 13,
+          "name": "updated_at",
+          "type": "DATETIME",
+          "notnull": false,
+          "default": null,
+          "pk": false
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_vendors_system_id",
+          "unique": false,
+          "columns": [
+            "system_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "from": "system_id",
+          "table": "systems",
+          "to": "id"
+        }
+      ],
+      "row_count": 0
+    }
+  },
+  "table_count": 56
+}

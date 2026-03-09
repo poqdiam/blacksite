@@ -2,11 +2,16 @@
 {% block title %}{{ app_name }} — Reports: {{ system.name }}{% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <a href="/systems">Systems</a>
+  <span class="sep">/</span>
+  <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+  <span class="sep">/</span>
+  <span>Reports</span>
+</div>
+
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
   <div>
-    <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">
-      <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a> / Reports
-    </div>
     <h1 style="font-size:1.3em;margin:0">Generated Reports</h1>
   </div>
   <button class="btn btn-primary btn-sm" onclick="document.getElementById('gen-form').style.display='block';this.style.display='none'">

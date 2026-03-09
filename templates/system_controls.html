@@ -130,7 +130,7 @@
     <p class="text-muted" style="margin:4px 0 0;font-size:0.85em">
       {{ system.name }}
       {% if system.abbreviation %}<span style="font-family:var(--mono);color:var(--cyan);margin-left:8px">{{ system.abbreviation }}</span>{% endif %}
-      · NIST SP 800-53r5
+      · {{ system.primary_catalog | upper if system.primary_catalog else 'Control Plan' }}
     </p>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -144,7 +144,7 @@
       RTM →
     </a>
     <a href="/systems/{{ system.id }}/submit" class="btn btn-primary" style="font-size:0.82em">
-      Submit for ATO →
+      Submit for Authorization →
     </a>
   </div>
 </div>
@@ -211,13 +211,13 @@
   {% if family %}
   <span class="active-filter-pill">
     Family: {{ family }}
-    <a href="/systems/{{ system.id }}/controls{% if status_filter %}?status_filter={{ status_filter }}{% endif %}" title="Remove family filter">✕</a>
+    <a href="/systems/{{ system.id }}/controls{% if status_filter %}?status_filter={{ status_filter }}{% endif %}" title="Remove family filter" aria-label="Remove family filter">✕</a>
   </span>
   {% endif %}
   {% if status_filter %}
   <span class="active-filter-pill">
     Status: {{ status_filter | replace('_', ' ') | title }}
-    <a href="/systems/{{ system.id }}/controls{% if family %}?family={{ family }}{% endif %}" title="Remove status filter">✕</a>
+    <a href="/systems/{{ system.id }}/controls{% if family %}?family={{ family }}{% endif %}" title="Remove status filter" aria-label="Remove status filter">✕</a>
   </span>
   {% endif %}
 
@@ -247,6 +247,14 @@
         <span class="status-badge" id="badge-{{ c.id }}" style="color:{{ c.color }};border-color:{{ c.color }}22">
           {{ c.status | replace('_',' ') | title }}
         </span>
+        <a href="/controls/{{ c.id }}"
+           onclick="event.stopPropagation()"
+           title="View {{ c.id | upper }} control definition"
+           style="color:var(--muted);font-size:0.75em;text-decoration:none;padding:2px 6px;
+                  border:1px solid rgba(255,255,255,0.1);border-radius:3px;
+                  background:rgba(255,255,255,0.03);white-space:nowrap">
+          Definition
+        </a>
         <a href="/systems/{{ system.id }}/workspace/{{ c.id }}"
            onclick="event.stopPropagation()"
            title="Open ISSO workspace for {{ c.id | upper }}"

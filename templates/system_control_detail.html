@@ -224,6 +224,29 @@
     font-size: 0.85em;
     color: var(--green);
   }
+
+  /* Assessment guidance */
+  .assess-section { margin-bottom: 14px; }
+  .assess-method {
+    display: flex; gap: 10px; align-items: baseline;
+    padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 0.83em; color: var(--text);
+  }
+  .assess-method:last-child { border-bottom: none; }
+  .assess-method-tag {
+    flex-shrink: 0; font-size: 0.68em; font-weight: 700;
+    letter-spacing: 1px; text-transform: uppercase;
+    padding: 1px 7px; border-radius: 3px;
+  }
+  .tag-examine  { background: rgba(0,255,204,0.1);  color: var(--cyan);   border: 1px solid rgba(0,255,204,0.2); }
+  .tag-interview{ background: rgba(255,193,7,0.1);  color: var(--yellow); border: 1px solid rgba(255,193,7,0.2); }
+  .tag-test     { background: rgba(76,175,80,0.1);  color: var(--green);  border: 1px solid rgba(76,175,80,0.2); }
+
+  /* SCA result badge */
+  .result-sat   { color: var(--green);  font-weight: 700; }
+  .result-ots   { color: var(--red);    font-weight: 700; }
+  .result-na    { color: var(--muted);  font-weight: 700; }
+  .result-none  { color: rgba(136,136,136,0.5); font-style: italic; }
 </style>
 {% endblock %}
 
@@ -251,7 +274,7 @@
 <div class="ws-card">
   <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
     <div style="flex:1;min-width:0">
-      <div class="ws-card-title">NIST SP 800-53r5 — Control Definition</div>
+      <div class="ws-card-title">Control Definition</div>
       <div class="ctrl-meta-row">
         <span class="ctrl-id-badge">{{ ctrl_id | upper }}</span>
         <span class="ctrl-family-badge">{{ cat_ctrl.family or ctrl_id.split('-')[0] | upper }}</span>
@@ -298,9 +321,123 @@
       {{ cat_ctrl.family or ctrl_id.split('-')[0] | upper }} family →
     </a>
     <span style="font-size:0.72em;color:var(--muted);margin-left:auto">
-      NIST SP 800-53 Rev 5
+      Control Catalog
     </span>
   </div>
+</div>
+
+{# ── Assessment Guidance card (shown when guidance exists) ────────────────── #}
+{% if assess_ctx %}
+<div class="ws-card">
+  <div class="ws-card-title">Assessment Guidance
+    <span style="font-size:0.85em;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:8px">
+      What to examine, who to interview, and what to test
+    </span>
+  </div>
+  {% if assess_ctx.examine %}
+  <div class="assess-section">
+    {% for item in assess_ctx.examine %}
+    <div class="assess-method">
+      <span class="assess-method-tag tag-examine">Examine</span>{{ item }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if assess_ctx.interview %}
+  <div class="assess-section">
+    {% for item in assess_ctx.interview %}
+    <div class="assess-method">
+      <span class="assess-method-tag tag-interview">Interview</span>{{ item }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if assess_ctx.test %}
+  <div class="assess-section">
+    {% for item in assess_ctx.test %}
+    <div class="assess-method">
+      <span class="assess-method-tag tag-test">Test</span>{{ item }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ── SCA Assessment Record card ────────────────────────────────────────────── #}
+<div class="ws-card">
+  <div class="ws-card-title">Assessment Record
+    {% if not can_assess %}
+    <span style="font-size:0.85em;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:8px">
+      (read-only — recorded by assessor)
+    </span>
+    {% endif %}
+  </div>
+
+  {% if can_assess %}
+  <form method="POST" action="/systems/{{ system.id }}/workspace/{{ ctrl_id }}">
+    <input type="hidden" name="save_mode" value="assess">
+    <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="flex:0 0 auto">
+        <label class="impl-label">Assessment Result</label>
+        <select name="assessment_result" style="min-width:220px">
+          <option value="">— Not yet assessed —</option>
+          {% for val, lbl in [
+            ('satisfied',             'Satisfied'),
+            ('other_than_satisfied',  'Other Than Satisfied'),
+            ('not_applicable',        'Not Applicable'),
+          ] %}
+          <option value="{{ val }}" {% if sc and sc.assessment_result == val %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <label class="impl-label">Assessment Notes
+      <span style="font-size:0.8em;font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted);margin-left:8px">
+        Evidence reviewed, interviews conducted, test results, and findings
+      </span>
+    </label>
+    <textarea name="assessment_notes" rows="5"
+              placeholder="Describe evidence examined, interviews conducted, test procedures performed, and any findings or deviations observed…">{{ sc.assessment_notes if sc and sc.assessment_notes else '' }}</textarea>
+    <div style="display:flex;align-items:center;gap:14px;margin-top:12px">
+      <button type="submit" class="btn btn-primary" style="padding:8px 20px">Save Assessment</button>
+      {% if sc and sc.assessed_by %}
+      <span style="font-size:0.75em;color:var(--muted)">
+        Last assessed by <strong>{{ sc.assessed_by }}</strong>
+        {% if sc.assessed_at %} on {{ sc.assessed_at.strftime('%Y-%m-%d') }}{% endif %}
+      </span>
+      {% endif %}
+    </div>
+  </form>
+  {% else %}
+  {# Read-only view of assessment result for ISSO/AO/others #}
+  <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:0.85em">
+    <div>
+      <div style="font-size:0.68em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Result</div>
+      {% if sc and sc.assessment_result == 'satisfied' %}
+        <span class="result-sat">✓ Satisfied</span>
+      {% elif sc and sc.assessment_result == 'other_than_satisfied' %}
+        <span class="result-ots">✗ Other Than Satisfied</span>
+      {% elif sc and sc.assessment_result == 'not_applicable' %}
+        <span class="result-na">— Not Applicable</span>
+      {% else %}
+        <span class="result-none">Not yet assessed</span>
+      {% endif %}
+    </div>
+    {% if sc and sc.assessed_by %}
+    <div>
+      <div style="font-size:0.68em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Assessed By</div>
+      <span>{{ sc.assessed_by }}{% if sc.assessed_at %} · {{ sc.assessed_at.strftime('%Y-%m-%d') }}{% endif %}</span>
+    </div>
+    {% endif %}
+  </div>
+  {% if sc and sc.assessment_notes %}
+  <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+    <div style="font-size:0.68em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Assessment Notes</div>
+    <div style="font-size:0.84em;color:var(--text);line-height:1.6;white-space:pre-wrap">{{ sc.assessment_notes }}</div>
+  </div>
+  {% endif %}
+  {% endif %}
 </div>
 
 {# ── Implementation Record card ───────────────────────────────────────────── #}

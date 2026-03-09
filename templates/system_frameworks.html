@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Framework Crosswalk — {{ system.name }}{% endblock %}
+
+{% block head %}
+<style>
+  .fw-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 14px;
+    margin-top: 8px;
+  }
+  .fw-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    position: relative;
+    transition: border-color .15s;
+  }
+  .fw-card.applied {
+    border-color: rgba(0,255,204,0.35);
+    background: rgba(0,255,204,0.03);
+  }
+  .fw-card:hover { border-color: rgba(0,255,204,0.5); }
+
+  .fw-name {
+    font-size: 0.88em;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 2px;
+  }
+  .fw-meta {
+    font-size: 0.7em;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+  }
+  .fw-bar-wrap {
+    background: rgba(255,255,255,.06);
+    border-radius: 3px;
+    height: 6px;
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  .fw-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width .4s;
+  }
+  .fw-stats {
+    display: flex;
+    gap: 14px;
+    font-size: 0.7em;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .fw-stat-val { font-weight: 700; }
+  .fw-stat-sat { color: var(--green); }
+  .fw-stat-gap { color: var(--red); }
+  .fw-stat-part { color: var(--yellow); }
+
+  .fw-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .fw-badge-applied {
+    font-size: 0.62em;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    background: rgba(0,255,204,0.12);
+    color: var(--cyan);
+    border: 1px solid rgba(0,255,204,0.3);
+  }
+  .fw-cat-pill {
+    font-size: 0.62em;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    background: rgba(158,158,158,0.1);
+    color: var(--muted);
+    position: absolute;
+    top: 14px;
+    right: 14px;
+  }
+
+  .section-header {
+    font-size: 0.65em;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 24px 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/systems">System Catalog</a>
+  <span class="sep">/</span>
+  <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+  <span class="sep">/</span>
+  <span>Compliance Frameworks</span>
+</div>
+
+<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:22px">
+  <div>
+    <h1 style="margin:0 0 4px">Compliance Framework Crosswalk</h1>
+    <div style="font-size:0.82em;color:var(--muted)">
+      {{ system.name }} — coverage against major security and compliance frameworks
+    </div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-ghost btn-sm" onclick="fwSuggest()" id="fw-suggest-btn">✦ Suggest Frameworks</button>
+    <a href="/systems/{{ system.id }}/rtm" class="btn btn-ghost btn-sm">RTM</a>
+    <a href="/systems/{{ system.id }}/controls" class="btn btn-ghost btn-sm">Controls</a>
+    <a href="/systems/{{ system.id }}" class="btn btn-ghost btn-sm">System</a>
+  </div>
+</div>
+
+<!-- Framework Suggestion Panel -->
+<div id="fw-suggest-panel" style="display:none;margin-bottom:20px">
+  <div class="card" style="border-color:rgba(0,229,255,0.25)">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="font-weight:700;font-size:0.9em">✦ Framework Applicability Suggestions</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="fwWizard(0)" id="fw-wizard-btn" style="font-size:0.78em">Walk-through Wizard →</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('fw-suggest-panel').style.display='none'" style="font-size:0.78em;color:var(--muted)">Close</button>
+      </div>
+    </div>
+    <div id="fw-suggest-body" style="padding:16px 20px">
+      <div class="text-muted" style="font-size:0.85em">Loading suggestions…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Wizard Modal -->
+<div id="fw-wizard-modal" role="dialog" aria-modal="true" aria-label="Framework setup wizard" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9000;display:none;align-items:center;justify-content:center">
+  <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;width:540px;max-width:95vw;padding:32px;position:relative">
+    <button onclick="document.getElementById('fw-wizard-modal').style.display='none'" style="position:absolute;top:12px;right:16px;background:none;border:none;color:var(--muted);font-size:1.2em;cursor:pointer" aria-label="Close framework wizard">✕</button>
+    <div id="wizard-step-content"></div>
+    <div style="display:flex;justify-content:space-between;margin-top:24px">
+      <button class="btn btn-ghost" id="wizard-back-btn" onclick="fwWizard(-1)" style="display:none">← Back</button>
+      <button class="btn btn-primary" id="wizard-next-btn" onclick="fwWizard(1)">Next →</button>
+    </div>
+  </div>
+</div>
+
+{% set kind_descs = {
+  'baseline':   'Select the risk-appropriate control baseline for this system. Determined by your FIPS 199 impact level.',
+  'overlay':    'Apply additive overlays on top of your baseline for specific program requirements (cloud, privacy, OT, DoD).',
+  'framework':  'Enable frameworks for crosswalk coverage analysis and mapping.',
+  'regulation': 'Track regulatory requirements for awareness and compliance reference.',
+} %}
+{% set kind_hints = {
+  'baseline':   'Applying a baseline links it to your FIPS 199 categorization for reporting.',
+  'overlay':    'Overlays are additive — apply as many as your program requires.',
+  'framework':  'Frameworks enable gap analysis and RTM mapping.',
+  'regulation': 'Regulatory entries have no crosswalk data — tracked for awareness only.',
+} %}
+
+{% if not frameworks %}
+<div class="card" style="text-align:center;padding:48px;color:var(--muted)">
+  <div style="font-size:2em;margin-bottom:12px">⚙</div>
+  <div>No frameworks loaded. Run <code>scripts/seed_crosswalks.py</code> to seed framework data.</div>
+</div>
+{% else %}
+
+{% for kind in kind_order %}
+  {% set fws = by_kind.get(kind, []) %}
+  {% if fws %}
+  <div style="margin-bottom:32px">
+    <div style="margin-bottom:10px">
+      <div style="font-size:0.7em;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)">
+        {{ kind_labels[kind] }}
+        <span style="font-weight:400;font-size:0.9em;text-transform:none;letter-spacing:0;margin-left:8px;color:var(--muted)">— {{ kind_descs.get(kind,'') }}</span>
+      </div>
+    </div>
+    <div class="fw-grid">
+      {% for fw in fws %}
+      {% set cov = coverage.get(fw.id, {}) %}
+      {% set pct = cov.get('pct', 0) %}
+      {% set is_applied = fw.id in applied_ids %}
+      {% set sub = applied_subcats.get(fw.id) %}
+      <div class="fw-card {% if is_applied %}applied{% endif %}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+          <span class="fw-cat-pill">{{ fw.published_by or fw.category | title }}</span>
+          {% if kind == 'overlay' %}
+          <span style="font-size:0.65em;padding:1px 6px;border-radius:3px;background:rgba(0,188,212,0.1);color:#00bcd4;border:1px solid rgba(0,188,212,0.25)">overlay</span>
+          {% elif kind == 'baseline' %}
+          <span style="font-size:0.65em;padding:1px 6px;border-radius:3px;background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2)">baseline</span>
+          {% endif %}
+        </div>
+
+        <div class="fw-name">{{ fw.name }}</div>
+        {% if fw.version %}
+        <div class="fw-meta">v{{ fw.version }}{% if cov.get('total', 0) > 0 %} &nbsp;·&nbsp; {{ cov.get('total', 0) }} requirements{% endif %}</div>
+        {% endif %}
+        {% if fw.description %}
+        <div style="font-size:0.75em;color:var(--muted);margin:6px 0 10px;line-height:1.4">{{ fw.description[:120] }}{% if fw.description | length > 120 %}…{% endif %}</div>
+        {% endif %}
+
+        {% if cov.get('total', 0) > 0 %}
+        <div class="fw-bar-wrap">
+          <div class="fw-bar-fill"
+               style="width:{{ pct }}%;background:{% if pct >= 80 %}var(--green){% elif pct >= 50 %}var(--yellow){% else %}var(--red){% endif %}"></div>
+        </div>
+        <div class="fw-stats">
+          <span><span class="fw-stat-val fw-stat-sat">{{ cov.get('satisfied', 0) }}</span> satisfied</span>
+          <span><span class="fw-stat-val fw-stat-part">{{ cov.get('partial', 0) }}</span> partial</span>
+          <span><span class="fw-stat-val fw-stat-gap">{{ cov.get('gap', 0) }}</span> gap</span>
+          <span style="margin-left:auto;font-weight:700;color:{% if pct >= 80 %}var(--green){% elif pct >= 50 %}var(--yellow){% else %}var(--red){% endif %}">{{ pct }}%</span>
+        </div>
+        {% elif kind not in ('regulation',) %}
+        <div style="font-size:0.78em;color:var(--muted);margin-bottom:14px">No crosswalk data loaded</div>
+        {% endif %}
+
+        <div class="fw-actions">
+          {% if is_applied and cov.get('total', 0) > 0 %}
+          <a href="/systems/{{ system.id }}/frameworks/{{ fw.short_name }}" class="btn btn-sm btn-ghost">
+            View Crosswalk
+          </a>
+          {% endif %}
+          {% if is_applied %}
+          <span class="fw-badge-applied">Applied{% if sub %} — {{ sub }}{% endif %}</span>
+          {% endif %}
+          <form method="post" action="/systems/{{ system.id }}/frameworks/{{ fw.id }}/toggle"
+                style="margin-left:auto">
+            <button type="submit" class="btn btn-sm"
+                    style="{% if is_applied %}background:rgba(244,67,54,0.1);color:var(--red);border:1px solid rgba(244,67,54,0.3){% else %}background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.25){% endif %}">
+              {% if is_applied %}Remove{% else %}
+                {% if kind == 'overlay' %}Apply Overlay{% elif kind == 'baseline' %}Select Baseline{% elif kind == 'regulation' %}Track{% else %}Apply{% endif %}
+              {% endif %}
+            </button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+{% endfor %}
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+var _fwSuggestions = null;
+var _wizardIdx = 0;
+
+async function fwSuggest() {
+  const panel = document.getElementById('fw-suggest-panel');
+  panel.style.display = 'block';
+  const body = document.getElementById('fw-suggest-body');
+  if (_fwSuggestions === null) {
+    body.innerHTML = '<div class="text-muted" style="font-size:0.85em">Analyzing system attributes…</div>';
+    try {
+      const data = await fetch('/api/systems/{{ system.id }}/suggest-frameworks').then(r => r.json());
+      _fwSuggestions = data.suggestions || [];
+    } catch(e) {
+      body.innerHTML = '<div style="color:var(--red)">Could not load suggestions.</div>';
+      return;
+    }
+  }
+  renderSuggestions(body);
+}
+
+function renderSuggestions(body) {
+  if (!_fwSuggestions.length) {
+    body.innerHTML = '<div class="text-muted" style="font-size:0.85em">No applicable frameworks detected based on current system attributes.</div>';
+    return;
+  }
+  const applicable = _fwSuggestions.filter(s => !s.already_applied);
+  const already    = _fwSuggestions.filter(s => s.already_applied);
+
+  let html = '';
+  if (applicable.length) {
+    html += '<div style="margin-bottom:14px;font-size:0.8em;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em">Suggested — not yet applied</div>';
+    html += applicable.map(s => `
+      <div style="display:flex;align-items:flex-start;gap:14px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:0.9em">${s.name}</div>
+          <div style="font-size:0.8em;color:var(--muted);margin-top:3px">${s.reason}</div>
+        </div>
+        <div style="font-size:0.75em;color:var(--cyan);white-space:nowrap;margin-top:2px">${s.framework_id}</div>
+      </div>`).join('');
+  }
+  if (already.length) {
+    html += `<div style="margin:16px 0 10px;font-size:0.8em;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em">Already applied</div>`;
+    html += already.map(s => `
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 0;font-size:0.85em;color:var(--green)">
+        <span>✓</span><span>${s.name}</span>
+      </div>`).join('');
+  }
+  if (!applicable.length && already.length) {
+    html = '<div class="text-muted" style="font-size:0.85em;margin-bottom:12px">All detected applicable frameworks are already applied to this system.</div>' + html;
+  }
+  body.innerHTML = html;
+}
+
+function fwWizard(dir) {
+  if (_fwSuggestions === null) {
+    fwSuggest().then(() => fwWizardOpen());
+    return;
+  }
+  if (dir === 0) { _wizardIdx = 0; fwWizardOpen(); return; }
+  _wizardIdx = Math.max(0, Math.min((_fwSuggestions.filter(s=>!s.already_applied).length - 1), _wizardIdx + dir));
+  fwWizardRender();
+}
+
+function fwWizardOpen() {
+  const modal = document.getElementById('fw-wizard-modal');
+  modal.style.display = 'flex';
+  fwWizardRender();
+  const focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+  if (focusable.length) focusable[0].focus();
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    const modal = document.getElementById('fw-wizard-modal');
+    if (modal && modal.style.display === 'flex') modal.style.display = 'none';
+  }
+});
+
+function fwWizardRender() {
+  const applicable = _fwSuggestions.filter(s => !s.already_applied);
+  const content = document.getElementById('wizard-step-content');
+  const backBtn = document.getElementById('wizard-back-btn');
+  const nextBtn = document.getElementById('wizard-next-btn');
+  if (!applicable.length) {
+    content.innerHTML = '<div style="text-align:center;padding:20px"><div style="font-size:1.5em;margin-bottom:12px">✓</div><div style="font-weight:700">All detected frameworks are already applied.</div></div>';
+    backBtn.style.display = 'none';
+    nextBtn.textContent = 'Done';
+    nextBtn.onclick = () => { document.getElementById('fw-wizard-modal').style.display='none'; };
+    return;
+  }
+  const s = applicable[_wizardIdx];
+  const isLast = _wizardIdx >= applicable.length - 1;
+  content.innerHTML = `
+    <div style="font-size:0.75em;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px">
+      Framework ${_wizardIdx+1} of ${applicable.length}
+    </div>
+    <h2 style="margin:0 0 8px;font-size:1.2em">${s.name}</h2>
+    <div class="mono" style="font-size:0.78em;color:var(--cyan);margin-bottom:16px">${s.framework_id}</div>
+    <p style="font-size:0.9em;color:var(--muted);line-height:1.6">${s.reason}</p>
+    <div style="margin-top:20px;padding:14px;background:var(--surface);border-radius:6px;font-size:0.82em;color:var(--muted)">
+      To apply this framework, find it in the frameworks list below and click Enable.
+      The framework must be loaded in the catalog first via Admin → Frameworks.
+    </div>`;
+  backBtn.style.display = _wizardIdx > 0 ? 'inline-block' : 'none';
+  nextBtn.textContent = isLast ? 'Done' : 'Next →';
+  nextBtn.onclick = isLast
+    ? () => { document.getElementById('fw-wizard-modal').style.display='none'; }
+    : () => fwWizard(1);
+}
+
+// Close modal on backdrop click
+document.getElementById('fw-wizard-modal').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+</script>
+{% endblock %}

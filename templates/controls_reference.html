@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Reference Frameworks{% endblock %}
+
+{% block head %}
+<style>
+.fw-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  padding: 13px 20px; border-bottom: 1px solid var(--border);
+  text-decoration: none; color: inherit; transition: background 0.12s;
+}
+.fw-row:hover { background: rgba(0,255,204,0.04); }
+.fw-row:last-child { border-bottom: none; }
+.fw-row-name { font-size: 0.88em; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.fw-row-desc { font-size: 0.73em; color: var(--muted); line-height: 1.35; }
+.fw-row-meta { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.fw-row-count { font-size: 0.75em; color: var(--muted); white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/controls">Control Catalog</a>
+  <span class="sep">/</span>
+  <span>Reference Frameworks</span>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:6px">
+  <h1 style="margin:0">Reference Frameworks</h1>
+</div>
+<p style="color:var(--muted);font-size:0.85em;margin-bottom:24px">
+  Non-prescriptive guidance documents and best-practice frameworks.
+  These are not compliance mandates but provide useful reference material for program design.
+</p>
+
+<div class="card" style="padding:0;overflow:hidden">
+  {% for fw in frameworks %}
+  <a href="{{ fw.link }}" class="fw-row">
+    <div>
+      <div class="fw-row-name">{{ fw.name }}</div>
+      {% if fw.description %}
+      <div class="fw-row-desc">{{ fw.description[:200] }}{% if fw.description|length > 200 %}…{% endif %}</div>
+      {% endif %}
+    </div>
+    <div class="fw-row-meta">
+      {% if fw.ctrl_count %}<span class="fw-row-count">{{ fw.ctrl_count }} controls</span>
+      {% else %}<span class="fw-row-count" style="font-style:italic">Reference only</span>{% endif %}
+      <span style="color:var(--cyan);font-size:0.85em">→</span>
+    </div>
+  </a>
+  {% else %}
+  <div style="padding:48px;text-align:center;color:var(--muted);font-size:0.88em">
+    No reference frameworks currently enabled.
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -25,13 +25,14 @@
 {% endblock %}
 
 {% block content %}
-<div style="margin-bottom:6px;font-size:0.82em">
-  <a href="/systems" style="color:var(--muted)">Systems</a>
-  <span style="color:var(--border);margin:0 6px">/</span>
-  <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a>
-  <span style="color:var(--border);margin:0 6px">/</span>
-  <span style="color:var(--text)">Submit for Authorization</span>
+<div class="breadcrumb">
+  <a href="/systems">Systems</a>
+  <span class="sep">/</span>
+  <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+  <span class="sep">/</span>
+  <span>Submit for Authorization</span>
 </div>
+
 
 <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:24px;flex-wrap:wrap">
   <h1 style="margin:0">Authorization Package</h1>

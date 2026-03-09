@@ -2,9 +2,15 @@
 {% block title %}{{ app_name }} — Data Owner Dashboard{% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <a href="/dashboard">Dashboard</a>
+  <span class="sep">/</span>
+  <span>Data Owner Dashboard</span>
+</div>
+
 <div style="margin-bottom:28px">
   <h1 style="margin:0;margin-bottom:4px">Data Owner Dashboard</h1>
-  <p class="text-muted" style="font-size:0.88em">Owned systems, FIPS 199 data sensitivity flags, and active POA&Ms</p>
+  <p class="text-muted" style="font-size:0.88em">Owned systems, data sensitivity classifications, and active POA&Ms</p>
 </div>
 
 {# ── Stats ── #}
@@ -46,16 +52,16 @@
           {% if sys.abbreviation %}<span class="mono" style="color:var(--muted);font-size:0.85em"> ({{ sys.abbreviation }})</span>{% endif %}
         </td>
         <td style="padding:10px 14px;text-align:center">
-          {% if sys.has_pii %}<span style="color:var(--yellow)" title="Contains PII">●</span>{% else %}<span style="color:#333">○</span>{% endif %}
+          {% if sys.has_pii %}<span style="color:var(--yellow)" title="Contains PII" aria-label="Contains PII">●</span>{% else %}<span style="color:#333" aria-label="No PII">○</span>{% endif %}
         </td>
         <td style="padding:10px 14px;text-align:center">
-          {% if sys.has_phi %}<span style="color:var(--red)" title="Contains PHI">●</span>{% else %}<span style="color:#333">○</span>{% endif %}
+          {% if sys.has_phi %}<span style="color:var(--red)" title="Contains PHI" aria-label="Contains PHI">●</span>{% else %}<span style="color:#333" aria-label="No PHI">○</span>{% endif %}
         </td>
         <td style="padding:10px 14px;text-align:center">
-          {% if sys.has_cui %}<span style="color:var(--yellow)" title="Contains CUI">●</span>{% else %}<span style="color:#333">○</span>{% endif %}
+          {% if sys.has_cui %}<span style="color:var(--yellow)" title="Contains CUI" aria-label="Contains CUI">●</span>{% else %}<span style="color:#333" aria-label="No CUI">○</span>{% endif %}
         </td>
         <td style="padding:10px 14px;text-align:center">
-          {% if sys.is_public_facing %}<span style="color:var(--cyan)" title="Public-facing">●</span>{% else %}<span style="color:#333">○</span>{% endif %}
+          {% if sys.is_public_facing %}<span style="color:var(--cyan)" title="Public-facing" aria-label="Public-facing">●</span>{% else %}<span style="color:#333" aria-label="Not public-facing">○</span>{% endif %}
         </td>
         <td style="padding:10px 20px">
           {% set cs = sys.categorization_status or 'draft' %}

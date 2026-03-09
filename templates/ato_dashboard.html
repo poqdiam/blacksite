@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}ATO Package Dashboard — BLACKSITE{% endblock %}
+{% block title %}Auth Package Dashboard — BLACKSITE{% endblock %}
 {% block head %}
 <style>
   .ato-stat-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:24px; }
@@ -58,11 +58,16 @@
 </style>
 {% endblock %}
 {% block content %}
+<div class="breadcrumb">
+  <a href="/dashboard">Dashboard</a>
+  <span class="sep">/</span>
+  <span>Auth Packages</span>
+</div>
 
 <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:8px">
   <div>
-    <h1 class="page-title" style="margin:0">ATO Package Dashboard</h1>
-    <p style="margin:4px 0 0;font-size:0.85em;color:var(--muted)">Authorization To Operate — document status across all systems</p>
+    <h1 class="page-title" style="margin:0">Authorization Package Dashboard</h1>
+    <p style="margin:4px 0 0;font-size:0.85em;color:var(--muted)">Document status across all systems and compliance programs</p>
   </div>
 </div>
 
@@ -81,7 +86,7 @@
   <span style="color:var(--yellow)">&#9432;</span>
   Showing first <strong style="color:var(--text)">{{ ato_default_cap }}</strong> of
   <strong style="color:var(--text)">{{ total_systems }}</strong> systems.
-  <a href="/ato?show_all=1" style="color:var(--cyan);margin-left:4px">Show all {{ total_systems }} →</a>
+  <a href="/packages?show_all=1" style="color:var(--cyan);margin-left:4px">Show all {{ total_systems }} →</a>
 </div>
 {% endif %}
 
@@ -124,31 +129,57 @@
 </div>
 
 {# ── Per-system cards ── #}
-{% set ato_categories = [
+{% set ato_fallback_cats = [
     ('core',          'Core RMF Documents'),
     ('preparation',   'FedRAMP Preparation'),
     ('authorization', 'Authorization Package'),
     ('conmon',        'Continuous Monitoring'),
+    ('hipaa',         'HIPAA'),
+    ('hitrust',       'HITRUST'),
+    ('pci',           'PCI DSS'),
+    ('soc',           'SOC'),
+    ('gdpr',          'GDPR'),
+    ('iso27701',      'ISO 27701'),
+    ('ccpa',          'CCPA'),
+    ('cmmc',          'CMMC'),
+    ('iso27001',      'ISO 27001'),
+    ('csa',           'CSA STAR'),
 ] %}
 
 {% for sys in systems %}
 {% set s = sys_summary[sys.id] %}
+{% set prog_groups = sys_prog_groups[sys.id] %}
+{% set sys_keys = sys_doc_keys[sys.id] %}
 
 <div class="card ato-sys-card" data-name="{{ sys.name | lower }}" style="padding:20px;margin-bottom:20px">
   {# System header row #}
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
-    <div style="display:flex;align-items:baseline;gap:10px">
-      <a href="/ato/{{ sys.id }}" style="font-size:1.05em;font-weight:700;color:var(--cyan);text-decoration:none">
-        {{ sys.name }}
-      </a>
-      {% if sys.classification %}
-      <span style="font-size:0.72em;font-weight:700;padding:2px 8px;border-radius:3px;
-                   background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.25);color:var(--gold)">
-        {{ sys.classification }}
-      </span>
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+    <div>
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="/ato/{{ sys.id }}" style="font-size:1.05em;font-weight:700;color:var(--cyan);text-decoration:none">
+          {{ sys.name }}
+        </a>
+        {% if sys.classification %}
+        <span style="font-size:0.72em;font-weight:700;padding:2px 8px;border-radius:3px;
+                     background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.25);color:var(--gold)">
+          {{ sys.classification }}
+        </span>
+        {% endif %}
+      </div>
+      {# Program pills #}
+      {% if prog_groups %}
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">
+        {% for pg in prog_groups %}
+        <span style="font-size:0.65em;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;
+                     padding:2px 8px;border-radius:3px;
+                     background:rgba(0,188,212,0.08);color:#00bcd4;border:1px solid rgba(0,188,212,0.2)">
+          {{ pg.sn }}
+        </span>
+        {% endfor %}
+      </div>
       {% endif %}
     </div>
-    <span style="font-size:0.8em;color:var(--muted)">
+    <span style="font-size:0.8em;color:var(--muted);white-space:nowrap">
       <span style="color:var(--cyan)">{{ s.finalized }}</span> finalized ·
       <span style="color:var(--yellow)">{{ s.in_review }}</span> review ·
       {{ s.draft }} draft ·
@@ -156,6 +187,7 @@
         {{ s.missing }}
       </span> missing
       · <strong>{{ s.pct }}%</strong>
+      <span style="color:var(--muted);font-weight:400">({{ s.total }} docs)</span>
     </span>
   </div>
 
@@ -166,21 +198,13 @@
     </div>
   </div>
 
-  {# Doc badges grouped by category #}
-  {% for cat_key, cat_label in ato_categories %}
-    {# collect docs in this category #}
-    {% set ns = namespace(has_docs=false) %}
-    {% for key in ato_doc_keys %}
-      {% if ato_doc_types[key].get('category','core') == cat_key %}
-        {% set ns.has_docs = true %}
-      {% endif %}
-    {% endfor %}
-    {% if ns.has_docs %}
-    <div class="ato-cat-label">{{ cat_label }}</div>
-    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:2px">
-      {% for key in ato_doc_keys %}
+  {# Doc badges: grouped by enrolled program, or by category for legacy systems #}
+  {% if prog_groups %}
+    {% for pg in prog_groups %}
+    <div class="ato-cat-label">{{ pg.name }}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">
+      {% for key in pg.doc_keys %}
       {% set meta = ato_doc_types[key] %}
-      {% if meta.get('category','core') == cat_key %}
       {% set doc = ato_map.get((sys.id, key)) %}
       {% set st = doc.status if doc else 'missing' %}
       <a href="/ato/{{ sys.id }}/{{ key }}"
@@ -189,15 +213,40 @@
         {%- if st == 'finalized' %}✓{% elif st == 'approved' %}✓{% elif st == 'in_review' %}◎{% elif st == 'missing' %}+{% endif %}
         {{ meta.short -}}
       </a>
-      {% endif %}
       {% endfor %}
     </div>
-    {% endif %}
-  {% endfor %}
+    {% endfor %}
+  {% else %}
+    {# Fallback category grouping for systems with no registered packages #}
+    {% for cat_key, cat_label in ato_fallback_cats %}
+      {% set ns = namespace(has_docs=false) %}
+      {% for key in sys_keys %}
+        {% if ato_doc_types[key].get('category','core') == cat_key %}{% set ns.has_docs = true %}{% endif %}
+      {% endfor %}
+      {% if ns.has_docs %}
+      <div class="ato-cat-label">{{ cat_label }}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:2px">
+        {% for key in sys_keys %}
+        {% set meta = ato_doc_types[key] %}
+        {% if meta.get('category','core') == cat_key %}
+        {% set doc = ato_map.get((sys.id, key)) %}
+        {% set st = doc.status if doc else 'missing' %}
+        <a href="/ato/{{ sys.id }}/{{ key }}"
+           title="{{ meta.name }}{% if st == 'missing' %} — click to start{% elif doc and doc.version %} · v{{ doc.version }}{% endif %}"
+           class="ato-badge ato-badge-{{ st }}">
+          {%- if st == 'finalized' %}✓{% elif st == 'approved' %}✓{% elif st == 'in_review' %}◎{% elif st == 'missing' %}+{% endif %}
+          {{ meta.short -}}
+        </a>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+    {% endfor %}
+  {% endif %}
 
   {# Quick Actions — generate/upload for non-finalized docs #}
   {% set ns_qa = namespace(has_actions=false) %}
-  {% for key in ato_doc_keys %}
+  {% for key in sys_keys %}
     {% set doc = ato_map.get((sys.id, key)) %}
     {% set st = doc.status if doc else 'missing' %}
     {% if st in ('missing', 'draft') %}{% set ns_qa.has_actions = true %}{% endif %}
@@ -211,7 +260,7 @@
       <span style="font-size:0.85em;opacity:0.6">(generate or upload missing documents)</span>
     </summary>
     <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;padding-bottom:4px">
-      {% for key in ato_doc_keys %}
+      {% for key in sys_keys %}
       {% set doc = ato_map.get((sys.id, key)) %}
       {% set st = doc.status if doc else 'missing' %}
       {% if st in ('missing', 'draft') %}
@@ -269,16 +318,16 @@
 {% endif %}
 
 {# ── Upload modal ── #}
-<div id="ato-upload-modal" role="dialog" aria-modal="true" aria-label="Upload document">
+<div id="ato-upload-modal" role="dialog" aria-modal="true" aria-labelledby="ato-upload-modal-title">
   <div class="ato-modal-box">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
       <div>
-        <div style="font-size:0.7em;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">ATO Package</div>
+        <div style="font-size:0.7em;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">Auth Package</div>
         <div style="font-weight:700;font-size:0.95em" id="ato-upload-modal-title">Upload Document</div>
       </div>
       <button onclick="closeAtoUpload()"
               style="background:none;border:none;color:var(--muted);font-size:1.3em;cursor:pointer;line-height:1"
-              title="Close">✕</button>
+              title="Close" aria-label="Close upload dialog">✕</button>
     </div>
     <form id="ato-upload-form" method="post" enctype="multipart/form-data">
       <div style="margin-bottom:14px">

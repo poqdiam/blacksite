@@ -160,11 +160,210 @@
 </div>
 
 {# ── Form card ────────────────────────────────────────────────────────────── #}
+{% set all_frameworks = all_frameworks if all_frameworks is defined else [] %}
+{% set fw_json = fw_json if fw_json is defined else [] %}
+{% set selected_framework_ids = selected_framework_ids if selected_framework_ids is defined else [] %}
+{% set selected_frameworks = selected_frameworks if selected_frameworks is defined else [] %}
+
 <div class="card form-card">
   <form method="POST" action="{{ action }}" autocomplete="off">
 
     {# ════════════════════════════════════════════════════════════════════════
-       SECTION 1 — Identity
+       SECTION 1 — System Classification & Control Program
+       (upstream choices — set these first; everything else adapts)
+    ════════════════════════════════════════════════════════════════════════ #}
+    <div class="form-section">
+      <div class="section-header">System Classification &amp; Control Program</div>
+      <p style="font-size:0.85em;color:var(--muted);margin-bottom:18px">
+        These choices determine the control catalog, available overlays, impact labels, and personnel titles throughout the form.
+        Set them first — everything else adapts.
+      </p>
+
+      {# Federal / FISMA flag — top of form since it drives labels everywhere #}
+      <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;
+                  background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:20px">
+        <input type="checkbox" id="is_federal" name="is_federal" value="1"
+               {% if system and system.is_federal %}checked{% endif %}
+               onchange="dsUpdate();onFederalChange()"
+               style="margin-top:3px;accent-color:var(--cyan);width:15px;height:15px;flex-shrink:0">
+        <div style="flex:1;min-width:0">
+          <label for="is_federal" style="font-size:0.84em;font-weight:600;color:var(--text);cursor:pointer;display:block;margin-bottom:3px">
+            Federal / FISMA System
+            <span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:0.72em;
+                         font-weight:700;letter-spacing:0.5px;text-transform:uppercase;
+                         background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2);
+                         margin-left:4px">FISMA</span>
+          </label>
+          <div style="font-size:0.75em;color:var(--muted);line-height:1.5">Operated by or on behalf of a federal agency. Enables RMF lifecycle tracking, FIPS 199 categorization, federal ATO package, and FISMA compliance workflows. Changes personnel titles and section labels throughout this form.</div>
+        </div>
+      </div>
+
+      {# Catalog picker #}
+      <script id="catalog-data" type="application/json">{{ catalog_json | default([]) | tojson }}</script>
+      <script id="baseline-data" type="application/json">{{ baseline_json | default([]) | tojson }}</script>
+
+      {% set current_catalog = system.primary_catalog if system else 'nist80053r5' %}
+      {% set current_baseline_id = '' %}
+      {# Detect applied baseline from selected_framework_ids #}
+      {% if system %}
+        {% for bl in baseline_json | default([]) %}
+          {% if bl.id in selected_framework_ids %}
+            {% set current_baseline_id = bl.id %}
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+
+      <label style="font-size:0.78em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px">Primary Control Catalog</label>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:18px" id="catalog-cards">
+        {% for cat in catalog_json | default([]) %}
+        <label class="catalog-radio-card"
+               style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;
+                      border-radius:8px;background:var(--surface);
+                      border:2px solid {% if current_catalog == cat.short_name %}rgba(0,255,204,0.5){% else %}var(--border){% endif %};
+                      cursor:pointer;transition:border-color .15s"
+               id="cat-card-{{ cat.short_name }}">
+          <input type="radio" name="primary_catalog" value="{{ cat.short_name }}"
+                 {% if current_catalog == cat.short_name %}checked{% endif %}
+                 onchange="onCatalogChange(this.value)"
+                 style="margin-top:3px;accent-color:var(--cyan);flex-shrink:0">
+          <div>
+            <div style="font-size:0.88em;font-weight:700;color:var(--text);margin-bottom:3px">{{ cat.name }}</div>
+            {% if cat.description %}
+            <div style="font-size:0.74em;color:var(--muted);line-height:1.4">{{ cat.description[:120] }}{% if cat.description|length > 120 %}…{% endif %}</div>
+            {% endif %}
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+
+      {# Baseline picker — updates based on selected catalog #}
+      <div style="margin-bottom:4px">
+        <label style="font-size:0.78em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px">
+          Baseline
+          <span class="tip-icon" data-tip="The baseline pre-populates your control plan. For NIST: pick Low/Moderate/High based on FIPS 199. For ISO 27001: Annex A covers all 93 controls.">?</span>
+        </label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap" id="baseline-options">
+          {# Rendered by JS based on selected catalog #}
+        </div>
+        <input type="hidden" name="baseline_id" id="baseline-id-input" value="{{ current_baseline_id }}">
+        <p style="font-size:0.74em;color:var(--muted);margin-top:6px">
+          The selected baseline will be applied to the system and its controls auto-populated.
+          {% if system %}You can change the baseline from the <a href="/systems/{{ system.id }}/frameworks" style="color:var(--cyan)">Frameworks</a> page.{% endif %}
+        </p>
+      </div>
+
+      <script>
+      (function() {
+        const BASELINES = JSON.parse(document.getElementById('baseline-data').textContent);
+        const CATALOG_PARENT = {
+          'nist_low':'nist80053r5','nist_mod':'nist80053r5','nist_high':'nist80053r5','nist_all':'nist80053r5',
+          'iso27001_annex_a':'iso27001','iso27001_core':'iso27001',
+          'user_generated':'both',  // appears for any catalog
+        };
+        const PILL = {
+          'nist_low':        {label:'Low',     s:'rgba(76,175,80,0.12)',  c:'#4caf50', b:'rgba(76,175,80,0.3)'},
+          'nist_mod':        {label:'Moderate',s:'rgba(255,193,7,0.12)',  c:'#ffc107', b:'rgba(255,193,7,0.3)'},
+          'nist_high':       {label:'High',    s:'rgba(244,67,54,0.12)',  c:'#f44336', b:'rgba(244,67,54,0.3)'},
+          'nist_all':        {label:'All',     s:'rgba(100,100,100,0.12)',c:'var(--text)',b:'rgba(150,150,150,0.3)'},
+          'iso27001_annex_a':{label:'Full',    s:'rgba(0,188,212,0.12)',  c:'#00bcd4', b:'rgba(0,188,212,0.3)'},
+          'iso27001_core':   {label:'Core',    s:'rgba(0,188,212,0.08)',  c:'#00bcd4', b:'rgba(0,188,212,0.25)'},
+          'user_generated':  {label:'Custom',  s:'rgba(123,97,255,0.1)',  c:'#7b61ff', b:'rgba(123,97,255,0.25)'},
+        };
+        let currentBaseline = '{{ current_baseline_id }}';
+
+        function pill(b) {
+          const p = PILL[b.short_name] || {label:b.short_name, s:'rgba(158,158,158,0.1)', c:'var(--muted)', b:'rgba(158,158,158,0.2)'};
+          return `<span style="font-size:0.68em;font-weight:700;letter-spacing:1px;text-transform:uppercase;` +
+            `padding:1px 6px;border-radius:3px;margin-left:6px;background:${p.s};color:${p.c};border:1px solid ${p.b}">${p.label}</span>`;
+        }
+
+        function renderBaselines(catalogSn) {
+          const container = document.getElementById('baseline-options');
+          const filtered = BASELINES.filter(b => {
+            const p = CATALOG_PARENT[b.short_name];
+            return p === catalogSn || p === 'both';
+          });
+          if (!filtered.length) {
+            container.innerHTML = '<span style="font-size:0.8em;color:var(--muted)">No baselines configured for this catalog yet.</span>';
+            return;
+          }
+          container.innerHTML = '';
+          const validIds = filtered.map(b => b.id);
+          if (currentBaseline && !validIds.includes(currentBaseline)) {
+            currentBaseline = '';
+            document.getElementById('baseline-id-input').value = '';
+          }
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;align-items:center';
+          filtered.forEach(b => {
+            const isSelected = b.id === currentBaseline;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.dataset.blId = b.id;
+            btn.innerHTML = b.name.replace(/^(NIST SP 800-53 |ISO 27001 Annex A )/,'') + pill(b);
+            const selStyle = 'background:rgba(0,255,204,0.12);color:var(--cyan);border:2px solid var(--cyan)';
+            const defStyle = 'background:var(--surface);color:var(--text);border:2px solid var(--border)';
+            btn.style.cssText = `padding:7px 13px;border-radius:6px;font-size:0.82em;font-weight:600;cursor:pointer;transition:all .15s;${isSelected?selStyle:defStyle}`;
+            btn.addEventListener('click', function() {
+              if (currentBaseline === b.id) {
+                currentBaseline = '';
+                document.getElementById('baseline-id-input').value = '';
+                btn.style.cssText = btn.style.cssText.replace(/background:[^;]+;color:[^;]+;border:2px solid [^;]+/,defStyle.replace(/;/g,';'));
+              } else {
+                currentBaseline = b.id;
+                document.getElementById('baseline-id-input').value = b.id;
+                row.querySelectorAll('button').forEach(b2 => {
+                  b2.style.background='var(--surface)'; b2.style.color='var(--text)'; b2.style.border='2px solid var(--border)';
+                });
+                btn.style.background='rgba(0,255,204,0.12)'; btn.style.color='var(--cyan)'; btn.style.border='2px solid var(--cyan)';
+              }
+            });
+            row.appendChild(btn);
+          });
+          container.appendChild(row);
+        }
+
+        window.applySystemTypeVisibility = function applySystemTypeVisibility(catalogSn) {
+          // Federal system types only appear when BOTH: NIST 800-53 catalog AND is_federal checked
+          const isNist = (catalogSn === 'nist80053r5');
+          const isFederalChecked = !!(document.getElementById('is_federal') || {}).checked;
+          const showFedTypes = isNist && isFederalChecked;
+          const fedGroup = document.getElementById('sytype-federal-group');
+          const sysTypeSel = document.getElementById('system_type');
+          if (!fedGroup || !sysTypeSel) return;
+          const fedVals = new Set(['major_application','general_support_system','minor_application']);
+          if (showFedTypes) {
+            fedGroup.style.display = '';
+          } else {
+            fedGroup.style.display = 'none';
+            if (fedVals.has(sysTypeSel.value)) sysTypeSel.value = '';
+          }
+        }
+
+        window.onCatalogChange = function(catalogSn) {
+          document.querySelectorAll('.catalog-radio-card').forEach(c => c.style.borderColor='var(--border)');
+          const sel = document.getElementById('cat-card-'+catalogSn);
+          if (sel) sel.style.borderColor='rgba(0,255,204,0.5)';
+          renderBaselines(catalogSn);
+          if (window.fwFilterByCatalog) window.fwFilterByCatalog(catalogSn);
+          const riskSection = document.getElementById('risk-impact-section');
+          if (riskSection) riskSection.style.display = (catalogSn === 'nist80053r5') ? '' : 'none';
+          applySystemTypeVisibility(catalogSn);
+        };
+
+        const checked = document.querySelector('input[name="primary_catalog"]:checked');
+        if (checked) {
+          renderBaselines(checked.value);
+          const riskSection = document.getElementById('risk-impact-section');
+          if (riskSection) riskSection.style.display = (checked.value === 'nist80053r5') ? '' : 'none';
+          applySystemTypeVisibility(checked.value);
+        }
+      })();
+      </script>
+    </div>
+
+    {# ════════════════════════════════════════════════════════════════════════
+       SECTION 2 — Identity
     ════════════════════════════════════════════════════════════════════════ #}
     <div class="form-section">
       <div class="section-header">Identity</div>
@@ -185,12 +384,12 @@
       <div class="form-row">
         <div class="form-group">
           <label for="abbreviation">Abbreviation <span class="required-star">*</span>
-            <span class="tip-icon" data-tip="Exactly 4 uppercase letters. Becomes the prefix of this system&#39;s Inventory Number (e.g. AFMS-0200). Must be unique — if two systems share an abbreviation, the newer one gets its last letter changed to &#39;1&#39;.">?</span></label>
+            <span class="tip-icon" data-tip="Exactly 4 alphanumeric characters (letters and numbers, no special characters). Becomes the prefix of this system&#39;s Inventory Number (e.g. HR01-0200). Must be unique.">?</span></label>
           <input type="text" id="abbreviation" name="abbreviation" required
-                 maxlength="4" minlength="4" pattern="[A-Za-z]{4}"
-                 placeholder="e.g. AFMS"
+                 maxlength="4" minlength="4" pattern="[A-Za-z0-9]{4}"
+                 placeholder="e.g. AFMS or HR01"
                  value="{{ system.abbreviation or '' if system else '' }}"
-                 oninput="this.value=this.value.toUpperCase().replace(/[^A-Z]/g,'').slice(0,4)"/>
+                 oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4)"/>
           <p class="field-help">A short acronym or code name used internally (optional). For example, "AFMS" for Agency Financial Management System.</p>
         </div>
         <div class="form-group" style="margin-bottom:0">
@@ -200,34 +399,37 @@
 
       <div class="form-row" style="margin-top:0">
         <div class="form-group" style="margin-bottom:0">
-          <label for="system_type">System Type
-            <span class="tip-icon" data-tip="Major Application — standalone app for important agency business (e.g. grants portal).&#10;General Support System — shared infrastructure other systems depend on (e.g. data center, cloud platform).&#10;Minor Application — smaller app running on top of a General Support System.">?</span></label>
-          <select id="system_type" name="system_type">
+          <label for="system_type" id="lbl-system-type">System Type <span class="required-star">*</span>
+            <span class="tip-icon" data-tip="NIST 800-53 / Federal: Major Application, General Support System, Minor Application (NIST SP 800-18).&#10;All other catalogs: Application, Service/API, Platform, Infrastructure, or SaaS Product.">?</span></label>
+          <select id="system_type" name="system_type" required>
             <option value="">— Select type —</option>
-            <option value="major_application"
-              {% if system and system.system_type == 'major_application' %}selected{% endif %}>
-              Major Application
-            </option>
-            <option value="general_support_system"
-              {% if system and system.system_type == 'general_support_system' %}selected{% endif %}>
-              General Support System
-            </option>
-            <option value="minor_application"
-              {% if system and system.system_type == 'minor_application' %}selected{% endif %}>
-              Minor Application
-            </option>
+            <optgroup label="Federal (NIST SP 800-18)" id="sytype-federal-group">
+              <option value="major_application"      {% if system and system.system_type == 'major_application' %}selected{% endif %}>Major Application</option>
+              <option value="general_support_system" {% if system and system.system_type == 'general_support_system' %}selected{% endif %}>General Support System</option>
+              <option value="minor_application"      {% if system and system.system_type == 'minor_application' %}selected{% endif %}>Minor Application</option>
+            </optgroup>
+            <optgroup label="Commercial / Industry" id="sytype-commercial-group">
+              <option value="application"   {% if system and system.system_type == 'application' %}selected{% endif %}>Application</option>
+              <option value="service"       {% if system and system.system_type == 'service' %}selected{% endif %}>Service / API</option>
+              <option value="platform"      {% if system and system.system_type == 'platform' %}selected{% endif %}>Platform</option>
+              <option value="infrastructure"{% if system and system.system_type == 'infrastructure' %}selected{% endif %}>Infrastructure</option>
+              <option value="saas_product"  {% if system and system.system_type == 'saas_product' %}selected{% endif %}>SaaS Product</option>
+            </optgroup>
           </select>
           <p class="field-help">
-            <strong>Major Application</strong> — a standalone application that handles important agency business (e.g., a grants management portal).<br>
-            <strong>General Support System</strong> — shared infrastructure other systems rely on (e.g., a data center, network, or cloud platform).<br>
-            <strong>Minor Application</strong> — a smaller app that runs on top of a General Support System.
+            <em>Federal (NIST SP 800-18):</em>
+            <strong>Major Application</strong> — a standalone application handling important agency business.
+            <strong>General Support System</strong> — shared infrastructure other systems rely on.
+            <strong>Minor Application</strong> — a smaller app running on top of a GSS.<br>
+            <em>Commercial / Industry:</em>
+            <strong>Application</strong>, <strong>Service / API</strong>, <strong>Platform</strong>, <strong>Infrastructure</strong>, or <strong>SaaS Product</strong>.
           </p>
         </div>
 
         <div class="form-group" style="margin-bottom:0">
           <label for="environment">Environment
             <span class="tip-icon" data-tip="Where does the system live?&#10;On-Premises — your agency's own servers or data center.&#10;Cloud / SaaS / PaaS / IaaS — hosted by a third-party provider (e.g. AWS, Azure, Salesforce).&#10;Hybrid — partly on-premises and partly in the cloud.">?</span></label>
-          <select id="environment" name="environment">
+          <select id="environment" name="environment" required>
             <option value="">— Select environment —</option>
             <option value="on_prem"
               {% if system and system.environment == 'on_prem' %}selected{% endif %}>
@@ -265,85 +467,10 @@
     </div>
 
     {# ════════════════════════════════════════════════════════════════════════
-       SECTION 2 — Ownership
-    ════════════════════════════════════════════════════════════════════════ #}
-    <div class="form-section">
-      <div class="section-header">Ownership</div>
-      <p class="section-intro">
-        The System Owner is the individual responsible for this system — they ensure it operates correctly, stays compliant,
-        and that security requirements are met. This is usually a manager or program lead, not an IT support person.
-      </p>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label for="owner_name">System Owner Name
-            <span class="tip-icon" data-tip="Full name of the person accountable for this system. This person signs off on security decisions and is the primary point of contact for compliance matters.">?</span></label>
-          <input type="text" id="owner_name" name="owner_name"
-                 placeholder="e.g. Jane Smith"
-                 value="{{ system.owner_name or '' if system else '' }}"/>
-          <p class="field-help">Full name of the person accountable for this system. This person signs off on security decisions.</p>
-        </div>
-
-        <div class="form-group">
-          <label for="owner_email">System Owner Email
-            <span class="tip-icon" data-tip="Official work email address for the System Owner. Used for compliance notifications and audit correspondence.">?</span></label>
-          <input type="email" id="owner_email" name="owner_email"
-                 placeholder="owner@agency.gov"
-                 value="{{ system.owner_email or '' if system else '' }}"/>
-          <p class="field-help">Official work email address. Used for compliance notifications and audit correspondence.</p>
-        </div>
-      </div>
-
-      {# Key Personnel: AO, ISSM, ISSO #}
-      <div class="form-row" style="margin-top:10px">
-        <div class="form-group">
-          <label for="ao_name">Authorizing Official (AO) Name</label>
-          <input type="text" id="ao_name" name="ao_name"
-                 placeholder="e.g. Alex Rivera"
-                 value="{{ system.ao_name or '' if system else '' }}"/>
-        </div>
-        <div class="form-group">
-          <label for="ao_email">AO Email</label>
-          <input type="email" id="ao_email" name="ao_email"
-                 placeholder="ao@agency.gov"
-                 value="{{ system.ao_email or '' if system else '' }}"/>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="issm_name">ISSM Name</label>
-          <input type="text" id="issm_name" name="issm_name"
-                 placeholder="e.g. Morgan Lee"
-                 value="{{ system.issm_name or '' if system else '' }}"/>
-        </div>
-        <div class="form-group">
-          <label for="issm_email">ISSM Email</label>
-          <input type="email" id="issm_email" name="issm_email"
-                 placeholder="issm@agency.gov"
-                 value="{{ system.issm_email or '' if system else '' }}"/>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="isso_name">ISSO Name</label>
-          <input type="text" id="isso_name" name="isso_name"
-                 placeholder="e.g. Taylor Kim"
-                 value="{{ system.isso_name or '' if system else '' }}"/>
-        </div>
-        <div class="form-group" style="margin-bottom:0">
-          <label for="isso_email">ISSO Email</label>
-          <input type="email" id="isso_email" name="isso_email"
-                 placeholder="isso@agency.gov"
-                 value="{{ system.isso_email or '' if system else '' }}"/>
-        </div>
-      </div>
-    </div>
-
-    {# ════════════════════════════════════════════════════════════════════════
        SECTION 3 — FIPS 199 Categorization
     ════════════════════════════════════════════════════════════════════════ #}
-    <div class="form-section">
-      <div class="section-header">FIPS 199 Categorization</div>
+    <div class="form-section" id="risk-impact-section">
+      <div class="section-header" id="fips-section-header">{% if system and system.is_federal %}FIPS 199 Categorization{% else %}Risk Impact Assessment{% endif %}</div>
       <p class="section-intro">
         FIPS 199 categorization tells us how sensitive this system is. Think about what would happen <em>if something went wrong</em>
         — if data was stolen, altered, or the system went offline. Your answers here determine how many security controls are required.
@@ -439,28 +566,75 @@
     ════════════════════════════════════════════════════════════════════════ #}
     <div class="form-section" id="data-sensitivity-section">
       <div class="section-header">Data Sensitivity &amp; Special Categories</div>
-      <p style="font-size:0.85em;color:var(--muted);margin-bottom:16px">
-        Check all data types this system processes. These flags determine the minimum recommended FIPS 199 impact level
-        and may trigger additional regulatory requirements.
+      <p style="font-size:0.85em;color:var(--muted);margin-bottom:16px" id="ds-intro-text">
+        Check all data types this system processes. These flags may trigger additional regulatory requirements.
       </p>
 
+      {# ── Dynamic Data Attribute Picker (Phase 33/34) ── #}
+      {% if attr_defs %}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;margin-bottom:16px">
+        {% for ad in attr_defs %}
+        {% set is_checked = (ad.key in system_attr_keys) or
+            (system and (
+              (ad.key == 'pii'               and system.has_pii) or
+              (ad.key == 'phi'               and system.has_phi) or
+              (ad.key == 'ephi'              and system.has_ephi) or
+              (ad.key == 'cui'               and system.has_cui) or
+              (ad.key == 'gdpr'              and system.has_gdpr_data) or
+              (ad.key == 'financial'         and system.has_financial_data) or
+              (ad.key == 'public_facing'     and system.is_public_facing) or
+              (ad.key == 'federal_connection'and system.connects_to_federal) or
+              (ad.key == 'federal'           and system.is_federal)
+            )) %}
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:10px;
+                    background:var(--surface);border:1px solid var(--border);border-radius:6px;
+                    {% if is_checked %}border-color:rgba(0,255,204,0.35);background:rgba(0,255,204,0.04);{% endif %}">
+          <input type="checkbox" id="da_{{ ad.key }}" name="data_attributes" value="{{ ad.key }}"
+                 {% if is_checked %}checked{% endif %}
+                 onchange="dsUpdateAttrs()"
+                 style="margin-top:3px;accent-color:var(--cyan);width:15px;height:15px;flex-shrink:0">
+          <div style="flex:1;min-width:0">
+            <label for="da_{{ ad.key }}" style="font-size:0.84em;font-weight:600;color:var(--text);cursor:pointer;display:block;margin-bottom:3px">
+              {{ ad.label }}
+              <span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:0.72em;
+                           font-weight:700;letter-spacing:0.5px;text-transform:uppercase;
+                           background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2);
+                           margin-left:4px">{{ ad.short_label }}</span>
+              {% if ad.jurisdiction %}
+              <span style="display:inline-block;padding:1px 5px;border-radius:3px;font-size:0.68em;
+                           font-weight:600;background:rgba(128,128,128,0.1);color:var(--muted);
+                           margin-left:2px">{{ ad.jurisdiction }}</span>
+              {% endif %}
+            </label>
+            {% if ad.description %}<div style="font-size:0.75em;color:var(--muted);line-height:1.5">{{ ad.description }}</div>{% endif %}
+            <div style="font-size:0.7em;color:var(--muted);margin-top:3px">
+              {% if ad.triggers_privacy_review %}<span style="color:var(--cyan)">Privacy review</span>{% endif %}
+              {% if ad.triggers_co_review %}<span style="color:var(--yellow)">{% if ad.triggers_privacy_review %} · {% endif %}CO review</span>{% endif %}
+              {% if ad.triggers_notification %}<span style="color:var(--muted)">{% if ad.triggers_privacy_review or ad.triggers_co_review %} · {% endif %}Notifies privacy officer</span>{% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      {# Fallback: legacy boolean checkboxes if attr_defs not yet seeded #}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 32px;margin-bottom:16px">
-        {# Each checkbox with framework badge + tooltip #}
         {% set checks = [
-          ('has_pii',          'Personally Identifiable Information (PII)',  'NIST Privacy',  'Names, SSNs, addresses, birthdates, or any info that can identify an individual. Minimum recommended: Moderate Confidentiality.'),
-          ('has_phi',          'Protected Health Information (PHI)',          'HIPAA',         'Medical records, diagnoses, treatment history, or any health-related data. Minimum: High Confidentiality.'),
-          ('has_ephi',         'Electronic PHI (ePHI)',                       'HIPAA/HITECH',  'PHI stored or transmitted electronically. HIPAA Security Rule applies. Minimum: High Confidentiality.'),
-          ('has_financial_data','Financial / Payment Data',                   'PCI DSS',       'Credit card numbers, bank accounts, financial transactions, or budget data. Minimum: High Confidentiality.'),
-          ('is_public_facing', 'Public-Facing System',                       'NIST',          'Accessible from the internet by the general public. Raises Integrity and Availability baselines.'),
-          ('has_cui',          'Controlled Unclassified Information (CUI)',   'CMMC',          'Federal CUI as defined by NARA. May require CMMC compliance. Minimum: Moderate across C/I/A.'),
-          ('connects_to_federal','Connects to Federal Network / System',      'FedRAMP',       'Has data flows to or from a federal agency network or system. May require FedRAMP authorization boundary review.'),
+          ('has_pii',          'Personally Identifiable Information (PII)',  'NIST Privacy',  'Names, SSNs, addresses, birthdates, or any info that can identify an individual.'),
+          ('has_phi',          'Protected Health Information (PHI)',          'HIPAA',         'Medical records, diagnoses, treatment history, or any health-related data.'),
+          ('has_ephi',         'Electronic PHI (ePHI)',                       'HIPAA/HITECH',  'PHI stored or transmitted electronically.'),
+          ('has_financial_data','Financial / Payment Data',                   'PCI DSS',       'Credit card numbers, bank accounts, financial transactions.'),
+          ('is_public_facing', 'Public-Facing System',                       'NIST',          'Accessible from the internet by the general public.'),
+          ('has_cui',          'Controlled Unclassified Information (CUI)',   'CMMC',          'Federal CUI as defined by NARA.'),
+          ('connects_to_federal','Connects to Federal Network / System',      'FedRAMP',       'Has data flows to or from a federal agency network or system.'),
+          ('has_gdpr_data',    'EU Personal Data (GDPR)',                     'GDPR',          'Processes personal data of EU/EEA residents.'),
         ] %}
         {% for field, label, badge, tip in checks %}
         <div style="display:flex;align-items:flex-start;gap:10px;padding:10px;
                     background:var(--surface);border:1px solid var(--border);border-radius:6px">
           <input type="checkbox" id="{{ field }}" name="{{ field }}" value="1"
                  {% if system and system[field] %}checked{% endif %}
-                 onchange="dsUpdate()"
+                 onchange="dsUpdate(){% if field == 'is_federal' %};onFederalChange(){% endif %}"
                  style="margin-top:3px;accent-color:var(--cyan);width:15px;height:15px;flex-shrink:0">
           <div style="flex:1;min-width:0">
             <label for="{{ field }}" style="font-size:0.84em;font-weight:600;color:var(--text);cursor:pointer;display:block;margin-bottom:3px">
@@ -475,12 +649,13 @@
         </div>
         {% endfor %}
       </div>
+      {% endif %}
 
       {# FIPS recommendation output #}
       <div id="ds-recommendation" style="display:none;padding:12px 16px;border-radius:6px;
            border:1px solid rgba(255,179,0,0.3);background:rgba(255,179,0,0.06);margin-bottom:12px">
-        <div style="font-size:0.75em;font-weight:700;letter-spacing:1px;text-transform:uppercase;
-                    color:var(--yellow);margin-bottom:6px">⚠ FIPS 199 Minimum Recommendation</div>
+        <div id="ds-rec-title" style="font-size:0.75em;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+                    color:var(--yellow);margin-bottom:6px">⚠ Minimum Impact Recommendation</div>
         <div id="ds-rec-text" style="font-size:0.85em;color:var(--text);line-height:1.6"></div>
       </div>
 
@@ -517,9 +692,9 @@
       </p>
 
       <div class="form-group">
-        <label for="purpose">System Purpose
+        <label for="purpose">System Purpose <span class="required-star">*</span>
           <span class="tip-icon" data-tip="Why does this system exist? What business problem does it solve? Write in plain language. Example: 'Processes payroll for 4,500 agency employees, calculating wages and issuing direct deposits bi-weekly.'">?</span></label>
-        <textarea id="purpose" name="purpose" rows="3"
+        <textarea id="purpose" name="purpose" rows="3" required
                   placeholder="Describe the primary mission or business purpose of this system…">{{ system.purpose or '' if system else '' }}</textarea>
         <p class="field-help">
           Why does this system exist? What business problem does it solve?
@@ -528,9 +703,9 @@
       </div>
 
       <div class="form-group">
-        <label for="boundary">System Boundary
+        <label for="boundary">System Boundary <span class="required-star">*</span>
           <span class="tip-icon" data-tip="What components are within this system's security boundary? List servers, databases, applications, and user groups in scope. Explicitly note what is excluded. Example: 'Includes the web app server, Oracle DB, and HR staff. Excludes cloud infrastructure managed by the provider.'">?</span></label>
-        <textarea id="boundary" name="boundary" rows="3"
+        <textarea id="boundary" name="boundary" rows="3" required
                   placeholder="Describe the authorization boundary — what components, data, and users are in scope…">{{ system.boundary or '' if system else '' }}</textarea>
         <p class="field-help">
           What is included in this system's security boundary? List the servers, databases, applications, and user groups that are part of this system.
@@ -550,11 +725,389 @@
     </div>
 
     {# ════════════════════════════════════════════════════════════════════════
-       SECTION 5 — Authorization  (AO / Admin only)
+       SECTION 5 — Ownership
+    ════════════════════════════════════════════════════════════════════════ #}
+    <div class="form-section">
+      <div class="section-header">Ownership</div>
+      <p class="section-intro">
+        The System Owner is the individual responsible for this system — they ensure it operates correctly, stays compliant,
+        and that security requirements are met. This is usually a manager or program lead, not an IT support person.
+      </p>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="owner_name">System Owner Name <span class="req">*</span>
+            <span class="tip-icon" data-tip="Full name of the person accountable for this system. This person signs off on security decisions and is the primary point of contact for compliance matters.">?</span></label>
+          <input type="text" id="owner_name" name="owner_name" required
+                 placeholder="e.g. Jane Smith"
+                 value="{{ system.owner_name or '' if system else '' }}"/>
+          <p class="field-help">Full name of the person accountable for this system. This person signs off on security decisions.</p>
+        </div>
+
+        <div class="form-group">
+          <label for="owner_email">System Owner Email <span class="req">*</span>
+            <span class="tip-icon" data-tip="Official work email address for the System Owner. Used for compliance notifications and audit correspondence.">?</span></label>
+          <input type="email" id="owner_email" name="owner_email" required
+                 pattern="[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"
+                 title="Enter a valid email address"
+                 placeholder="owner@agency.gov"
+                 value="{{ system.owner_email or '' if system else '' }}"/>
+          <p class="field-help">Official work email address. Used for compliance notifications and audit correspondence.</p>
+        </div>
+      </div>
+
+      {# Key Personnel: AO, ISSM, ISSO #}
+      <div class="form-row" style="margin-top:10px">
+        <div class="form-group">
+          <label for="ao_name"><span id="lbl-ao-name">Authorizing Official (AO)</span> Name</label>
+          <input type="text" id="ao_name" name="ao_name"
+                 placeholder="e.g. Alex Rivera"
+                 value="{{ system.ao_name or '' if system else '' }}"/>
+        </div>
+        <div class="form-group">
+          <label for="ao_email"><span id="lbl-ao-short">AO</span> Email</label>
+          <input type="email" id="ao_email" name="ao_email"
+                 pattern="[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"
+                 title="Enter a valid email address"
+                 placeholder="ao@agency.gov"
+                 value="{{ system.ao_email or '' if system else '' }}"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="issm_name"><span id="lbl-issm-name">ISSM</span> Name</label>
+          <input type="text" id="issm_name" name="issm_name"
+                 placeholder="e.g. Morgan Lee"
+                 value="{{ system.issm_name or '' if system else '' }}"/>
+        </div>
+        <div class="form-group">
+          <label for="issm_email"><span id="lbl-issm-short">ISSM</span> Email</label>
+          <input type="email" id="issm_email" name="issm_email"
+                 pattern="[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"
+                 title="Enter a valid email address"
+                 placeholder="issm@agency.gov"
+                 value="{{ system.issm_email or '' if system else '' }}"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="isso_name"><span id="lbl-isso-name">ISSO</span> Name</label>
+          <input type="text" id="isso_name" name="isso_name"
+                 placeholder="e.g. Taylor Kim"
+                 value="{{ system.isso_name or '' if system else '' }}"/>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label for="isso_email"><span id="lbl-isso-short">ISSO</span> Email</label>
+          <input type="email" id="isso_email" name="isso_email"
+                 pattern="[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"
+                 title="Enter a valid email address"
+                 placeholder="isso@agency.gov"
+                 value="{{ system.isso_email or '' if system else '' }}"/>
+        </div>
+      </div>
+    </div>
+
+    {# ════════════════════════════════════════════════════════════════════════
+       SECTION 6 — Applicable Compliance Frameworks
+    ════════════════════════════════════════════════════════════════════════ #}
+    <div class="form-section">
+      <div class="section-header">Overlays, Frameworks &amp; Regulations</div>
+
+      {# Embed framework data for JS cascade — all roles see the chips #}
+      <p style="font-size:0.85em;color:var(--muted);margin-bottom:16px">
+        Add overlays, crosswalk frameworks, and regulatory standards for this system.
+        Catalogs and baselines are managed in the section above.
+      </p>
+
+      <script id="fw-data" type="application/json">{{ fw_json | default([]) | tojson }}</script>
+
+      {% if user_role in ('admin', 'ao', 'ciso') %}
+      {# ── Cascading selector (executive roles only) ── #}
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+        <div style="display:flex;flex-direction:column;gap:4px;flex:0 0 160px">
+          <label style="font-size:0.75em;color:var(--muted);font-weight:600;letter-spacing:0.4px;text-transform:uppercase">Category</label>
+          <select id="fw-cat-sel"
+                  style="background:var(--surface);border:1px solid var(--border);border-radius:6px;
+                         padding:7px 10px;color:var(--text);font-size:0.84em;cursor:pointer">
+            <option value="">— Select —</option>
+            {% set seen_cats = [] %}
+            {% for fw in all_frameworks %}
+            {% if fw.category not in seen_cats and fw.kind not in ('catalog','baseline') %}
+            {% set _ = seen_cats.append(fw.category) %}
+            <option value="{{ fw.category }}">{{ fw.category | title }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px">
+          <label style="font-size:0.75em;color:var(--muted);font-weight:600;letter-spacing:0.4px;text-transform:uppercase">Framework</label>
+          <select id="fw-fw-sel"
+                  style="background:var(--surface);border:1px solid var(--border);border-radius:6px;
+                         padding:7px 10px;color:var(--text);font-size:0.84em;cursor:pointer">
+            <option value="">— Pick category first —</option>
+          </select>
+        </div>
+        <button type="button" id="fw-add-btn"
+                style="padding:7px 18px;border-radius:6px;background:var(--cyan);color:#000;
+                       font-size:0.84em;font-weight:700;border:none;cursor:pointer;
+                       white-space:nowrap;align-self:flex-end">+ Add</button>
+      </div>
+      {% endif %}
+
+      {# ── Chip list — visible to all roles ── #}
+      <div id="fw-chips"
+           style="display:flex;flex-wrap:wrap;gap:7px;min-height:32px;
+                  padding:8px;border:1px solid var(--border);border-radius:6px;
+                  background:rgba(0,0,0,0.1)">
+        {% if not selected_frameworks %}
+        <span id="fw-empty-msg" style="font-size:0.78em;color:var(--muted);align-self:center;padding:0 4px">
+          No frameworks selected
+        </span>
+        {% endif %}
+        {% for fw in selected_frameworks %}
+        <span class="fw-chip" data-id="{{ fw.id }}"
+              style="display:inline-flex;align-items:center;gap:6px;font-size:0.78em;
+                     padding:4px 10px;border-radius:4px;
+                     background:rgba(0,200,160,0.12);color:var(--cyan);
+                     border:1px solid rgba(0,200,160,0.25)">
+          <span class="fw-chip-cat" style="opacity:0.6;font-size:0.9em">{{ fw.category | title }}</span>
+          <span>{{ fw.name }}</span>
+          {% if user_role in ('admin', 'ao', 'ciso') %}
+          <button type="button" class="fw-chip-remove"
+                  onclick="fwRemoveChip(this)"
+                  style="background:none;border:none;color:var(--muted);cursor:pointer;
+                         font-size:1.1em;padding:0;line-height:1">&times;</button>
+          {% endif %}
+          <input type="hidden" name="framework_ids" value="{{ fw.id }}">
+        </span>
+        {% endfor %}
+      </div>
+      {# ── Privacy overlay suggestion banner ── #}
+      <div id="privacy-overlay-banner" style="display:none;margin-top:10px;padding:11px 15px;
+           border-radius:6px;border:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div style="flex:1;min-width:0">
+            <div id="priv-banner-label" style="font-size:0.68em;font-weight:700;letter-spacing:1.2px;
+                 text-transform:uppercase;margin-bottom:3px"></div>
+            <div id="priv-banner-text" style="font-size:0.82em;color:var(--text);line-height:1.4"></div>
+          </div>
+          <button type="button" id="priv-banner-add"
+                  style="padding:5px 13px;border-radius:4px;font-size:0.78em;font-weight:700;
+                         border:none;cursor:pointer;white-space:nowrap;flex-shrink:0">Add →</button>
+        </div>
+      </div>
+
+      <p style="font-size:0.74em;color:var(--muted);margin-top:6px">
+        {% if user_role in ('admin', 'ao', 'ciso') %}
+        Select a category, then a framework, then click <strong>+ Add</strong>.
+        Remove a framework by clicking &times; on its chip.
+        {% else %}
+        Framework assignment is restricted to executive roles (CISO / AO / Admin).
+        {% endif %}
+      </p>
+
+      <script>
+      (function() {
+        const ALL_FW = JSON.parse(document.getElementById('fw-data').textContent);
+        const catSel  = document.getElementById('fw-cat-sel');
+        const fwSel   = document.getElementById('fw-fw-sel');
+        const addBtn  = document.getElementById('fw-add-btn');
+        const chips   = document.getElementById('fw-chips');
+        const emptyMsg = document.getElementById('fw-empty-msg');
+
+        if (!catSel) return; // read-only view
+
+        // Returns frameworks visible for the currently selected primary catalog
+        function visibleFws() {
+          const catalogRadio = document.querySelector('input[name="primary_catalog"]:checked');
+          const catalog = catalogRadio ? catalogRadio.value : 'nist80053r5';
+          return ALL_FW.filter(f => {
+            if (f.catalog_affinity === 'nist') return catalog === 'nist80053r5';
+            if (f.catalog_affinity === 'iso')  return catalog === 'iso27001';
+            return true; // 'both'
+          });
+        }
+
+        // Rebuild the category dropdown based on the selected catalog
+        window.fwFilterByCatalog = function(catalogSn) {
+          const currentCat = catSel.value;
+          catSel.innerHTML = '<option value="">— Select —</option>';
+          const seen = new Set();
+          ALL_FW.filter(f => {
+            if (f.catalog_affinity === 'nist') return catalogSn === 'nist80053r5';
+            if (f.catalog_affinity === 'iso')  return catalogSn === 'iso27001';
+            return true;
+          }).forEach(f => {
+            if (!seen.has(f.category)) {
+              seen.add(f.category);
+              const o = document.createElement('option');
+              o.value = f.category;
+              o.textContent = f.category.charAt(0).toUpperCase()+f.category.slice(1);
+              if (f.category === currentCat) o.selected = true;
+              catSel.appendChild(o);
+            }
+          });
+          // Re-trigger framework dropdown if category was selected
+          catSel.dispatchEvent(new Event('change'));
+        };
+
+        function selectedIds() {
+          return new Set([...chips.querySelectorAll('input[name="framework_ids"]')]
+                         .map(i => i.value));
+        }
+
+        catSel.addEventListener('change', function() {
+          const cat = this.value;
+          fwSel.innerHTML = cat
+            ? '<option value="">— Select framework —</option>'
+            : '<option value="">— Pick category first —</option>';
+          if (!cat) return;
+          visibleFws().filter(f => f.category === cat).forEach(f => {
+            const o = document.createElement('option');
+            o.value = f.id;
+            o.textContent = f.name;
+            if (selectedIds().has(f.id)) o.disabled = true;
+            fwSel.appendChild(o);
+          });
+        });
+
+        addBtn.addEventListener('click', function() {
+          const id = fwSel.value;
+          if (!id || selectedIds().has(id)) return;
+          const fw = ALL_FW.find(f => f.id === id);
+          if (!fw) return;
+          addChip(fw);
+          // Disable the option in the dropdown
+          const opt = fwSel.querySelector(`option[value="${id}"]`);
+          if (opt) opt.disabled = true;
+          fwSel.value = '';
+        });
+
+        function addChip(fw) {
+          if (emptyMsg) emptyMsg.style.display = 'none';
+          const chip = document.createElement('span');
+          chip.className = 'fw-chip';
+          chip.dataset.id = fw.id;
+          chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;font-size:0.78em;' +
+            'padding:4px 10px;border-radius:4px;background:rgba(0,200,160,0.12);color:var(--cyan);' +
+            'border:1px solid rgba(0,200,160,0.25)';
+          chip.innerHTML =
+            `<span style="opacity:0.6;font-size:0.9em">${fw.category.charAt(0).toUpperCase()+fw.category.slice(1)}</span>` +
+            `<span>${fw.name}</span>` +
+            `<button type="button" onclick="fwRemoveChip(this)"` +
+            ` style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1em;padding:0;line-height:1">&times;</button>` +
+            `<input type="hidden" name="framework_ids" value="${fw.id}">`;
+          chips.appendChild(chip);
+        }
+
+        window.fwRemoveChip = function(btn) {
+          const chip = btn.closest('.fw-chip');
+          const id = chip.dataset.id;
+          chip.remove();
+          const opt = fwSel.querySelector(`option[value="${id}"]`);
+          if (opt) opt.disabled = false;
+          if (!chips.querySelector('.fw-chip')) {
+            if (emptyMsg) emptyMsg.style.display = '';
+            else { const m = document.createElement('span');
+              m.id='fw-empty-msg'; m.style.cssText='font-size:0.78em;color:var(--muted);align-self:center;padding:0 4px';
+              m.textContent='No frameworks selected'; chips.appendChild(m); }
+          }
+        };
+
+        // ── Privacy overlay suggestion ─────────────────────────────────────────
+        const PRIVACY_TRIGGER_KEYS = ['pii','phi','ephi','gdpr','phi_ephi'];
+        // FW short_names that make privacy overlay *required* (not just suggested)
+        const PRIVACY_REQUIRED_SNS = new Set(['fedramp','hipaa','hitech','fisma']);
+        // FW short_names that already ARE a privacy overlay
+        const PRIVACY_OVERLAY_SNS  = new Set(['nist_privacy','iso27701','iso27018']);
+
+        function selectedChipSns() {
+          return new Set([...chips.querySelectorAll('input[name="framework_ids"]')]
+            .map(inp => { const f = ALL_FW.find(x => x.id === inp.value); return f ? f.short_name : ''; })
+            .filter(Boolean));
+        }
+
+        function hasPiiFlag() {
+          // Dynamic attr_defs checkboxes
+          if (PRIVACY_TRIGGER_KEYS.some(k => {
+            const cb = document.getElementById('da_' + k); return cb && cb.checked;
+          })) return true;
+          // Legacy checkboxes
+          return ['has_pii','has_phi','has_ephi','has_gdpr_data'].some(id => {
+            const el = document.getElementById(id); return el && el.checked;
+          });
+        }
+
+        window.checkPrivacyOverlay = function() {
+          const banner   = document.getElementById('privacy-overlay-banner');
+          const label    = document.getElementById('priv-banner-label');
+          const msgEl    = document.getElementById('priv-banner-text');
+          const addBtnEl = document.getElementById('priv-banner-add');
+          if (!banner) return;
+
+          if (!hasPiiFlag()) { banner.style.display = 'none'; return; }
+
+          const selectedSns = selectedChipSns();
+          if ([...PRIVACY_OVERLAY_SNS].some(s => selectedSns.has(s))) {
+            banner.style.display = 'none'; return;
+          }
+
+          // Pick the right privacy overlay for the selected catalog
+          const catalogRadio = document.querySelector('input[name="primary_catalog"]:checked');
+          const catalog = catalogRadio ? catalogRadio.value : 'nist80053r5';
+          const targetSn = catalog === 'iso27001' ? 'iso27701' : 'nist_privacy';
+          const privFw = ALL_FW.find(f => f.short_name === targetSn);
+          if (!privFw) { banner.style.display = 'none'; return; }
+
+          const required = [...PRIVACY_REQUIRED_SNS].some(s => selectedSns.has(s));
+          banner.style.display = '';
+          if (required) {
+            banner.style.cssText += ';border-color:rgba(244,67,54,.35);background:rgba(244,67,54,.05)';
+            label.style.color = 'var(--red)';
+            label.textContent = '⚠ Privacy Overlay Required';
+            addBtnEl.style.cssText += ';background:rgba(244,67,54,.15);color:var(--red);border:1px solid rgba(244,67,54,.3)';
+          } else {
+            banner.style.cssText += ';border-color:rgba(0,255,204,.25);background:rgba(0,255,204,.04)';
+            label.style.color = 'var(--cyan)';
+            label.textContent = 'Privacy Overlay Suggested';
+            addBtnEl.style.cssText += ';background:rgba(0,255,204,.12);color:var(--cyan);border:1px solid rgba(0,255,204,.25)';
+          }
+          msgEl.textContent = required
+            ? privFw.name + ' is required for systems with privacy-sensitive data under ' +
+              [...PRIVACY_REQUIRED_SNS].filter(s => selectedSns.has(s)).join(', ').toUpperCase() + '.'
+            : 'This system handles privacy-sensitive data. Adding ' + privFw.name + ' is recommended.';
+
+          addBtnEl.onclick = function() {
+            addChip(privFw);
+            window.checkPrivacyOverlay();
+            const opt = fwSel && fwSel.querySelector(`option[value="${privFw.id}"]`);
+            if (opt) opt.disabled = true;
+          };
+        };
+
+        // Trigger on catalog change, data-attribute changes, chip add/remove
+        document.querySelectorAll('input[name="primary_catalog"]')
+          .forEach(r => r.addEventListener('change', window.checkPrivacyOverlay));
+        const dsSection = document.getElementById('data-sensitivity-section');
+        if (dsSection) dsSection.addEventListener('change', window.checkPrivacyOverlay);
+        new MutationObserver(window.checkPrivacyOverlay).observe(chips, {childList: true, subtree: true});
+
+        // Init: filter by whatever catalog is currently selected
+        const initCatalog = document.querySelector('input[name="primary_catalog"]:checked');
+        if (initCatalog && window.fwFilterByCatalog) {
+          window.fwFilterByCatalog(initCatalog.value);
+        }
+        window.checkPrivacyOverlay();
+      })();
+      </script>
+    </div>
+
+    {# ════════════════════════════════════════════════════════════════════════
+       SECTION 6 — Authorization  (AO / Admin only)
     ════════════════════════════════════════════════════════════════════════ #}
     {% if user_role in ('ao', 'admin') %}
     <div class="form-section">
-      <div class="section-header">Authorization</div>
+      <div class="section-header" id="auth-section-header">Authorization</div>
       <p class="section-intro">
         An Authorization to Operate (ATO) is the official management decision to allow a system to operate.
         It is granted by an Authorizing Official (AO) — typically a senior agency executive — after reviewing the system's security posture.
@@ -563,7 +1116,7 @@
       </p>
 
       <div class="form-group">
-        <label for="auth_status">Authorization Status
+        <label for="auth_status" id="lbl-auth-status">Authorization Status
           <span class="tip-icon" data-tip="The system's current ATO (Authorization to Operate) status.&#10;Not Authorized — hasn't started the formal authorization process.&#10;In Progress — security package is being prepared or is under AO review.&#10;Authorized — valid, active ATO signed by an Authorizing Official.&#10;Expired — ATO has lapsed; system needs re-authorization.">?</span></label>
         <select id="auth_status" name="auth_status">
           <option value="">— Select status —</option>
@@ -597,7 +1150,7 @@
           <label for="auth_date">Authorization Date
             <span class="tip-icon" data-tip="The date the Authorizing Official signed the ATO decision letter. Leave blank if the system is not yet authorized.">?</span></label>
           <input type="date" id="auth_date" name="auth_date"
-                 value="{{ system.auth_date.strftime('%Y-%m-%d') if system and system.auth_date else '' }}"/>
+                 value="{{ system.auth_date | string if system and system.auth_date else '' }}"/>
           <p class="field-help">The date the Authorizing Official signed the ATO decision letter. Leave blank if not yet authorized.</p>
         </div>
 
@@ -605,7 +1158,7 @@
           <label for="auth_expiry">Authorization Expiry
             <span class="tip-icon" data-tip="When the current ATO expires. Typically 3 years from the authorization date. BLACKSITE will alert you as expiry approaches so you can begin re-authorization in time.">?</span></label>
           <input type="date" id="auth_expiry" name="auth_expiry"
-                 value="{{ system.auth_expiry.strftime('%Y-%m-%d') if system and system.auth_expiry else '' }}"/>
+                 value="{{ system.auth_expiry | string if system and system.auth_expiry else '' }}"/>
           <p class="field-help">When the current ATO expires. Typically 3 years from the authorization date. BLACKSITE will alert you when expiry is approaching.</p>
         </div>
       </div>
@@ -667,7 +1220,7 @@
 </script>
 
 <script>
-// ── Data Sensitivity FIPS 199 recommendation logic ────────────────────────
+// ── Data Sensitivity impact recommendation logic ───────────────────────────
 (function() {
   // Map of checkbox id → {minC, minI, minA} where 1=Low, 2=Moderate, 3=High
   var DS_RULES = {
@@ -678,6 +1231,7 @@
     is_public_facing:  { minC: 1, minI: 2, minA: 2 },  // Moderate I/A
     has_cui:           { minC: 2, minI: 2, minA: 2 },  // Moderate
     connects_to_federal:{ minC: 2, minI: 2, minA: 2 }, // Moderate
+    has_gdpr_data:     { minC: 2, minI: 2, minA: 1 },  // Moderate C/I (GDPR Art. 5 accuracy + confidentiality)
   };
   var RANK  = { 'low': 1, 'moderate': 2, 'high': 3, '': 0 };
   var LABEL = { 0: '—', 1: 'Low', 2: 'Moderate', 3: 'High' };
@@ -701,6 +1255,14 @@
     var overSec = document.getElementById('ds-override-section');
     var overHid = document.getElementById('ds-override-hidden');
 
+    // Check current CIA selections
+    var curC = RANK[(document.getElementById('confidentiality_impact') || {}).value] || 0;
+    var curI = RANK[(document.getElementById('integrity_impact') || {}).value] || 0;
+    var curA = RANK[(document.getElementById('availability_impact') || {}).value] || 0;
+    var belowMin = (curC < minC) || (curI < minI) || (curA < minA);
+
+    // Only show the recommendation banner when no flags are checked OR
+    // when current selections are BELOW the required minimum.
     if (minC === 0 && minI === 0 && minA === 0) {
       if (recDiv) recDiv.style.display = 'none';
       if (overSec) overSec.style.display = 'none';
@@ -708,28 +1270,32 @@
       return;
     }
 
-    // Build recommendation text
+    if (!belowMin) {
+      // User has met or exceeded the minimum — no alert needed
+      if (recDiv) recDiv.style.display = 'none';
+      if (overSec) overSec.style.display = 'none';
+      if (overHid) overHid.style.display = '';
+      var catField = document.getElementById('cat_status_field');
+      if (catField) catField.value = 'draft';
+      return;
+    }
+
+    // Below minimum — show warning
     if (recText) {
       recText.innerHTML =
         'Based on selected data types, minimum recommended levels: ' +
         '<strong>Confidentiality: ' + LABEL[minC] + '</strong> · ' +
         '<strong>Integrity: '       + LABEL[minI] + '</strong> · ' +
-        '<strong>Availability: '    + LABEL[minA] + '</strong>.';
+        '<strong>Availability: '    + LABEL[minA] + '</strong>. ' +
+        'Current selections are below this minimum.';
     }
     if (recDiv) recDiv.style.display = '';
-
-    // Check if current CIA meets minimum
-    var curC = RANK[document.getElementById('confidentiality_impact').value] || 0;
-    var curI = RANK[document.getElementById('integrity_impact').value] || 0;
-    var curA = RANK[document.getElementById('availability_impact').value] || 0;
-    var belowMin = (curC < minC) || (curI < minI) || (curA < minA);
-
-    if (overSec) overSec.style.display = belowMin ? '' : 'none';
-    if (overHid) overHid.style.display = belowMin ? 'none' : '';
+    if (overSec) overSec.style.display = '';
+    if (overHid) overHid.style.display = 'none';
 
     // Set categorization_status
     var catField = document.getElementById('cat_status_field');
-    if (catField) catField.value = belowMin ? 'pending_review' : 'draft';
+    if (catField) catField.value = 'pending_review';
   };
 
   // Hook CIA selects to re-evaluate on change
@@ -756,6 +1322,69 @@
 
   // Run on load for edit form
   window.dsUpdate();
+})();
+</script>
+
+<script>
+// ── Federal/Commercial adaptive labels ────────────────────────────────────
+(function() {
+  var FEDERAL = {
+    fipsHeader:   'FIPS 199 Categorization',
+    dsIntroText:  'Check all data types this system processes. These flags determine the minimum recommended FIPS 199 impact level and may trigger additional regulatory requirements.',
+    dsFipsLabel:  'FIPS 199 impact level',
+    dsRecTitle:   '⚠ FIPS 199 Minimum Recommendation',
+    aoName:      'Authorizing Official (AO)',
+    aoShort:     'AO',
+    issmName:    'ISSM',
+    issmShort:   'ISSM',
+    issoName:    'ISSO',
+    issoShort:   'ISSO',
+    authHeader:  'Authorization',
+    authStatus:  'Authorization Status',
+  };
+  var COMMERCIAL = {
+    fipsHeader:   'Risk Impact Assessment',
+    dsIntroText:  'Check all data types this system processes. These flags may trigger additional regulatory requirements.',
+    dsFipsLabel:  'impact level',
+    dsRecTitle:   '⚠ Risk Impact Recommendation',
+    aoName:      'Risk Acceptance Authority',
+    aoShort:     'RAA',
+    issmName:    'CISO / Security Director',
+    issmShort:   'CISO',
+    issoName:    'Security Manager',
+    issoShort:   'Sec Mgr',
+    authHeader:  'Authorization / Certification',
+    authStatus:  'Authorization / Certification Status',
+  };
+
+  function setText(id, text) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  window.onFederalChange = function() {
+    var isFederal = !!(document.getElementById('is_federal') || {}).checked;
+    var T = isFederal ? FEDERAL : COMMERCIAL;
+    setText('fips-section-header', T.fipsHeader);
+    setText('ds-intro-text',       T.dsIntroText);
+    setText('ds-rec-title',        T.dsRecTitle);
+    setText('lbl-ao-name',         T.aoName);
+    setText('lbl-ao-short',        T.aoShort);
+    setText('lbl-issm-name',       T.issmName);
+    setText('lbl-issm-short',      T.issmShort);
+    setText('lbl-isso-name',       T.issoName);
+    setText('lbl-isso-short',      T.issoShort);
+    setText('auth-section-header', T.authHeader);
+    setText('lbl-auth-status',     T.authStatus);
+    // Re-evaluate system type options whenever the federal flag changes
+    var activeCatalog = document.querySelector('input[name="primary_catalog"]:checked');
+    if (window.applySystemTypeVisibility && activeCatalog) {
+      window.applySystemTypeVisibility(activeCatalog.value);
+    }
+  };
+
+  // Run on page load
+  window.onFederalChange();
 })();
 </script>
 {% endblock %}

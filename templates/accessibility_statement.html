@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Accessibility Statement{% endblock %}
+
+{% block content %}
+<div style="max-width:860px;margin:0 auto;padding:24px 16px">
+
+  <h1 style="font-family:var(--mono);font-size:1.4em;color:var(--cyan);
+             letter-spacing:1px;margin-bottom:4px">Accessibility Statement</h1>
+  <p style="color:var(--muted);font-size:0.85em;margin-bottom:32px">
+    Last assessed: 2026-03-09
+  </p>
+
+  {# ── Conformance status ──────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      Conformance Status
+    </h2>
+    <p style="color:var(--text);margin:0">
+      <strong style="color:var(--cyan)">Partially conformant</strong> with
+      <a href="https://www.w3.org/TR/WCAG21/" target="_blank" rel="noopener"
+         style="color:var(--cyan)">WCAG 2.1 Level AA</a>.
+      Partially conformant means that some parts of the content do not fully
+      conform to the accessibility standard.
+    </p>
+  </div>
+
+  {# ── What we've done ─────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      Accessibility Improvements Completed
+    </h2>
+    <ul style="margin:0;padding:0 0 0 20px;color:var(--text);line-height:1.9;font-size:0.9em">
+      <li><strong>Skip navigation link</strong> — a "Skip to main content" link is present at the top of every page.</li>
+      <li><strong>ARIA labels</strong> — interactive controls (buttons, inputs, icons) carry descriptive <code>aria-label</code> or <code>aria-labelledby</code> attributes.</li>
+      <li><strong>Modal semantics</strong> — dialog elements use <code>role="dialog"</code>, <code>aria-modal="true"</code>, and focus management (trap + restore on close).</li>
+      <li><strong>Table scope attributes</strong> — data tables include <code>scope="col"</code> and <code>scope="row"</code> on header cells.</li>
+      <li><strong>Required field indicators</strong> — required form fields are marked with <code>aria-required="true"</code> in addition to visual cues.</li>
+      <li><strong>Color-independent status indicators</strong> — status information is conveyed by text or icon in addition to color.</li>
+      <li><strong>Tab panel ARIA</strong> — tabbed interfaces use <code>role="tablist"</code>, <code>role="tab"</code>, <code>role="tabpanel"</code>, and <code>aria-selected</code>.</li>
+      <li><strong>Live regions</strong> — dynamic status updates use <code>aria-live="polite"</code> or <code>aria-live="assertive"</code> so screen readers announce changes.</li>
+      <li><strong>Keyboard navigation</strong> — all interactive elements are reachable and operable via keyboard alone.</li>
+    </ul>
+  </div>
+
+  {# ── Known limitations ───────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      Known Limitations
+    </h2>
+    <ul style="margin:0;padding:0 0 0 20px;color:var(--text);line-height:1.9;font-size:0.9em">
+      <li><strong>Contrast ratios</strong> — foreground/background contrast ratios have not been formally measured against the WCAG 2.1 AA threshold (4.5:1 for normal text). Some muted text elements may fall below this threshold.</li>
+      <li><strong>Keyboard regression testing</strong> — systematic keyboard-only regression testing is in progress. Some recently added interactive components may not yet meet full keyboard operability requirements.</li>
+      <li><strong>Complex tables on narrow viewports</strong> — data-dense comparison tables may require horizontal scrolling on small screens. Column headers may not remain visible when scrolling.</li>
+    </ul>
+  </div>
+
+  {# ── Technical information ────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      Technical Information
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;margin:0 0 10px">
+      <strong>Target standard:</strong> WCAG 2.1 Level AA
+    </p>
+    <p style="color:var(--text);font-size:0.9em;margin:0 0 10px">
+      <strong>Testing browsers:</strong> Google Chrome (latest stable), Mozilla Firefox (latest stable)
+    </p>
+    <p style="color:var(--text);font-size:0.9em;margin:0 0 10px">
+      <strong>Assessment approach:</strong> Self-evaluation by the development team using browser developer tools, manual keyboard testing, and automated linting (axe-core where available).
+    </p>
+    <p style="color:var(--text);font-size:0.9em;margin:0">
+      View our full <a href="/accessibility/vpat" style="color:var(--cyan)">VPAT (Voluntary Product Accessibility Template)</a>
+      for detailed criterion-by-criterion conformance claims under WCAG 2.1 and Section 508.
+    </p>
+  </div>
+
+  {# ── Feedback form ───────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 8px;font-weight:700">
+      Report an Accessibility Issue
+    </h2>
+    <p style="color:var(--muted);font-size:0.85em;margin:0 0 18px">
+      If you experience a barrier that is not listed above or need assistance accessing content,
+      please let us know. We aim to respond within 5 business days.
+    </p>
+
+    <div id="a11y-form-wrap">
+      <form id="a11y-feedback-form" onsubmit="submitA11yFeedback(event)">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+          <div>
+            <label for="a11y-name" style="display:block;font-size:0.8em;color:var(--muted);
+                   margin-bottom:4px">Name (optional)</label>
+            <input id="a11y-name" name="name" type="text" autocomplete="name"
+                   style="width:100%;background:var(--surface);border:1px solid var(--border);
+                          border-radius:5px;padding:8px 10px;font-size:0.9em;color:var(--text);
+                          outline:none;box-sizing:border-box"
+                   onfocus="this.style.borderColor='rgba(0,255,204,0.4)'"
+                   onblur="this.style.borderColor='var(--border)'">
+          </div>
+          <div>
+            <label for="a11y-email" style="display:block;font-size:0.8em;color:var(--muted);
+                   margin-bottom:4px">Email (optional)</label>
+            <input id="a11y-email" name="email" type="email" autocomplete="email"
+                   style="width:100%;background:var(--surface);border:1px solid var(--border);
+                          border-radius:5px;padding:8px 10px;font-size:0.9em;color:var(--text);
+                          outline:none;box-sizing:border-box"
+                   onfocus="this.style.borderColor='rgba(0,255,204,0.4)'"
+                   onblur="this.style.borderColor='var(--border)'">
+          </div>
+        </div>
+        <div style="margin-bottom:16px">
+          <label for="a11y-desc" style="display:block;font-size:0.8em;color:var(--muted);
+                 margin-bottom:4px">
+            Description of issue <span style="color:var(--red)">*</span>
+          </label>
+          <textarea id="a11y-desc" name="description" rows="4" required
+                    aria-required="true"
+                    placeholder="Please describe the accessibility barrier you encountered…"
+                    style="width:100%;background:var(--surface);border:1px solid var(--border);
+                           border-radius:5px;padding:8px 10px;font-size:0.9em;color:var(--text);
+                           outline:none;box-sizing:border-box;resize:vertical;
+                           font-family:var(--sans)"
+                    onfocus="this.style.borderColor='rgba(0,255,204,0.4)'"
+                    onblur="this.style.borderColor='var(--border)'"></textarea>
+        </div>
+        <div id="a11y-form-error" role="alert" aria-live="assertive"
+             style="display:none;color:var(--red);font-size:0.85em;margin-bottom:10px"></div>
+        <button type="submit"
+                style="background:rgba(0,255,204,0.12);border:1px solid rgba(0,255,204,0.35);
+                       border-radius:5px;color:var(--cyan);font-size:0.9em;font-weight:600;
+                       padding:9px 22px;cursor:pointer">
+          Submit Feedback
+        </button>
+      </form>
+    </div>
+    <div id="a11y-thank-you" style="display:none;color:var(--green);font-size:0.9em;padding:8px 0"
+         role="status" aria-live="polite">
+      Thank you — your feedback has been received.
+    </div>
+  </div>
+
+  {# ── Contact ─────────────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 8px;font-weight:700">Contact</h2>
+    <p style="color:var(--text);font-size:0.9em;margin:0">
+      Platform administrators can be reached via the
+      <a href="/admin" style="color:var(--cyan)">admin dashboard</a>.
+      For urgent accessibility requests, contact your system administrator directly.
+    </p>
+  </div>
+
+</div>
+
+<script>
+async function submitA11yFeedback(e) {
+  e.preventDefault();
+  var form    = document.getElementById('a11y-feedback-form');
+  var errEl   = document.getElementById('a11y-form-error');
+  var thanksEl = document.getElementById('a11y-thank-you');
+  var wrapEl  = document.getElementById('a11y-form-wrap');
+  errEl.style.display = 'none';
+
+  var desc = document.getElementById('a11y-desc').value.trim();
+  if (!desc) {
+    errEl.textContent = 'Please describe the accessibility issue.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  var payload = {
+    name:        document.getElementById('a11y-name').value.trim(),
+    email:       document.getElementById('a11y-email').value.trim(),
+    description: desc,
+  };
+
+  try {
+    var r = await fetch('/accessibility/feedback', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (r.ok) {
+      wrapEl.style.display = 'none';
+      thanksEl.style.display = 'block';
+    } else {
+      var d = await r.json().catch(() => ({}));
+      errEl.textContent = d.detail || 'Submission failed — please try again.';
+      errEl.style.display = 'block';
+    }
+  } catch (ex) {
+    errEl.textContent = 'Network error — please try again.';
+    errEl.style.display = 'block';
+  }
+}
+</script>
+{% endblock %}

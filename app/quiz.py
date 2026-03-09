@@ -1,6 +1,6 @@
 """
-BLACKSITE — CISSP-domain quiz bank
-50 questions covering all 8 CISSP domains.
+BLACKSITE — information security quiz bank
+Questions covering core information security domains.
 """
 from __future__ import annotations
 from typing import List, Dict, Any

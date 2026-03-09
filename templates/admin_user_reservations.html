@@ -2,6 +2,12 @@
 {% block title %}User Reservations{% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <a href="/admin">Admin</a>
+  <span class="sep">/</span>
+  <span>User Reservations</span>
+</div>
+
 <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:16px;flex-wrap:wrap">
   <div>
     <div style="color:var(--muted);font-size:0.75em;letter-spacing:1px;margin-bottom:4px">
@@ -90,16 +96,16 @@
 {% endif %}
 
 {# Override modal #}
-<div id="override-modal" style="display:none;position:fixed;inset:0;z-index:500;
+<div id="override-modal" role="dialog" aria-modal="true" aria-labelledby="override-modal-heading" style="display:none;position:fixed;inset:0;z-index:500;
      background:rgba(0,0,0,0.7);align-items:center;justify-content:center">
   <div class="card" style="width:440px;padding:28px;max-width:90vw">
-    <h3 style="margin:0 0 16px;font-size:1.1em;color:var(--yellow)">Grant Reservation Override</h3>
+    <h3 id="override-modal-heading" style="margin:0 0 16px;font-size:1.1em;color:var(--yellow)">Grant Reservation Override</h3>
     <p id="override-desc" style="color:var(--muted);font-size:0.85em;margin-bottom:16px"></p>
     <form id="override-form" method="post" action="">
       <label style="display:block;font-size:0.82em;color:var(--muted);margin-bottom:6px">
         Reason for override <span style="color:var(--red)">*</span>
       </label>
-      <textarea name="reason" rows="3" required
+      <textarea name="reason" rows="3" required aria-required="true"
                 style="width:100%;background:var(--surface);border:1px solid var(--border);
                        border-radius:6px;color:var(--text);padding:8px 12px;font-size:0.84em;
                        resize:vertical;box-sizing:border-box"
@@ -116,18 +122,26 @@
 </div>
 
 <script>
+var _overrideLastFocus = null;
 function showOverride(id, username) {
+  _overrideLastFocus = document.activeElement;
   document.getElementById('override-desc').textContent =
     'You are granting an override for username "' + username + '". This allows this username/email to be re-used before the hold expires. This action is logged.';
   document.getElementById('override-form').action = '/admin/users/reservations/' + id + '/override';
   const m = document.getElementById('override-modal');
   m.style.display = 'flex';
+  const focusable = m.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+  if (focusable.length) focusable[0].focus();
 }
 function closeOverride() {
   document.getElementById('override-modal').style.display = 'none';
+  if (_overrideLastFocus) _overrideLastFocus.focus();
 }
 document.getElementById('override-modal').addEventListener('click', function(e) {
   if (e.target === this) closeOverride();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && document.getElementById('override-modal').style.display === 'flex') closeOverride();
 });
 </script>
 {% endblock %}

@@ -61,14 +61,16 @@
 {# ── Filter bar ────────────────────────────────────────────────────────────── #}
 <form method="get" action="/admin/siem"
       style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:20px">
-  <select name="severity" onchange="this.form.submit()"
+  <select name="severity" id="siem-severity" onchange="this.form.submit()"
+          aria-label="Severity filter (auto-applies on change)"
           style="background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 8px;font-size:0.8em">
     <option value="">All Severities</option>
     {% for sev in ['info','low','medium','high','critical'] %}
     <option value="{{ sev }}" {% if filter_severity == sev %}selected{% endif %}>{{ sev | title }}</option>
     {% endfor %}
   </select>
-  <select name="event_type" onchange="this.form.submit()"
+  <select name="event_type" id="siem-event-type" onchange="this.form.submit()"
+          aria-label="Event type filter (auto-applies on change)"
           style="background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 8px;font-size:0.8em">
     <option value="">All Event Types</option>
     {% for et in ['http','failed_auth','access_denied','server_error','anomaly'] %}
@@ -88,13 +90,13 @@
     <table>
       <thead>
         <tr>
-          <th>Time</th>
-          <th>Type</th>
-          <th>Sev</th>
-          <th>IP</th>
-          <th>User</th>
-          <th>Method + Path</th>
-          <th style="text-align:center">Status</th>
+          <th scope="col">Time</th>
+          <th scope="col">Type</th>
+          <th scope="col">Sev</th>
+          <th scope="col">IP</th>
+          <th scope="col">User</th>
+          <th scope="col">Method + Path</th>
+          <th style="text-align:center" scope="col">Status</th>
         </tr>
       </thead>
       <tbody>

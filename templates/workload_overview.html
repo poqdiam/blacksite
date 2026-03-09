@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Team Workload Overview{% endblock %}
+
+{% block content %}
+<div style="max-width:960px;margin:0 auto">
+  <div class="breadcrumb">
+    <a href="/issm/dashboard">ISSM</a>
+    <span class="sep">/</span>
+    <span>Workload Overview</span>
+  </div>
+  <h1>Team Workload — {{ today }}</h1>
+  <p class="text-muted" style="margin-bottom:28px">
+    Daily control review and POA&amp;M check assignments across all team members.
+    Assignments are deterministically generated each day — the same user always sees
+    the same tasks on the same day.
+  </p>
+
+  {% set users = assignments | map(attribute='remote_user') | unique | list %}
+
+  {% if not assignments %}
+  <div class="card" style="text-align:center;padding:48px">
+    <div style="font-size:2em;margin-bottom:12px">📋</div>
+    <p class="text-muted">No assignments generated yet for today. Assignments appear once users access their dashboard.</p>
+  </div>
+  {% else %}
+
+  <div style="display:grid;gap:20px">
+    {% for u in users %}
+    {% set u_tasks = assignments | selectattr('remote_user','eq',u) | list %}
+    {% set done_ct = u_tasks | selectattr('status','eq','done') | list | length %}
+    {% set skip_ct = u_tasks | selectattr('status','eq','skipped') | list | length %}
+    {% set pend_ct = u_tasks | selectattr('status','eq','pending') | list | length %}
+
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <div class="card-title" style="margin-bottom:2px">{{ u }}</div>
+          <div class="text-muted mono" style="font-size:0.8em">{{ u_tasks|length }} assignments</div>
+        </div>
+        <div style="display:flex;gap:10px;font-size:0.8em">
+          <span style="background:rgba(0,229,100,0.12);border:1px solid rgba(0,229,100,0.3);border-radius:20px;padding:3px 10px;color:var(--green)">
+            ✓ {{ done_ct }} done
+          </span>
+          <span style="background:rgba(255,179,0,0.12);border:1px solid rgba(255,179,0,0.3);border-radius:20px;padding:3px 10px;color:var(--yellow)">
+            ↷ {{ skip_ct }} skipped
+          </span>
+          <span style="background:rgba(0,229,255,0.12);border:1px solid rgba(0,229,255,0.3);border-radius:20px;padding:3px 10px;color:var(--cyan)">
+            ○ {{ pend_ct }} pending
+          </span>
+        </div>
+      </div>
+
+      <div style="display:grid;gap:8px">
+        {% for a in u_tasks %}
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;
+                    background:var(--surface);border:1px solid var(--border);border-radius:6px">
+          <div style="width:10px;height:10px;border-radius:50%;flex-shrink:0;
+                      background:{% if a.status=='done' %}var(--green){% elif a.status=='skipped' %}var(--yellow){% else %}var(--border){% endif %}">
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:0.85em">
+              {% if a.task_type == 'control_review' %}
+                <span class="mono" style="color:var(--cyan)">{{ a.control_id }}</span>
+                — Control Review
+              {% else %}
+                POA&amp;M Check
+              {% endif %}
+            </div>
+            <div class="text-muted" style="font-size:0.78em">{{ a.system_abbr }} · {{ a.system_name }}</div>
+          </div>
+          <div class="text-muted mono" style="font-size:0.78em;white-space:nowrap">{{ a.status }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

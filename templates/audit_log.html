@@ -228,8 +228,8 @@
     <div class="filter-grid">
 
       <div class="filter-field">
-        <label>Time Range</label>
-        <select name="days" onchange="this.form.submit()">
+        <label for="audit-days">Time Range</label>
+        <select name="days" id="audit-days" onchange="this.form.submit()" aria-label="Date range (auto-applies on change)">
           <option value="1"   {% if days==1   %}selected{% endif %}>Last 24 hours</option>
           <option value="7"   {% if days==7   %}selected{% endif %}>Last 7 days</option>
           <option value="30"  {% if days==30  %}selected{% endif %}>Last 30 days</option>
@@ -329,15 +329,15 @@
     <table class="audit-table" id="audit-table">
       <thead>
         <tr>
-          <th style="width:34px;text-align:center">#</th>
-          <th data-col="col-ts">Timestamp</th>
-          <th data-col="col-actor">Actor</th>
-          <th data-col="col-action">Action</th>
-          <th data-col="col-rtype">Resource Type</th>
-          <th data-col="col-res">Resource</th>
-          <th data-col="col-out">Outcome</th>
-          <th data-col="col-ip">IP Address</th>
-          <th data-col="col-detail">Details</th>
+          <th style="width:34px;text-align:center" scope="col">#</th>
+          <th data-col="col-ts" scope="col">Timestamp</th>
+          <th data-col="col-actor" scope="col">Actor</th>
+          <th data-col="col-action" scope="col">Action</th>
+          <th data-col="col-rtype" scope="col">Resource Type</th>
+          <th data-col="col-res" scope="col">Resource</th>
+          <th data-col="col-out" scope="col">Outcome</th>
+          <th data-col="col-ip" scope="col">IP Address</th>
+          <th data-col="col-detail" scope="col">Details</th>
         </tr>
       </thead>
       <tbody>

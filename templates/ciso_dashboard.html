@@ -65,6 +65,14 @@
   .csys-table tr:hover td { background: rgba(255,255,255,0.02); }
   .csys-table tr:last-child td { border-bottom: none; }
 
+  /* Clickable stat tile */
+  a.ciso-stat {
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+  }
+  a.ciso-stat:hover { border-color: var(--cyan); }
+
   /* Auth status pill */
   .auth-pill {
     display: inline-block;
@@ -130,6 +138,12 @@
 {% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <a href="/dashboard">Dashboard</a>
+  <span class="sep">/</span>
+  <span>CISO Dashboard</span>
+</div>
+
 <div style="max-width:1100px;margin:0 auto;padding:24px 16px">
 
   {# ── Page header ────────────────────────────────────────────────────────── #}
@@ -145,45 +159,71 @@
 
   {# ── Top stat tiles ──────────────────────────────────────────────────────── #}
   <div class="ciso-stats">
-    <div class="ciso-stat">
+    <a href="/systems" class="ciso-stat">
       <div class="ciso-stat-val" style="color:var(--cyan)">{{ system_count }}</div>
       <div class="ciso-stat-lbl">Total Systems</div>
-    </div>
-    <div class="ciso-stat">
+    </a>
+    <a href="/systems?status=authorized" class="ciso-stat">
       <div class="ciso-stat-val" style="color:var(--green)">{{ auth_counts.authorized }}</div>
       <div class="ciso-stat-lbl">Authorized</div>
-    </div>
-    <div class="ciso-stat">
+    </a>
+    <a href="/systems?status=in_progress" class="ciso-stat">
       <div class="ciso-stat-val" style="color:var(--yellow)">{{ auth_counts.in_progress }}</div>
       <div class="ciso-stat-lbl">In Progress</div>
-    </div>
-    <div class="ciso-stat">
+    </a>
+    <a href="/systems?status=expired" class="ciso-stat">
       <div class="ciso-stat-val" style="color:var(--red)">{{ auth_counts.expired }}</div>
       <div class="ciso-stat-lbl">Expired ATO</div>
-    </div>
-    <div class="ciso-stat">
+    </a>
+    <a href="/systems?status=not_authorized" class="ciso-stat">
       <div class="ciso-stat-val" style="color:var(--muted)">{{ auth_counts.not_authorized }}</div>
       <div class="ciso-stat-lbl">Not Authorized</div>
-    </div>
-    <div class="ciso-stat">
-      <div class="ciso-stat-val" style="color:{% if total_overdue_poams > 0 %}var(--red){% else %}var(--text){% endif %}">
+    </a>
+    <a href="/poam" class="ciso-stat">
+      <div class="ciso-stat-val" style="color:{% if total_open_poams > 0 %}var(--yellow){% else %}var(--text){% endif %}">
         {{ total_open_poams }}
       </div>
       <div class="ciso-stat-lbl">Open POA&amp;Ms</div>
-    </div>
-    <div class="ciso-stat">
+    </a>
+    <a href="/poam?overdue=1" class="ciso-stat">
       <div class="ciso-stat-val" style="color:{% if total_overdue_poams > 0 %}var(--red){% else %}var(--green){% endif %}">
         {{ total_overdue_poams }}
       </div>
       <div class="ciso-stat-lbl">Overdue POA&amp;Ms</div>
-    </div>
-    <div class="ciso-stat">
+    </a>
+    <a href="/risks" class="ciso-stat">
       <div class="ciso-stat-val" style="color:{% if total_open_risks > 0 %}var(--yellow){% else %}var(--green){% endif %}">
         {{ total_open_risks }}
       </div>
       <div class="ciso-stat-lbl">Open Risks</div>
-    </div>
+    </a>
   </div>
+
+  {# ── Training Engagement ─────────────────────────────────────────────────── #}
+  <section class="card" style="margin-bottom:16px;padding:20px 24px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem">
+      <span style="font-size:1.1em">📚</span>
+      <h3 style="font-size:0.85em;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin:0">Team Training Engagement</h3>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">
+      <div class="ciso-stat">
+        <div class="ciso-stat-val">{{ training_summary.completions_today }}</div>
+        <div class="ciso-stat-lbl">Challenges Today</div>
+      </div>
+      <div class="ciso-stat">
+        <div class="ciso-stat-val" style="color:{% if training_summary.passing_today > 0 %}var(--green){% else %}var(--muted){% endif %}">{{ training_summary.passing_today }}</div>
+        <div class="ciso-stat-lbl">Passed Today</div>
+      </div>
+      <div class="ciso-stat">
+        <div class="ciso-stat-val" style="color:{% if training_summary.avg_score_30d >= 75 %}var(--green){% elif training_summary.avg_score_30d >= 50 %}var(--yellow){% else %}var(--muted){% endif %}">{{ training_summary.avg_score_30d }}%</div>
+        <div class="ciso-stat-lbl">Avg Score 30d</div>
+      </div>
+      <div class="ciso-stat">
+        <div class="ciso-stat-val" style="color:{% if training_summary.clicks_week > 0 %}var(--cyan){% else %}var(--muted){% endif %}">{{ training_summary.clicks_week }}</div>
+        <div class="ciso-stat-lbl">Ext. Training Clicks (7d)</div>
+      </div>
+    </div>
+  </section>
 
   {# ── Authorization breakdown ─────────────────────────────────────────────── #}
   <div class="card" style="margin-bottom:16px;padding:20px 24px">
@@ -224,10 +264,10 @@
       </div>
     </div>
 
-    {# FIPS 199 classification #}
+    {# Impact classification #}
     <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
       <div style="font-size:0.75em;text-transform:uppercase;letter-spacing:0.7px;color:var(--muted);margin-bottom:10px">
-        FIPS 199 Classification
+        Impact Classification
       </div>
       <div class="auth-bar-wrap">
         {% if impact_counts.High > 0 %}
@@ -270,13 +310,15 @@
           <th>System</th>
           <th>Classification</th>
           <th>Auth Status</th>
-          <th>Auth Expiry</th>
+          <th>Expiry</th>
+          <th>ISSM</th>
           <th style="text-align:right">Open POA&amp;Ms</th>
           <th style="text-align:right">Overdue</th>
           <th style="text-align:right">Action</th>
         </tr>
       </thead>
       <tbody>
+        {% set today_iso = now.date().isoformat() %}
         {% for s in systems %}
         <tr>
           <td>
@@ -299,18 +341,25 @@
               {{ status_labels.get(s.auth_status, s.auth_status|capitalize) }}
             </span>
           </td>
-          <td style="color:{% if s.auth_expiry and s.auth_expiry < now.date().isoformat() %}var(--red){% else %}var(--muted){% endif %};font-size:0.82em;font-family:var(--mono)">
+          <td style="color:{% if s.auth_expiry and s.auth_expiry < today_iso %}var(--red){% elif s.days_to_expiry is defined and s.days_to_expiry is not none and s.days_to_expiry <= 90 %}var(--yellow){% else %}var(--muted){% endif %};font-size:0.82em;font-family:var(--mono)" title="{% if s.days_to_expiry is defined and s.days_to_expiry is not none and s.days_to_expiry > 0 %}{{ s.days_to_expiry }}d remaining{% endif %}">
             {{ s.auth_expiry or '—' }}
           </td>
-          <td style="text-align:right">
-            <span class="poam-num{% if s.open_poams > 0 %} poam-overdue{% endif %}">
-              {{ s.open_poams if s.open_poams > 0 else '—' }}
-            </span>
+          <td style="font-size:0.8em;color:var(--muted)">
+            {{ s.issm_name or '—' }}
           </td>
           <td style="text-align:right">
-            <span class="poam-num{% if s.overdue_poams > 0 %} poam-overdue{% endif %}">
-              {{ s.overdue_poams if s.overdue_poams > 0 else '—' }}
-            </span>
+            {% if s.open_poams > 0 %}
+            <a href="/poam?system_id={{ s.id }}" class="poam-num poam-overdue" style="text-decoration:none">{{ s.open_poams }}</a>
+            {% else %}
+            <span class="poam-num">—</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right">
+            {% if s.overdue_poams > 0 %}
+            <a href="/poam?system_id={{ s.id }}&overdue=1" class="poam-num poam-overdue" style="text-decoration:none">{{ s.overdue_poams }}</a>
+            {% else %}
+            <span class="poam-num">—</span>
+            {% endif %}
           </td>
           <td style="text-align:right">
             <a href="/systems/{{ s.id }}/edit" class="btn btn-ghost btn-sm" style="font-size:0.75em;padding:3px 10px">Edit</a>
@@ -331,7 +380,7 @@
   <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px">
     <a href="/poam" class="btn btn-ghost btn-sm">POA&amp;M →</a>
     <a href="/risks" class="btn btn-ghost btn-sm">Risk Register →</a>
-    <a href="/ato" class="btn btn-ghost btn-sm">ATO Package →</a>
+    <a href="/packages" class="btn btn-ghost btn-sm">Auth Packages →</a>
     <a href="/reports" class="btn btn-ghost btn-sm">Reports →</a>
   </div>
 

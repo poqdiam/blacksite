@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ app_name }} — Evidence Artifacts — {{ system.name }}{% endblock %}
+{% block title %}{{ app_name }} — Artifact Archive — {{ system.name }}{% endblock %}
 
 {% block head %}
 <style>
@@ -21,12 +21,12 @@
   <span class="sep">/</span>
   <a href="/systems/{{ system.id }}">{{ system.name }}</a>
   <span class="sep">/</span>
-  <span>Evidence Artifacts</span>
+  <span>Artifact Archive</span>
 </div>
 
 <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:22px">
   <div>
-    <h1 style="margin:0">Evidence Artifacts</h1>
+    <h1 style="margin:0">Artifact Archive</h1>
     <p class="text-muted" style="font-size:.84em;margin-top:4px">
       {{ system.name }} — {{ artifacts | length }} artifact{{ 's' if artifacts | length != 1 else '' }}
     </p>
@@ -75,15 +75,15 @@
     <table>
       <thead>
         <tr>
-          <th>Title</th>
-          <th>Control</th>
-          <th>Type</th>
-          <th>Source</th>
-          <th>Collected</th>
-          <th>Freshness</th>
-          <th>Owner</th>
-          <th>Status</th>
-          <th></th>
+          <th scope="col">Title</th>
+          <th scope="col">Control</th>
+          <th scope="col">Type</th>
+          <th scope="col">Source</th>
+          <th scope="col">Collected</th>
+          <th scope="col">Freshness</th>
+          <th scope="col">Owner</th>
+          <th scope="col">Status</th>
+          <th scope="col"></th>
         </tr>
       </thead>
       <tbody>
@@ -132,12 +132,12 @@
             <form method="post" action="/systems/{{ system.id }}/artifacts/{{ art.id }}/approve"
                   style="display:inline">
               <input type="hidden" name="decision" value="approved">
-              <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--green)">✓</button>
+              <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--green)" aria-label="Approve">✓</button>
             </form>
             <form method="post" action="/systems/{{ system.id }}/artifacts/{{ art.id }}/approve"
                   style="display:inline">
               <input type="hidden" name="decision" value="rejected">
-              <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--red)">✗</button>
+              <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--red)" aria-label="Reject">✗</button>
             </form>
             {% endif %}
           </td>
@@ -150,18 +150,18 @@
 {% else %}
 <div class="card" style="padding:48px;text-align:center;margin-bottom:24px">
   <div style="color:#1e1e30;font-size:1.8em;font-family:var(--mono);margin-bottom:10px">[ ]</div>
-  <div class="text-muted" style="font-size:.88em">No evidence artifacts recorded yet.</div>
+  <div class="text-muted" style="font-size:.88em">No artifacts recorded yet.</div>
 </div>
 {% endif %}
 
 {# Add Artifact form #}
 <div class="add-artifact-card">
-  <div class="section-header">Add Evidence Artifact</div>
+  <div class="section-header">Add Artifact</div>
   <form method="post" action="/systems/{{ system.id }}/artifacts" enctype="multipart/form-data">
     <div class="af-grid" style="margin-bottom:12px">
       <div>
-        <label class="form-label">Title <span style="color:var(--red)">*</span></label>
-        <input type="text" name="title" class="form-control" required placeholder="Artifact title">
+        <label class="form-label">Title <span style="color:var(--red)" aria-hidden="true">*</span></label>
+        <input type="text" name="title" class="form-control" required aria-required="true" placeholder="Artifact title">
       </div>
       <div>
         <label class="form-label">Control ID</label>

@@ -75,15 +75,15 @@
       <table>
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Vendor</th>
-            <th>Version</th>
-            <th>Qty</th>
-            <th>Location</th>
-            <th>IP Address</th>
-            <th>Serial / ID</th>
-            <th>Notes</th>
-            <th></th>
+            <th scope="col">Name</th>
+            <th scope="col">Vendor</th>
+            <th scope="col">Version</th>
+            <th scope="col">Qty</th>
+            <th scope="col">Location</th>
+            <th scope="col">IP Address</th>
+            <th scope="col">Serial / ID</th>
+            <th scope="col">Notes</th>
+            <th scope="col"></th>
           </tr>
         </thead>
         <tbody>
@@ -103,7 +103,7 @@
             <td>
               <form method="post" action="/systems/{{ system.id }}/inventory/{{ item.id }}/delete"
                     onsubmit="return confirm('Delete this inventory item?')">
-                <button type="submit" class="btn btn-danger btn-sm">×</button>
+                <button type="submit" class="btn btn-danger btn-sm" aria-label="Delete">×</button>
               </form>
             </td>
           </tr>

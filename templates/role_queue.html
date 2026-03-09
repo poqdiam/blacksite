@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} — BLACKSITE{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-inner">
+    <div class="ph-breadcrumb">
+      <span class="ph-bc-item">{{ page_title }}</span>
+    </div>
+    <h1 class="ph-title">{{ page_title }}</h1>
+    <p class="ph-sub">{{ page_desc }}</p>
+  </div>
+</div>
+
+<div class="content-area">
+
+  {# ── Privacy Officer queue: PII systems with assessment status ── #}
+  {% if queue_items and queue_items[0].system is defined and queue_items[0].has_assessment is defined %}
+  <div class="card">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>System</th>
+          <th>Inv #</th>
+          <th>PII</th>
+          <th>GDPR</th>
+          <th>Privacy Assessment</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in queue_items %}
+        <tr>
+          <td><strong>{{ item.system.name }}</strong></td>
+          <td>{{ item.system.inventory_number }}</td>
+          <td>{% if item.system.has_pii %}<span class="badge badge-warn">PII</span>{% else %}—{% endif %}</td>
+          <td>{% if item.system.has_gdpr_data %}<span class="badge badge-warn">GDPR</span>{% else %}—{% endif %}</td>
+          <td>
+            {% if item.has_assessment %}
+            <span class="badge badge-ok">Completed</span>
+            {% else %}
+            <span class="badge badge-danger">Pending Review</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="/systems/{{ item.system.id }}/privacy-assessments" class="btn btn-sm btn-secondary">Review</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# ── Executive observations: form + history ── #}
+  {% elif observations is defined %}
+  <div class="grid-2" style="gap:1.5rem; align-items:start;">
+    <div class="card" style="padding:1.5rem;">
+      <h3 style="margin-bottom:1rem; font-size:0.95rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted);">Add Observation</h3>
+      <form method="POST" action="/role/executive/observations">
+        <div class="form-group">
+          <label class="form-label">System</label>
+          <select name="system_id" class="form-control" required>
+            <option value="">— select system —</option>
+            {% for s in systems %}
+            <option value="{{ s.id }}">{{ s.name }} ({{ s.inventory_number }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Observation</label>
+          <textarea name="body" class="form-control" rows="4" required
+            placeholder="Advisory observation — non-binding. AO authority is not affected."></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Submit Observation</button>
+      </form>
+    </div>
+
+    <div>
+      {% if observations %}
+      {% for obs in observations %}
+      <div class="card" style="padding:1.25rem; margin-bottom:1rem; border-left:3px solid var(--accent);">
+        <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
+          <strong style="font-size:0.9rem;">
+            {% set obs_sys = systems | selectattr('id', 'equalto', obs.system_id) | first %}
+            {% if obs_sys %}{{ obs_sys.name }}{% else %}Unknown System{% endif %}
+          </strong>
+          <span style="font-size:0.8rem; color:var(--text-muted);">{{ obs.remote_user }} · {{ obs.created_at.strftime('%Y-%m-%d') if obs.created_at else '' }}</span>
+        </div>
+        <p style="font-size:0.9rem; margin:0; color:var(--text-secondary);">{{ obs.body }}</p>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="card" style="padding:2rem; text-align:center; color:var(--text-muted);">
+        <p>No observations recorded yet.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Contracting Officer function-mapped queue ── #}
+  {% elif co_view is defined and co_view %}
+  {% if queue_items %}
+  <div class="card">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>System</th>
+          <th>Inv #</th>
+          <th>Auth Status</th>
+          <th>Scope Basis</th>
+          <th>Scope Note</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in queue_items %}
+        <tr>
+          <td><strong>{{ item.system.name }}</strong></td>
+          <td>{{ item.system.inventory_number }}</td>
+          <td>
+            {% set ast = item.system.auth_status %}
+            {% if ast == 'authorized' %}<span class="badge badge-ok">Authorized</span>
+            {% elif ast == 'in_progress' %}<span class="badge badge-warn">In Progress</span>
+            {% elif ast == 'expired' %}<span class="badge badge-danger">Expired</span>
+            {% else %}<span class="badge">Not Authorized</span>{% endif %}
+          </td>
+          <td>
+            {% if item.is_manual %}
+            <span class="badge badge-neutral" title="Manually granted engagement">Manual Grant</span>
+            {% else %}
+            {% for t in item.triggers %}
+            <span class="badge badge-neutral" title="System attribute trigger">{{ t }}</span>
+            {% endfor %}
+            {% endif %}
+          </td>
+          <td>{{ item.engagement.scope_note if item.engagement and item.engagement.scope_note else '—' }}</td>
+          <td>
+            <a href="/systems/{{ item.system.id }}/auth-status" class="btn btn-sm btn-secondary">Review</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card" style="padding:2.5rem; text-align:center; color:var(--text-muted);">
+    <div style="font-size:2.5rem; margin-bottom:1rem; opacity:0.4;">⊡</div>
+    <p style="font-size:1.05rem; font-weight:600; color:var(--text-secondary); margin-bottom:0.5rem;">No systems in scope</p>
+    <p style="font-size:0.875rem;">No systems currently match contracting officer oversight criteria (federal, CUI, FedRAMP, CMMC, etc.).</p>
+  </div>
+  {% endif %}
+
+  {# ── Vendor engagement list ── #}
+  {% elif queue_items and queue_items[0].engagement is defined %}
+  {% if queue_items %}
+  <div class="card">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>System</th>
+          <th>Inv #</th>
+          <th>Scope</th>
+          <th>Internal Role</th>
+          <th>Granted</th>
+          <th>Expires</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in queue_items %}
+        <tr>
+          <td><strong>{{ item.system.name }}</strong></td>
+          <td>{{ item.system.inventory_number }}</td>
+          <td>{{ item.engagement.scope_note or '—' }}</td>
+          <td>{{ item.engagement.internal_role or 'External only' }}</td>
+          <td>{{ item.engagement.granted_at.strftime('%Y-%m-%d') if item.engagement.granted_at else '—' }}</td>
+          <td>
+            {% if item.engagement.expires_at %}
+            {{ item.engagement.expires_at.strftime('%Y-%m-%d') }}
+            {% else %}
+            <span style="color:var(--text-muted);">No expiry</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="/systems/{{ item.system.id }}/auth-status" class="btn btn-sm btn-secondary">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card" style="padding:2.5rem; text-align:center; color:var(--text-muted);">
+    <div style="font-size:2.5rem; margin-bottom:1rem; opacity:0.4;">⊡</div>
+    <p style="font-size:1.05rem; font-weight:600; color:var(--text-secondary); margin-bottom:0.5rem;">No active engagements</p>
+    <p style="font-size:0.875rem;">You have not been granted access to any systems. Contact your administrator.</p>
+  </div>
+  {% endif %}
+
+  {# ── Fallback: empty queue ── #}
+  {% else %}
+  <div class="card" style="padding:2.5rem; text-align:center; color:var(--text-muted);">
+    <div style="font-size:2.5rem; margin-bottom:1rem; opacity:0.4;">⊡</div>
+    <p style="font-size:1.05rem; font-weight:600; color:var(--text-secondary); margin-bottom:0.5rem;">No pending items</p>
+    <p style="font-size:0.875rem;">Items requiring your review or action will appear here once assigned by your administrator.</p>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -24,13 +24,16 @@
 {% endblock %}
 
 {% block content %}
-<div style="margin-bottom:6px;font-size:0.82em">
-  <a href="/submissions" style="color:var(--muted)">Submissions</a>
-  <span style="color:var(--border);margin:0 6px">/</span>
-  {% if system %}<a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a>
-  <span style="color:var(--border);margin:0 6px">/</span>{% endif %}
-  <span style="color:var(--text);font-family:var(--mono)">{{ sub.id[:8] }}…</span>
+<div class="breadcrumb">
+  <a href="/submissions">Submissions</a>
+  <span class="sep">/</span>
+{% if system %}
+  <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+  <span class="sep">/</span>
+{% endif %}
+  <span>{{ sub.id[:8] }}…</span>
 </div>
+
 
 {# Header #}
 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
@@ -153,56 +156,191 @@
     {% endif %}
   </div>
 
-  {# Admin decision panel #}
-  {% if is_admin %}
-  <div class="card" style="padding:20px">
-    <div class="card-title">Authorizing Official</div>
-    <form method="post" action="/submissions/{{ sub.id }}/update">
-      <div style="display:grid;gap:12px">
+  {# ── Signature Chain Panel ── #}
+  <div>
 
-        <div>
-          <label class="form-label" style="font-size:0.7em">Status</label>
-          <select name="status" class="form-control">
-            {% for s in ['submitted','under_review','authorized','denied','withdrawn'] %}
-            <option value="{{ s }}" {% if sub.status == s %}selected{% endif %}>{{ s | replace('_',' ') | title }}</option>
-            {% endfor %}
-          </select>
+    {# Signing chain progress #}
+    <div class="card" style="padding:20px;margin-bottom:16px">
+      <div class="card-title" style="margin-bottom:14px">Authorization Signing Chain</div>
+      {% set stage_labels = {
+        'isso': 'ISSO',
+        'issm': 'ISSM',
+        'ao':   'Authorizing Official'
+      } %}
+      {% for stage in blocking_stages %}
+      {% set sig = sigs_by_stage.get(stage) %}
+      <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;padding-bottom:14px;
+                  border-bottom:1px solid var(--border)">
+        <div style="flex-shrink:0;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;
+                    justify-content:center;font-size:0.75em;font-weight:700;
+                    background:{% if sig %}var(--green){% else %}var(--border){% endif %};
+                    color:{% if sig %}#fff{% else %}var(--muted){% endif %}">
+          {% if sig %}✓{% else %}{{ loop.index }}{% endif %}
         </div>
-
-        <div>
-          <label class="form-label" style="font-size:0.7em">Reviewer</label>
-          <input type="text" name="reviewer" class="form-control" value="{{ sub.reviewer or '' }}" placeholder="AO username">
+        <div style="flex:1">
+          <div style="font-size:0.8em;font-weight:700;color:{% if sig %}var(--text){% else %}var(--muted){% endif %}">
+            {{ stage_labels.get(stage, stage | title) }}
+          </div>
+          {% if sig %}
+          <div style="font-size:0.75em;color:var(--muted);margin-top:2px">
+            {{ sig.signed_by }} · {{ sig.signed_at.strftime('%Y-%m-%d %H:%M') if sig.signed_at else '' }}
+            {% if sig.decision %}<span style="margin-left:6px;font-weight:600;
+              color:{% if sig.decision == 'authorized' %}var(--green){% else %}var(--red){% endif %}">
+              {{ sig.decision | title }}
+            </span>{% endif %}
+          </div>
+          {% if sig.comment %}<div style="font-size:0.75em;color:var(--muted);margin-top:2px;font-style:italic">{{ sig.comment }}</div>{% endif %}
+          {% if sig.file_name %}<div style="font-size:0.72em;color:var(--accent);margin-top:2px">📎 {{ sig.file_name }}</div>{% endif %}
+          {% else %}
+          <div style="font-size:0.73em;color:var(--muted);margin-top:2px">Awaiting signature</div>
+          {% endif %}
         </div>
-
-        <div>
-          <label class="form-label" style="font-size:0.7em">Decision</label>
-          <select name="decision" class="form-control">
-            <option value="">Pending</option>
-            <option value="authorized" {% if sub.decision == 'authorized' %}selected{% endif %}>Authorized</option>
-            <option value="denied"     {% if sub.decision == 'denied'     %}selected{% endif %}>Denied</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="form-label" style="font-size:0.7em">Decision Date</label>
-          <input type="date" name="decision_date" class="form-control" value="{{ sub.decision_date or '' }}">
-        </div>
-
-        <div>
-          <label class="form-label" style="font-size:0.7em">ATO Expiry</label>
-          <input type="date" name="ato_expiry" class="form-control" value="{{ sub.ato_expiry or '' }}">
-        </div>
-
-        <div>
-          <label class="form-label" style="font-size:0.7em">Notes</label>
-          <textarea name="package_notes" class="form-control" style="min-height:70px;resize:vertical">{{ sub.package_notes or '' }}</textarea>
-        </div>
-
-        <button type="submit" class="btn btn-primary" style="width:100%">Save Decision</button>
       </div>
-    </form>
+      {% endfor %}
+
+      {# Sign button for current user's stage #}
+      {% if can_sign_stage and can_sign_stage in blocking_stages %}
+      <form method="post" action="/submissions/{{ sub.id }}/sign" style="margin-top:4px">
+        <input type="hidden" name="stage" value="{{ can_sign_stage }}">
+        <div style="margin-bottom:10px">
+          <label style="font-size:0.75em;font-weight:700;display:block;margin-bottom:4px;color:var(--muted)">Comment (optional)</label>
+          <input type="text" name="comment" class="form-control" placeholder="Brief note…">
+        </div>
+        {% if can_sign_stage == 'ao' %}
+        <div style="margin-bottom:10px">
+          <label style="font-size:0.75em;font-weight:700;display:block;margin-bottom:4px;color:var(--muted)">Decision <span style="color:var(--red)" aria-hidden="true">*</span></label>
+          <select name="decision" class="form-control" required aria-required="true">
+            <option value="">Select…</option>
+            <option value="authorized">Authorized</option>
+            <option value="denied">Denied</option>
+          </select>
+        </div>
+        {% endif %}
+        <button type="submit" class="btn btn-primary" style="width:100%">
+          Sign as {{ stage_labels.get(can_sign_stage, can_sign_stage | title) }}
+        </button>
+      </form>
+      {% endif %}
+    </div>
+
+    {# Advisory concurrences #}
+    <div class="card" style="padding:20px;margin-bottom:16px">
+      <div class="card-title" style="margin-bottom:14px">Advisory Concurrences</div>
+      {% set adv_labels = {
+        'privacy_officer':     'Privacy Officer',
+        'risk_manager':        'Risk Manager',
+        'contracting_officer': 'Contracting Officer',
+      } %}
+      {% for stage in advisory_stages %}
+      {% set sig = sigs_by_stage.get(stage) %}
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="width:10px;height:10px;border-radius:50%;flex-shrink:0;
+          background:{% if sig %}{% if sig.decision == 'non_concur' %}var(--red){% else %}var(--green){% endif %}{% else %}var(--border){% endif %}"></div>
+        <div style="flex:1;font-size:0.8em">
+          <span style="font-weight:600">{{ adv_labels.get(stage, stage | title) }}</span>
+          {% if sig %}
+          <span style="color:var(--muted)"> · {{ sig.signed_by }} · {{ sig.signed_at.strftime('%Y-%m-%d') if sig.signed_at else '' }}</span>
+          <span style="font-weight:600;color:{% if sig.decision == 'non_concur' %}var(--red){% else %}var(--green){% endif %}">
+            {{ sig.decision | replace('_',' ') | title if sig.decision else 'Concurred' }}
+          </span>
+          {% else %}
+          <span style="color:var(--muted)">Pending</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+
+      {% if can_sign_stage and can_sign_stage in advisory_stages %}
+      <form method="post" action="/submissions/{{ sub.id }}/sign" style="margin-top:10px">
+        <input type="hidden" name="stage" value="{{ can_sign_stage }}">
+        <div style="margin-bottom:8px">
+          <label style="font-size:0.75em;font-weight:700;display:block;margin-bottom:4px;color:var(--muted)">Position</label>
+          <select name="decision" class="form-control">
+            <option value="concur">Concur</option>
+            <option value="non_concur">Non-Concur</option>
+          </select>
+        </div>
+        <div style="margin-bottom:8px">
+          <input type="text" name="comment" class="form-control" placeholder="Comment (optional)">
+        </div>
+        <button type="submit" class="btn btn-secondary" style="width:100%">Submit Concurrence</button>
+      </form>
+      {% endif %}
+    </div>
+
+    {# AO signed doc upload #}
+    {% if sigs_by_stage.get('ao') and not sigs_by_stage.get('ao').file_path %}
+    {% if is_admin or can_sign_stage == 'ao' %}
+    <div class="card" style="padding:20px;margin-bottom:16px">
+      <div class="card-title" style="margin-bottom:10px">Upload Signed Authorization Document</div>
+      <form method="post" action="/submissions/{{ sub.id }}/sign-upload" enctype="multipart/form-data">
+        <input type="file" name="signed_doc" class="form-control" accept=".pdf,.docx,.doc,.png,.jpg" style="margin-bottom:10px">
+        <button type="submit" class="btn btn-secondary" style="width:100%">Upload</button>
+      </form>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {# Export buttons #}
+    <div class="card" style="padding:20px">
+      <div class="card-title" style="margin-bottom:12px">Package Exports</div>
+      <div style="display:grid;gap:8px">
+        <a href="/systems/{{ sub.system_id }}/export/package" class="btn btn-secondary" style="text-align:center">
+          ⬇ Download ATO Package (.zip)
+        </a>
+        <a href="/systems/{{ sub.system_id }}/export/ato-letter" class="btn btn-secondary" style="text-align:center">
+          ⬇ ATO Letter
+        </a>
+      </div>
+    </div>
+
+    {# Admin override panel (collapsed by default) #}
+    {% if is_admin %}
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;font-size:0.78em;color:var(--muted);padding:8px 0">Admin Override</summary>
+      <div class="card" style="padding:16px;margin-top:8px">
+        <form method="post" action="/submissions/{{ sub.id }}/update">
+          <div style="display:grid;gap:10px">
+            <div>
+              <label class="form-label" style="font-size:0.7em">Status</label>
+              <select name="status" class="form-control">
+                {% for s in ['submitted','under_review','authorized','denied','withdrawn'] %}
+                <option value="{{ s }}" {% if sub.status == s %}selected{% endif %}>{{ s | replace('_',' ') | title }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="form-label" style="font-size:0.7em">Reviewer</label>
+              <input type="text" name="reviewer" class="form-control" value="{{ sub.reviewer or '' }}">
+            </div>
+            <div>
+              <label class="form-label" style="font-size:0.7em">Decision</label>
+              <select name="decision" class="form-control">
+                <option value="">Pending</option>
+                <option value="authorized" {% if sub.decision == 'authorized' %}selected{% endif %}>Authorized</option>
+                <option value="denied"     {% if sub.decision == 'denied'     %}selected{% endif %}>Denied</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label" style="font-size:0.7em">Decision Date</label>
+              <input type="date" name="decision_date" class="form-control" value="{{ sub.decision_date or '' }}">
+            </div>
+            <div>
+              <label class="form-label" style="font-size:0.7em">ATO Expiry</label>
+              <input type="date" name="ato_expiry" class="form-control" value="{{ sub.ato_expiry or '' }}">
+            </div>
+            <div>
+              <label class="form-label" style="font-size:0.7em">Notes</label>
+              <textarea name="package_notes" class="form-control" style="min-height:60px;resize:vertical">{{ sub.package_notes or '' }}</textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%">Save Override</button>
+          </div>
+        </form>
+      </div>
+    </details>
+    {% endif %}
+
   </div>
-  {% endif %}
 
 </div>
 {% endblock %}

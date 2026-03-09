@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}ATO Package — {{ system.name }} — BLACKSITE{% endblock %}
+{% block title %}Auth Package — {{ system.name }} — BLACKSITE{% endblock %}
 
 {% block head %}
 <style>
@@ -52,18 +52,25 @@
 {% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <a href="/systems">Systems</a>
+  <span class="sep">/</span>
+  <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+  <span class="sep">/</span>
+  <span>Authorization Package</span>
+</div>
+
 <div class="page-header">
   <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-    <a href="/ato" style="color:var(--muted);font-size:.85rem;text-decoration:none">← ATO Dashboard</a>
+    <a href="/packages" style="color:var(--muted);font-size:.85rem;text-decoration:none">← Dashboard</a>
     <span style="color:var(--border)">|</span>
     <h1 class="page-title" style="margin:0">{{ system.name }}</h1>
     <span class="badge badge-info">{{ system.classification or 'UNCLASSIFIED' }}</span>
-    {% if system.is_eis %}
-    <span class="badge" style="background:rgba(0,255,204,.1);color:var(--cyan);border:1px solid rgba(0,255,204,.2)">EIS</span>
-    {% endif %}
+    {% for sn in active_pkg_sns %}
+    <span class="badge" style="background:rgba(0,255,204,.1);color:var(--cyan);border:1px solid rgba(0,255,204,.2)">{{ sn }}</span>
+    {% endfor %}
   </div>
   {# Count only workflow docs (non guidance_only) for the pct #}
-  {% set workflow_total = ato_doc_keys | selectattr('__class__') | list | length %}
   {% set ns = namespace(workflow_total=0, workflow_finalized=0) %}
   {% for key in ato_doc_keys %}
     {% set meta = ato_doc_types[key] %}
@@ -76,8 +83,9 @@
     {% endif %}
   {% endfor %}
   <p class="page-sub">
-    ATO Package — {{ ns.workflow_finalized }}/{{ ns.workflow_total }} workflow documents finalized
+    Authorization Package — {{ ns.workflow_finalized }}/{{ ns.workflow_total }} workflow documents finalized
     ({{ ((ns.workflow_finalized / ns.workflow_total * 100) | int) if ns.workflow_total > 0 else 0 }}%)
+    {% if not active_pkg_sns %}<span style="color:var(--yellow);font-size:.8em"> — No programs registered. <a href="/systems/{{ system.id }}" style="color:var(--cyan)">Add authorization packages</a> to see relevant documents.</span>{% endif %}
   </p>
   <div style="margin-top:.75rem;background:var(--bg-card);border-radius:6px;height:8px;max-width:400px;overflow:hidden">
     {% set pct = ((ns.workflow_finalized / ns.workflow_total * 100) | int) if ns.workflow_total > 0 else 0 %}
@@ -87,7 +95,7 @@
 
 {# Helper macro for doc table row #}
 {% macro doc_row(key) %}
-{% if key in ato_doc_types %}
+{% if key in ato_doc_types and key in ato_doc_keys %}
 {% set doc = docs.get(key) %}
 {% set meta = ato_doc_types[key] %}
 {% set st = doc.status if doc else 'missing' %}
@@ -132,12 +140,22 @@
 {% endif %}
 {% endmacro %}
 
-{# ── Section 1: Core Authorization Package ── #}
-<div class="doc-section open" id="sec-core">
-  <div class="doc-section-header" onclick="toggleSection('sec-core')">
+{# Helper macro for a collapsible section #}
+{# pkg_filter: if set, section only shows when system has at least one matching package #}
+{% macro doc_section(sec_id, title, keys, open=false, pkg_filter=[]) %}
+{% set nsf = namespace(show=(pkg_filter|length == 0) or (active_pkg_sns|length == 0)) %}
+{% if not nsf.show %}
+  {% for sn in active_pkg_sns %}{% if sn in pkg_filter %}{% set nsf.show = true %}{% endif %}{% endfor %}
+{% endif %}
+{% if nsf.show %}
+{% set ns2 = namespace(visible=0) %}
+{% for k in keys %}{% if k in ato_doc_keys %}{% set ns2.visible = ns2.visible + 1 %}{% endif %}{% endfor %}
+{% if ns2.visible > 0 %}
+<div class="doc-section {% if open %}open{% endif %}" id="{{ sec_id }}">
+  <div class="doc-section-header" onclick="toggleSection('{{ sec_id }}')">
     <span class="doc-section-chevron">▶</span>
-    <span class="doc-section-title">Core Authorization Package</span>
-    <span class="doc-section-count">19 documents</span>
+    <span class="doc-section-title">{{ title }}</span>
+    <span class="doc-section-count">{{ ns2.visible }} document{{ 's' if ns2.visible != 1 else '' }}</span>
   </div>
   <div class="doc-section-body">
     <div style="overflow-x:auto">
@@ -146,86 +164,93 @@
           <tr><th>Document</th><th>Key</th><th>Status</th><th>Version</th><th>Assigned To</th><th>Due Date</th><th>Last Updated</th><th></th></tr>
         </thead>
         <tbody>
-          {% for key in ['FIPS199','SSP','SAP','SAR','POAM','ABD','NET_DIAGRAM','HW_INV','SW_INV','IRP','CP','CPT','CMP','CONMON','PTA','PIA','ROB','ISA','ADD'] %}
-          {% if key in ato_doc_types %}{{ doc_row(key) }}{% endif %}
-          {% endfor %}
+          {% for key in keys %}{{ doc_row(key) }}{% endfor %}
         </tbody>
       </table>
     </div>
   </div>
 </div>
+{% endif %}
+{% endif %}
+{% endmacro %}
 
-{# ── Section 2: FedRAMP Preparation ── #}
-{% set prep_keys = ['RAR_HIGH','RAR_MOD','CSP_PLAYBOOK','CRYPTO_POLICY','AUTH_BOUNDARY','TIMELINESS','PKG_ACCESS','REUSE_GUIDE','AGENCY_PB','3PAO_PERF','3PAO_RAR_GUIDE','BRANDING'] %}
-<div class="doc-section" id="sec-prep">
-  <div class="doc-section-header" onclick="toggleSection('sec-prep')">
-    <span class="doc-section-chevron">▶</span>
-    <span class="doc-section-title">FedRAMP Preparation</span>
-    <span class="doc-section-count">{{ prep_keys | length }} documents</span>
-  </div>
-  <div class="doc-section-body">
-    <div style="overflow-x:auto">
-      <table class="data-table">
-        <thead>
-          <tr><th>Document</th><th>Key</th><th>Status</th><th>Version</th><th>Assigned To</th><th>Due Date</th><th>Last Updated</th><th></th></tr>
-        </thead>
-        <tbody>
-          {% for key in prep_keys %}
-          {% if key in ato_doc_types %}{{ doc_row(key) }}{% endif %}
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
+{# ── Core RMF / Federal Authorization ── #}
+{{ doc_section('sec-core', 'Core Authorization Package (RMF / FISMA)',
+  ['FIPS199','ABD','NET_DIAGRAM','SSP','SAP','SAR','POAM',
+   'HW_INV','SW_INV','IRP','CP','CPT','CMP','CONMON','PTA','PIA','ROB','ISA','ADD'],
+  open=true, pkg_filter=['ATO','IATO','ATP','EIS']) }}
 
-{# ── Section 3: FedRAMP Package Appendices ── #}
-{% set app_keys = ['PKG_CHECKLIST','SSP_APP_A_HIGH','SSP_APP_A_MOD','SSP_APP_A_LOW','SSP_APP_A_LI','SSP_APP_J','SSP_APP_M','SSP_APP_Q','SAR_APP_A','SAR_APP_B_HIGH','SAR_APP_B_MOD','SAR_APP_B_LOW','ATO_LETTER','FR_BASELINE'] %}
-<div class="doc-section" id="sec-appendices">
-  <div class="doc-section-header" onclick="toggleSection('sec-appendices')">
-    <span class="doc-section-chevron">▶</span>
-    <span class="doc-section-title">FedRAMP Package Appendices</span>
-    <span class="doc-section-count">{{ app_keys | length }} documents</span>
-  </div>
-  <div class="doc-section-body">
-    <div style="overflow-x:auto">
-      <table class="data-table">
-        <thead>
-          <tr><th>Document</th><th>Key</th><th>Status</th><th>Version</th><th>Assigned To</th><th>Due Date</th><th>Last Updated</th><th></th></tr>
-        </thead>
-        <tbody>
-          {% for key in app_keys %}
-          {% if key in ato_doc_types %}{{ doc_row(key) }}{% endif %}
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
+{# ── FedRAMP / StateRAMP ── #}
+{{ doc_section('sec-fedramp-prep', 'FedRAMP / StateRAMP — Preparation',
+  ['RAR_HIGH','RAR_MOD','CSP_PLAYBOOK','CRYPTO_POLICY','AUTH_BOUNDARY',
+   'TIMELINESS','PKG_ACCESS','REUSE_GUIDE','AGENCY_PB','3PAO_PERF','3PAO_RAR_GUIDE','BRANDING'],
+  pkg_filter=['FedRAMP','StateRAMP']) }}
 
-{# ── Section 4: Continuous Monitoring ── #}
-{% set cm_keys = ['CONMON_MONTHLY','CONMON_DELIV','ANNUAL_CTRL_SEL','PENTEST_GUIDE','VULN_CONTAINERS','VULN_DEVIATION','CONMON_PLAYBOOK'] %}
-<div class="doc-section" id="sec-conmon">
-  <div class="doc-section-header" onclick="toggleSection('sec-conmon')">
-    <span class="doc-section-chevron">▶</span>
-    <span class="doc-section-title">Continuous Monitoring</span>
-    <span class="doc-section-count">{{ cm_keys | length }} documents</span>
-  </div>
-  <div class="doc-section-body">
-    <div style="overflow-x:auto">
-      <table class="data-table">
-        <thead>
-          <tr><th>Document</th><th>Key</th><th>Status</th><th>Version</th><th>Assigned To</th><th>Due Date</th><th>Last Updated</th><th></th></tr>
-        </thead>
-        <tbody>
-          {% for key in cm_keys %}
-          {% if key in ato_doc_types %}{{ doc_row(key) }}{% endif %}
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
+{{ doc_section('sec-fedramp-app', 'FedRAMP / StateRAMP — Package Appendices',
+  ['PKG_CHECKLIST','SSP_APP_A_HIGH','SSP_APP_A_MOD','SSP_APP_A_LOW','SSP_APP_A_LI',
+   'SSP_APP_J','SSP_APP_M','SSP_APP_Q','SAR_APP_A',
+   'SAR_APP_B_HIGH','SAR_APP_B_MOD','SAR_APP_B_LOW','ATO_LETTER','FR_BASELINE'],
+  pkg_filter=['FedRAMP','StateRAMP']) }}
+
+{{ doc_section('sec-conmon', 'FedRAMP / StateRAMP — Continuous Monitoring',
+  ['CONMON_MONTHLY','CONMON_DELIV','ANNUAL_CTRL_SEL','PENTEST_GUIDE',
+   'VULN_CONTAINERS','VULN_DEVIATION','CONMON_PLAYBOOK'],
+  pkg_filter=['FedRAMP','StateRAMP']) }}
+
+{# ── HIPAA ── #}
+{{ doc_section('sec-hipaa', 'HIPAA Security Assessment',
+  ['HIPAA_RA','HIPAA_RMP','HIPAA_WTP','HIPAA_BAA'],
+  pkg_filter=['HIPAA-SA']) }}
+
+{# ── HITRUST ── #}
+{{ doc_section('sec-hitrust', 'HITRUST CSF Certification',
+  ['HITRUST_GAP','HITRUST_CAP','HITRUST_EVD'],
+  pkg_filter=['HITRUST']) }}
+
+{# ── PCI-DSS ── #}
+{{ doc_section('sec-pci', 'PCI DSS Compliance',
+  ['PCI_SCOPE','PCI_SAQ','PCI_RISK'],
+  pkg_filter=['PCI-DSS']) }}
+
+{# ── SOC ── #}
+{{ doc_section('sec-soc', 'SOC 1 / SOC 2 Reports',
+  ['SOC1_SCOPE','SOC1_CTRLS','SOC2_SCOPE','SOC2_TSC','SOC2_GAP'],
+  pkg_filter=['SOC1','SOC2','SOC2-T1']) }}
+
+{# ── GDPR / Privacy ── #}
+{{ doc_section('sec-gdpr', 'GDPR / Privacy Compliance',
+  ['GDPR_ART30','GDPR_DPIA','GDPR_MAP','ISO27701_PIMS'],
+  pkg_filter=['GDPR','ISO27701']) }}
+
+{# ── CCPA ── #}
+{{ doc_section('sec-ccpa', 'CCPA Compliance',
+  ['CCPA_ASSESS','CCPA_INV'],
+  pkg_filter=['CCPA']) }}
+
+{# ── CMMC ── #}
+{{ doc_section('sec-cmmc', 'CMMC Certification',
+  ['CMMC_SSP','CMMC_SPRS','CMMC_PLAN'],
+  pkg_filter=['CMMC']) }}
+
+{# ── ISO 27001 ── #}
+{{ doc_section('sec-iso27001', 'ISO/IEC 27001 ISMS Certification',
+  ['ISO_SCOPE','ISO_RISK','ISO_SOA'],
+  pkg_filter=['ISO27001']) }}
+
+{# ── CSA STAR ── #}
+{{ doc_section('sec-csa', 'CSA STAR Certification',
+  ['CSA_CAIQ','CSA_CCM'],
+  pkg_filter=['CSA-STAR']) }}
+
+{# ── System Inventory (cross-program shared docs) ── #}
+{{ doc_section('sec-inventory', 'System Inventory',
+  ['HW_INV','SW_INV'],
+  pkg_filter=['ISO27001','PCI-DSS','CMMC','HITRUST','SOC1','SOC2','SOC2-T1','CSA-STAR']) }}
+
+{# ── Generic Authorization Decision (non-RMF programs) ── #}
+{{ doc_section('sec-auth-decision', 'Authorization / Certification Decision',
+  ['AUTH_DECISION'],
+  pkg_filter=['HIPAA-SA','HITRUST','PCI-DSS','SOC1','SOC2','SOC2-T1','GDPR','ISO27701','CCPA','CMMC','ISO27001','CSA-STAR']) }}
 
 {% endblock %}
 

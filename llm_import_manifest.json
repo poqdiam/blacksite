@@ -1,0 +1,2380 @@
+{
+  "repo": "/home/graycat/projects/blacksite",
+  "git_sha": "20a337ab40de71efdd614f60cdcfb97d13fd3b2d",
+  "generated_at_utc": "2026-03-01T18:50:43Z",
+  "intent_allowlist": [
+    "how do i do X in this app",
+    "what happens when i click X",
+    "which role is allowed to do X",
+    "where is X implemented in code",
+    "which config key controls X",
+    "which job runs X",
+    "what data is written when X runs",
+    "why did request_id X fail"
+  ],
+  "runtime_snapshots": [
+    {
+      "name": "version_stamp",
+      "purpose": "branch, sha, build_time_utc for deployed instance",
+      "fields": [
+        "env",
+        "branch",
+        "sha_short",
+        "sha_full",
+        "build_time_utc"
+      ]
+    },
+    {
+      "name": "route_map",
+      "purpose": "effective routes plus methods plus tags plus auth guard names",
+      "fields": [
+        "path",
+        "method",
+        "endpoint",
+        "tags",
+        "auth_guard"
+      ]
+    },
+    {
+      "name": "effective_config_redacted",
+      "purpose": "effective config values with secrets removed",
+      "fields": [
+        "key",
+        "value"
+      ],
+      "redact_keys": [
+        "app.secret_key",
+        "ai.api_key",
+        "email",
+        "smtp",
+        "password",
+        "token"
+      ]
+    },
+    {
+      "name": "job_status",
+      "purpose": "scheduled jobs plus last-run plus last-status plus last-error",
+      "fields": [
+        "job_name",
+        "schedule",
+        "last_run",
+        "last_status",
+        "last_error"
+      ]
+    },
+    {
+      "name": "db_schema",
+      "purpose": "tables, columns, indexes, foreign keys",
+      "fields": [
+        "table",
+        "column",
+        "type",
+        "nullable",
+        "default",
+        "indexes",
+        "fks"
+      ]
+    },
+    {
+      "name": "audit_vocab",
+      "purpose": "event types, resource types, action codes, UI mapping rules",
+      "fields": [
+        "event_type",
+        "resource_type",
+        "action_code",
+        "human_label",
+        "details_template"
+      ]
+    }
+  ],
+  "routes_seen_in_main_py": [
+    {
+      "decorator": "@app.get(\"/\")"
+    },
+    {
+      "decorator": "@app.get(\"/help\")"
+    },
+    {
+      "decorator": "@app.get(\"/logout\")"
+    },
+    {
+      "decorator": "@app.get(\"/switch-view\")"
+    },
+    {
+      "decorator": "@app.get(\"/switch-role-view\")"
+    },
+    {
+      "decorator": "@app.get(\"/exit-shell\")"
+    },
+    {
+      "decorator": "@app.get(\"/upload\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/upload\")"
+    },
+    {
+      "decorator": "@app.get(\"/status/{assessment_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/api/status/{assessment_id}\")"
+    },
+    {
+      "decorator": "@app.get(\"/results/{assessment_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/results/{assessment_id}/proctor\")"
+    },
+    {
+      "decorator": "@app.post(\"/results/{assessment_id}/link-system\")"
+    },
+    {
+      "decorator": "@app.post(\"/results/{assessment_id}/controls/{ctrl_id}/edit\")"
+    },
+    {
+      "decorator": "@app.get(\"/quiz/{assessment_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/quiz/{assessment_id}/submit\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/admin/audit\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/admin/view-as/{username}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/admin/download/{assessment_id}/json\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/download/{assessment_id}/original\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/download/{assessment_id}/print\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/admin/forward/{assessment_id}\")"
+    },
+    {
+      "decorator": "@app.get(\"/dashboard\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/dashboard/quiz\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/dashboard/quiz/submit\")"
+    },
+    {
+      "decorator": "@app.get(\"/profile/feeds\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/profile/feeds\")"
+    },
+    {
+      "decorator": "@app.get(\"/api/feeds/user\")"
+    },
+    {
+      "decorator": "@app.get(\"/profile\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/profile\")"
+    },
+    {
+      "decorator": "@app.post(\"/profile/avatar\")"
+    },
+    {
+      "decorator": "@app.get(\"/profile/avatar/{username}\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/systems/new\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/report\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/edit\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/edit\")"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/delete\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/systems/archived\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/admin/systems/{system_id}/restore\")"
+    },
+    {
+      "decorator": "@app.post(\"/admin/systems/{system_id}/purge\")"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/assign\")"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/unassign\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/assignments\")"
+    },
+    {
+      "decorator": "@app.get(\"/poam\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/poam/export\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/poam/import/template\")"
+    },
+    {
+      "decorator": "@app.get(\"/poam/import\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/poam/import\")"
+    },
+    {
+      "decorator": "@app.get(\"/poam/new\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/poam\")"
+    },
+    {
+      "decorator": "@app.get(\"/poam/{item_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/poam/{item_id}/update\")"
+    },
+    {
+      "decorator": "@app.post(\"/api/poam/{item_id}/status\")"
+    },
+    {
+      "decorator": "@app.post(\"/poam/{item_id}/evidence\")"
+    },
+    {
+      "decorator": "@app.get(\"/poam/{item_id}/evidence/{ev_id}\")"
+    },
+    {
+      "decorator": "@app.post(\"/poam/auto/{assessment_id}\")"
+    },
+    {
+      "decorator": "@app.get(\"/risks\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/risks/export\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/risks/new\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/risks\")"
+    },
+    {
+      "decorator": "@app.get(\"/risks/{risk_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/risks/{risk_id}/update\")"
+    },
+    {
+      "decorator": "@app.get(\"/ssp/{assessment_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/ssp/{assessment_id}/oscal\")"
+    },
+    {
+      "decorator": "@app.post(\"/api/review/{assessment_id}\")"
+    },
+    {
+      "decorator": "@app.post(\"/api/update-controls\")"
+    },
+    {
+      "decorator": "@app.get(\"/health\")"
+    },
+    {
+      "decorator": "@app.get(\"/api/version\")"
+    },
+    {
+      "decorator": "@app.get(\"/posture\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/search\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/api/search/suggest\")"
+    },
+    {
+      "decorator": "@app.get(\"/controls\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/controls/{ctrl_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/controls\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/controls/{ctrl_id}\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/workspace/{ctrl_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/workspace/{ctrl_id}\")"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/import-controls\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/submit\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/submit\")"
+    },
+    {
+      "decorator": "@app.get(\"/submissions\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/submissions/{sub_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/submissions/{sub_id}/update\")"
+    },
+    {
+      "decorator": "@app.get(\"/api/notifications\")"
+    },
+    {
+      "decorator": "@app.post(\"/api/notifications/{notif_id}/read\")"
+    },
+    {
+      "decorator": "@app.post(\"/api/notifications/read-all\")"
+    },
+    {
+      "decorator": "@app.get(\"/notifications\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/api/heartbeat\")"
+    },
+    {
+      "decorator": "@app.patch(\"/api/preferences\")"
+    },
+    {
+      "decorator": "@app.get(\"/api/alerts\")"
+    },
+    {
+      "decorator": "@app.get(\"/api/alerts/ato-expiry\")"
+    },
+    {
+      "decorator": "@app.get(\"/api/alerts/poam-overdue\")"
+    },
+    {
+      "decorator": "@app.post(\"/api/alerts/audit-check\")"
+    },
+    {
+      "decorator": "@app.get(\"/api/feeds\")"
+    },
+    {
+      "decorator": "@app.get(\"/api/ticker\")"
+    },
+    {
+      "decorator": "@app.get(\"/api/quiz/status\")"
+    },
+    {
+      "decorator": "@app.get(\"/rmf\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/rmf/{system_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/rmf/{system_id}/step/{step}\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/users\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/admin/users/add\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/users/provision\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/admin/users/provision\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/users/provision/credential\")"
+    },
+    {
+      "decorator": "@app.post(\"/admin/users/{username}/role\")"
+    },
+    {
+      "decorator": "@app.post(\"/admin/users/bulk-role\")"
+    },
+    {
+      "decorator": "@app.post(\"/admin/users/bulk-freeze\")"
+    },
+    {
+      "decorator": "@app.post(\"/admin/users/{username}/freeze\")"
+    },
+    {
+      "decorator": "@app.post(\"/admin/users/{username}/unfreeze\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/users/{username}/remove\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/admin/users/{username}/remove/confirm\")"
+    },
+    {
+      "decorator": "@app.post(\"/admin/users/{username}/restore\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/users/reservations\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/admin/users/reservations/{resv_id}/override\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/users/shadow\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/admin/siem\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/admin/system-settings\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/admin/system-settings\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/feeds\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/admin/feeds/{key}/toggle\")"
+    },
+    {
+      "decorator": "@app.post(\"/admin/feeds/{key}/test\")"
+    },
+    {
+      "decorator": "@app.post(\"/admin/feeds/reorder\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/ssp\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/admin/ssp/upload\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/ssp/review/{review_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/admin/ssp/review/{review_id}/pdf\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/audit/export\")"
+    },
+    {
+      "decorator": "@app.post(\"/admin/bundle/daily\")"
+    },
+    {
+      "decorator": "@app.get(\"/reports\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/ato\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/ato/{system_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/ato/{system_id}/{doc_type}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/ato/{system_id}/{doc_type}/save\")"
+    },
+    {
+      "decorator": "@app.post(\"/ato/{system_id}/{doc_type}/action\")"
+    },
+    {
+      "decorator": "@app.post(\"/ato/{system_id}/{doc_type}/generate\")"
+    },
+    {
+      "decorator": "@app.post(\"/ato/{system_id}/{doc_type}/upload\")"
+    },
+    {
+      "decorator": "@app.get(\"/issm/dashboard\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/ciso/dashboard\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/admin/users/{username}/max-packages\")"
+    },
+    {
+      "decorator": "@app.get(\"/sca/workspace\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/ao/decisions\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/ao/decisions/{system_id}\")"
+    },
+    {
+      "decorator": "@app.get(\"/system-owner/dashboard\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/bcdr/dashboard\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/bcdr/events\")"
+    },
+    {
+      "decorator": "@app.post(\"/bcdr/events/{event_id}/signoff\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/teams\")"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/teams\")"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/teams/{team_id}/members\")"
+    },
+    {
+      "decorator": "@app.delete(\"/systems/{system_id}/teams/{team_id}/members/{member_user}\")"
+    },
+    {
+      "decorator": "@app.get(\"/observations\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/observations/new\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/observations\")"
+    },
+    {
+      "decorator": "@app.get(\"/observations/{obs_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/observations/{obs_id}/update\")"
+    },
+    {
+      "decorator": "@app.post(\"/observations/{obs_id}/promote\")"
+    },
+    {
+      "decorator": "@app.get(\"/api/observations/summary\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/inventory\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/inventory\")"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/inventory/{item_id}/delete\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/connections\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/connections\")"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/connections/{conn_id}/delete\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/artifacts\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/artifacts\")"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/artifacts/{art_id}/approve\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/artifacts/{art_id}/download\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/eis-assessment\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/eis-assessment\")"
+    },
+    {
+      "decorator": "@app.websocket(\"/ws/admin-chat\")"
+    },
+    {
+      "decorator": "@app.get(\"/api/admin-chat/history/{room:path}\")"
+    },
+    {
+      "decorator": "@app.get(\"/api/admin-chat/unread\")"
+    },
+    {
+      "decorator": "@app.post(\"/api/profile/theme\")"
+    },
+    {
+      "decorator": "@app.post(\"/api/admin-chat/status\")"
+    },
+    {
+      "decorator": "@app.get(\"/api/admin-chat/users\")"
+    },
+    {
+      "decorator": "@app.get(\"/view-as/{username}\", response_class=RedirectResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/exit-view-as\", response_class=RedirectResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/chat/popup/{room:path}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/pen-tester/dashboard\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/sca/dashboard\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/auditor/dashboard\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/incident-responder/dashboard\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/data-owner/dashboard\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/pmo/dashboard\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/admin/ingest\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/admin/ingest/upload\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/ingest/preview/{job_id}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/admin/ingest/commit/{job_id}\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/ingest/template/{ingest_type}\")"
+    },
+    {
+      "decorator": "@app.post(\"/admin/feeds/nist/ingest\")"
+    },
+    {
+      "decorator": "@app.post(\"/admin/feeds/nvd/ingest\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/parameters\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/parameters\")"
+    },
+    {
+      "decorator": "@app.post(\"/admin/autofail/evaluate\")"
+    },
+    {
+      "decorator": "@app.get(\"/admin/autofail\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/daily\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/daily/save\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/daily/history\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/daily/logbook/{log_date}\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/daily/change-review\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/daily/change-review\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/daily/backup-check\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/daily/backup-check\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/daily/access-spotcheck\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/daily/access-spotcheck\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/rotation\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/rotation/complete\")"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/rotation/pause\")"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/rotation/resume\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/rotation/history\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/rotation/calendar\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/vendors\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/vendors\")"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/vendors/{vid}\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/interconnections\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/interconnections\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/dataflows\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/dataflows\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/privacy-assessments\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/privacy-assessments\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/restore-tests\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/restore-tests\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/reports\", response_class=HTMLResponse)"
+    },
+    {
+      "decorator": "@app.post(\"/systems/{system_id}/reports/generate\")"
+    },
+    {
+      "decorator": "@app.get(\"/systems/{system_id}/reports/{rid}/download\")"
+    },
+    {
+      "decorator": "@app.get(\"/issm/daily\", response_class=HTMLResponse)"
+    }
+  ],
+  "sources": [
+    {
+      "path": ".gitignore",
+      "purpose": "Repo source",
+      "area_tags": [],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "app/__init__.py",
+      "purpose": "Application logic module",
+      "area_tags": [
+        "python"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "app/assessor.py",
+      "purpose": "Application logic module",
+      "area_tags": [
+        "assessment",
+        "python",
+        "scoring"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "app/mailer.py",
+      "purpose": "Application logic module",
+      "area_tags": [
+        "email",
+        "notifications",
+        "python"
+      ],
+      "sensitivity": "secret"
+    },
+    {
+      "path": "app/main.py",
+      "purpose": "FastAPI entrypoint, routes, session rules, settings cache, build stamp, UI shell",
+      "area_tags": [
+        "api",
+        "entrypoint",
+        "python",
+        "routes",
+        "ui"
+      ],
+      "sensitivity": "admin"
+    },
+    {
+      "path": "app/models.py",
+      "purpose": "Application logic module",
+      "area_tags": [
+        "db",
+        "python",
+        "schema"
+      ],
+      "sensitivity": "admin"
+    },
+    {
+      "path": "app/parser.py",
+      "purpose": "Application logic module",
+      "area_tags": [
+        "parser",
+        "python",
+        "ssp"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "app/quiz.py",
+      "purpose": "Application logic module",
+      "area_tags": [
+        "python"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "app/remediation.py",
+      "purpose": "Application logic module",
+      "area_tags": [
+        "python",
+        "remediation"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "app/rss_feed.py",
+      "purpose": "Application logic module",
+      "area_tags": [
+        "python"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "app/scorer.py",
+      "purpose": "Application logic module",
+      "area_tags": [
+        "python"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "app/updater.py",
+      "purpose": "Application logic module",
+      "area_tags": [
+        "feeds",
+        "jobs",
+        "nist",
+        "python"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "config.yaml",
+      "purpose": "App configuration defaults, ports, base_url, cron schedule, feed URLs, email settings",
+      "area_tags": [
+        "config"
+      ],
+      "sensitivity": "admin"
+    },
+    {
+      "path": "docs/ATO_ALERTS_SPEC.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/AUDIT_REPORT.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/AUTOFAIL_SCHEDULER_SPEC.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/CHANGELOG.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/DEPLOY_VERIFY.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/DESIGN_MEMO_MULTI_NODE.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/ERROR_500_ROOT_CAUSE_SSP_ANALYZER.txt",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/EVIDENCE_INDEX.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/FEED_SOURCES_SPEC.txt",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/FIXLIST.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/ISSUE_SUMMARY.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/ISSUE_SUMMARY_LIST4.txt",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/NAV_CLEANUP_PLAN.txt",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/PERF_SHELL_PERSISTENCE_NOTES.txt",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/RBAC_RUN_SUMMARY.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/RELEASE_PROCESS.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/REPO_REMOTES.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/RMF_BLACKSITE.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/SSP_DESIGN_SYSTEM.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/TEST_NOTES.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/TEST_NOTES_LIST4.txt",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/UPDATE_WCMC_ROOT_CAUSE.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/WORKLOG.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/role_workflow.csv",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "docs/system_metrics.md",
+      "purpose": "Runbooks and documentation",
+      "area_tags": [
+        "docs"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "requirements.txt",
+      "purpose": "Repo source",
+      "area_tags": [],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "run.bat",
+      "purpose": "Repo source",
+      "area_tags": [],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "run.sh",
+      "purpose": "Repo source",
+      "area_tags": [],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "scripts/bsv_rbac_run",
+      "purpose": "Operational scripts",
+      "area_tags": [
+        "ops",
+        "scripts"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "scripts/clean_seed_data.py",
+      "purpose": "Operational scripts",
+      "area_tags": [
+        "ops",
+        "python",
+        "scripts"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "scripts/generate_aamf_data.py",
+      "purpose": "Operational scripts",
+      "area_tags": [
+        "ops",
+        "python",
+        "scripts"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "scripts/ingest_pt_controls.py",
+      "purpose": "Operational scripts",
+      "area_tags": [
+        "ops",
+        "python",
+        "scripts"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "scripts/seed_test_data.py",
+      "purpose": "Operational scripts",
+      "area_tags": [
+        "ops",
+        "python",
+        "scripts"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "scripts/xylock.py",
+      "purpose": "Operational scripts",
+      "area_tags": [
+        "ops",
+        "python",
+        "scripts"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "scripts/xylok_scrape_controls.py",
+      "purpose": "Operational scripts",
+      "area_tags": [
+        "ops",
+        "python",
+        "scripts"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "static/admin-chat.css",
+      "purpose": "Static UI assets",
+      "area_tags": [
+        "static",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "static/admin-chat.js",
+      "purpose": "Static UI assets",
+      "area_tags": [
+        "static",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "static/feed_cache/bleeping.json",
+      "purpose": "Static UI assets",
+      "area_tags": [
+        "static",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "static/feed_cache/cisa_alerts.json",
+      "purpose": "Static UI assets",
+      "area_tags": [
+        "static",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "static/feed_cache/darkreading.json",
+      "purpose": "Static UI assets",
+      "area_tags": [
+        "static",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "static/feed_cache/google.json",
+      "purpose": "Static UI assets",
+      "area_tags": [
+        "static",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "static/feed_cache/krebs.json",
+      "purpose": "Static UI assets",
+      "area_tags": [
+        "static",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "static/feed_cache/nist.json",
+      "purpose": "Static UI assets",
+      "area_tags": [
+        "static",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "static/feed_cache/sans-isc.json",
+      "purpose": "Static UI assets",
+      "area_tags": [
+        "static",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "static/feed_cache/sans.json",
+      "purpose": "Static UI assets",
+      "area_tags": [
+        "static",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "static/feed_cache/thn.json",
+      "purpose": "Static UI assets",
+      "area_tags": [
+        "static",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "static/vendor/chart.umd.min.js",
+      "purpose": "Static UI assets",
+      "area_tags": [
+        "static",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/admin.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/admin_autofail.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/admin_feeds.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/admin_ingest.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/admin_ingest_preview.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/admin_ssp_review.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/admin_ssp_upload.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/admin_system_settings.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/admin_user_reservations.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/admin_users.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/ao_decisions.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/archived_systems.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/artifacts.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/assessment_procedures.json",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/ato_dashboard.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/ato_document.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/ato_system.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/audit_log.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/auditor_dashboard.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/base.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/bcdr_dashboard.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/ccis.json",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/chat_popup.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/ciso_dashboard.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/confirm_remove.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/connections.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/control_detail.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/controls.csv",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/controls.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/controls.json",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/daily_quiz.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/dashboard.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/data_owner_dashboard.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/eis_assessment.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/error_pdf.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/errors/403.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/errors/404.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/errors/500.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/gate_quiz.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/help_center.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/incident_responder_dashboard.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/index.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/inventory.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/issm_daily_portfolio.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/issm_dashboard.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/macros.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/notifications.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/observation_detail.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/observations.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/odp_labels.json",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/pen_tester_dashboard.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/pmo_dashboard.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/poam.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/poam_export.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/poam_import.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/poam_item.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/posture.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/print_report.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/profile.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/profile_feeds.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/provision_user.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/quiz.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/reports.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/results.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/risk_form.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/risks.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/risks_export.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/rmf.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/rmf_system.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/sca_dashboard.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/sca_workspace.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/search.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/shadow_users.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/siem.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/ssp_export.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/ssp_mode_select.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/status.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/submission_detail.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/submission_form.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/submissions.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_control_detail.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_controls.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_daily.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_daily_access_spotcheck.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_daily_backup_check.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_daily_change_review.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_daily_history.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_daily_logbook.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_dataflows.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_detail.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_form.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_interconnections.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_owner_dashboard.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_parameters.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_privacy_assessments.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_report.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_reports.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_restore_tests.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_rotation.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_rotation_calendar.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_rotation_history.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/system_vendors.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/systems.html",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "templates/xylok_reference_bundle.json",
+      "purpose": "Server-rendered UI templates",
+      "area_tags": [
+        "templates",
+        "ui"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/__init__.py",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "python",
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/rbac/README.md",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "docs",
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/rbac/__init__.py",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "python",
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/rbac/config/curated_flows.yaml",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/rbac/config/fixtures.yaml",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/rbac/config/roles.yaml",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/rbac/discovery.py",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "python",
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/rbac/executor.py",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "python",
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/rbac/fixtures.py",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "python",
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/rbac/notifier.py",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "python",
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/rbac/personas.py",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "python",
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/rbac/reporter.py",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "python",
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/rbac/runner.py",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "python",
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/rbac/systemd/bsv-rbac-runner.service",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "tests/rbac/systemd/bsv-rbac-runner.timer",
+      "purpose": "Tests and regression coverage",
+      "area_tags": [
+        "tests"
+      ],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "update-controls.bat",
+      "purpose": "Repo source",
+      "area_tags": [],
+      "sensitivity": "employee"
+    },
+    {
+      "path": "update-controls.sh",
+      "purpose": "Repo source",
+      "area_tags": [],
+      "sensitivity": "employee"
+    }
+  ],
+  "redaction_notes": [
+    "Do not index /etc/blacksite/email.conf contents",
+    "Do not index data/.app_secret contents",
+    "Redact secret_key and ai api keys from config snapshots"
+  ]
+}

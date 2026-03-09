@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Platform Compliance &amp; Security{% endblock %}
+
+{% block content %}
+<div style="max-width:860px;margin:0 auto;padding:24px 16px">
+
+  <h1 style="font-family:var(--mono);font-size:1.4em;color:var(--cyan);
+             letter-spacing:1px;margin-bottom:4px">Platform Compliance &amp; Security</h1>
+  <p style="color:var(--muted);font-size:0.85em;margin-bottom:32px">
+    Information about BLACKSITE's security controls, accessibility conformance, and supported compliance frameworks.
+  </p>
+
+  {# ── 1. Accessibility ─────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      1. Accessibility
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0 0 10px">
+      BLACKSITE targets <strong>WCAG 2.1 Level AA</strong> partial conformance. Accessibility
+      improvements implemented include: skip navigation, ARIA labels on all interactive controls,
+      modal focus management, semantic table markup, live regions for dynamic content, and
+      keyboard operability throughout the platform.
+    </p>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      <a href="/accessibility" style="color:var(--cyan)">View Accessibility Statement</a>
+      &nbsp;·&nbsp;
+      <a href="/accessibility/vpat" style="color:var(--cyan)">View VPAT (Voluntary Product Accessibility Template)</a>
+    </p>
+  </div>
+
+  {# ── 2. Section 508 ───────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      2. Section 508 (2018 Refresh)
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0 0 10px">
+      BLACKSITE is designed to conform to <strong>Section 508 of the Rehabilitation Act
+      (36 CFR Part 1194, 2018 Refresh)</strong>, which aligns with WCAG 2.1 Level AA.
+      Conformance is partial; formal testing with assistive technologies (NVDA, JAWS, VoiceOver)
+      is in progress for Q2 2026.
+    </p>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      The VPAT details Chapter 3 (Functional Performance Criteria), Chapter 5 (Software),
+      and Chapter 6 (Support Documentation) conformance claims.
+      <a href="/accessibility/vpat" style="color:var(--cyan)">View VPAT</a>
+    </p>
+  </div>
+
+  {# ── 3. Privacy ───────────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      3. Privacy
+    </h2>
+    <ul style="margin:0 0 10px;padding:0 0 0 20px;color:var(--text);font-size:0.88em;line-height:1.9">
+      <li><strong>CCPA/CPRA (California):</strong> Full data subject rights supported. BLACKSITE does not sell or share personal information.</li>
+      <li><strong>GDPR (EU/EEA):</strong> Legal bases documented. Data Processing Agreements available on request for enterprise customers.</li>
+      <li><strong>COPPA:</strong> Platform is for professional use only; not directed at persons under 18. No knowing collection of minors' data.</li>
+      <li><strong>No data sales:</strong> BLACKSITE does not sell, rent, or share personal information with third parties for marketing purposes.</li>
+    </ul>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      <a href="/privacy" style="color:var(--cyan)">View Privacy Notice</a>
+    </p>
+  </div>
+
+  {# ── 4. Security ──────────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      4. Security Controls
+    </h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px 16px">
+        <div style="font-size:0.8em;font-weight:700;color:var(--cyan);margin-bottom:6px">Database Encryption</div>
+        <div style="font-size:0.83em;color:var(--text);line-height:1.6">
+          SQLCipher AES-256 encryption at rest. The database encryption key is stored in the
+          systemd service environment, never in code or configuration files.
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px 16px">
+        <div style="font-size:0.8em;font-weight:700;color:var(--cyan);margin-bottom:6px">Immutable Audit Log</div>
+        <div style="font-size:0.83em;color:var(--text);line-height:1.6">
+          All authentication, access, and modification events are written to an append-only audit
+          log with user, timestamp, IP address, and action details.
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px 16px">
+        <div style="font-size:0.8em;font-weight:700;color:var(--cyan);margin-bottom:6px">Role-Based Access Control</div>
+        <div style="font-size:0.83em;color:var(--text);line-height:1.6">
+          Granular RBAC with defined roles (Admin, ISSM, ISSO, SCA, System Owner, PMO, Employee,
+          Read-Only). Access to records is enforced at the application layer.
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px 16px">
+        <div style="font-size:0.8em;font-weight:700;color:var(--cyan);margin-bottom:6px">Authelia SSO</div>
+        <div style="font-size:0.83em;color:var(--text);line-height:1.6">
+          Authentication is delegated to Authelia, providing centralized single sign-on, multi-factor
+          authentication support, and session management.
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px 16px">
+        <div style="font-size:0.8em;font-weight:700;color:var(--cyan);margin-bottom:6px">Encryption in Transit</div>
+        <div style="font-size:0.83em;color:var(--text);line-height:1.6">
+          All traffic is served over HTTPS (TLS 1.2+) via a Caddy reverse proxy with automatic
+          certificate management.
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px 16px">
+        <div style="font-size:0.8em;font-weight:700;color:var(--cyan);margin-bottom:6px">Password Security</div>
+        <div style="font-size:0.83em;color:var(--text);line-height:1.6">
+          Passwords are hashed with bcrypt. Plaintext passwords are never stored or logged.
+          Session tokens are server-side and cryptographically random.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── 5. Supported Compliance Frameworks ───────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      5. Supported Compliance Frameworks
+    </h2>
+    <p style="color:var(--muted);font-size:0.85em;margin:0 0 14px">
+      BLACKSITE includes built-in control catalogs and assessment support for the following frameworks:
+    </p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
+      {% for fw in [
+        ('NIST SP 800-53 Rev 4', 'Federal information systems'),
+        ('NIST SP 800-53 Rev 5', 'Federal information systems'),
+        ('NIST SP 800-171 Rev 2', 'CUI in non-federal systems'),
+        ('NIST SP 800-171 Rev 3', 'CUI in non-federal systems'),
+        ('NIST CSF 2.0', 'Cybersecurity Framework'),
+        ('FedRAMP Low', 'Cloud authorization'),
+        ('FedRAMP Moderate', 'Cloud authorization'),
+        ('FedRAMP High', 'Cloud authorization'),
+        ('FISMA', 'Federal systems law'),
+        ('HIPAA', 'Healthcare data'),
+        ('CMMC 2.0', 'Defense industrial base'),
+        ('SOC 2', 'Service organization controls'),
+        ('ISO 27001', 'International ISMS standard'),
+        ('PCI DSS', 'Payment card industry'),
+      ] %}
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:10px 12px">
+        <div style="font-size:0.82em;font-weight:700;color:var(--cyan);margin-bottom:3px">{{ fw[0] }}</div>
+        <div style="font-size:0.75em;color:var(--muted)">{{ fw[1] }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ── 6. Documentation ─────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      6. Compliance Documentation
+    </h2>
+    <ul style="margin:0;padding:0 0 0 20px;color:var(--text);font-size:0.88em;line-height:2">
+      <li><a href="/accessibility/vpat" style="color:var(--cyan)">VPAT — Voluntary Product Accessibility Template (WCAG 2.1 / Section 508)</a></li>
+      <li><a href="/accessibility" style="color:var(--cyan)">Accessibility Statement</a></li>
+      <li><a href="/privacy" style="color:var(--cyan)">Privacy Notice (CCPA, GDPR, COPPA)</a></li>
+      <li><a href="/terms" style="color:var(--cyan)">Terms of Acceptable Use</a></li>
+    </ul>
+  </div>
+
+  {# ── 7. Contact ───────────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      7. Contact for Security or Compliance Inquiries
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0 0 10px">
+      For questions about platform security controls, to report a vulnerability, or for
+      compliance-related inquiries (accessibility accommodation requests, privacy rights, DPA requests),
+      contact the <strong>BLACKSITE Platform Administrator</strong> via the platform's designated
+      contact channel or the email address provided at contract or onboarding.
+    </p>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      To report an accessibility barrier, use the feedback form on the
+      <a href="/accessibility" style="color:var(--cyan)">Accessibility Statement</a> page.
+      To exercise privacy rights, use the
+      <a href="/privacy/my-data" style="color:var(--cyan)">My Data &amp; Privacy</a> page
+      (requires authentication).
+    </p>
+  </div>
+
+  <p style="color:var(--muted);font-size:0.78em;text-align:center;padding:8px 0 16px">
+    <a href="/privacy" style="color:var(--muted);text-decoration:none"
+       onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Privacy Notice</a>
+    &nbsp;·&nbsp;
+    <a href="/terms" style="color:var(--muted);text-decoration:none"
+       onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Terms of Use</a>
+    &nbsp;·&nbsp;
+    <a href="/accessibility" style="color:var(--muted);text-decoration:none"
+       onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Accessibility</a>
+  </p>
+
+</div>
+{% endblock %}

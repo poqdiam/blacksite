@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — RTM — {{ system.name }}{% endblock %}
+
+{% block head %}
+<style>
+  .rtm-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .rtm-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84em;
+  }
+  .rtm-table th {
+    background: var(--surface);
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 0.7em;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+  }
+  .rtm-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid rgba(30,30,48,0.7);
+    vertical-align: top;
+  }
+  .rtm-table tr:hover td { background: rgba(255,255,255,.015); }
+  .rtm-ctrl-id {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    font-weight: 700;
+    color: var(--cyan);
+    white-space: nowrap;
+  }
+  .rtm-st-implemented { color: var(--green); }
+  .rtm-st-not_applicable { color: var(--muted); }
+  .rtm-st-inherited { color: var(--cyan); }
+  .rtm-st-in_progress { color: var(--yellow); }
+  .rtm-st-not_started { color: var(--red); }
+  .rtm-badge {
+    font-size: 0.68em; font-weight: 700; letter-spacing: 0.5px;
+    padding: 2px 6px; border-radius: 3px; white-space: nowrap;
+  }
+  .filter-strip {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .filter-pill {
+    font-size: 0.68em; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 20px; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+    text-decoration: none; transition: border-color .15s, color .15s;
+  }
+  .filter-pill:hover, .filter-pill.active {
+    border-color: var(--cyan); color: var(--cyan);
+  }
+  .summary-strip {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .sum-item { display: flex; flex-direction: column; gap: 2px; }
+  .sum-val  { font-size: 1em; font-weight: 700; }
+  .sum-lbl  { font-size: 0.6em; font-weight: 700; letter-spacing: 1.5px;
+               text-transform: uppercase; color: var(--muted); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/systems">System Catalog</a>
+  <span class="sep">/</span>
+  <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+  <span class="sep">/</span>
+  <span>RTM</span>
+</div>
+
+<div class="rtm-header">
+  <div>
+    <h1 style="margin:0 0 4px">Requirements Traceability Matrix</h1>
+    <div style="font-size:0.82em;color:var(--muted)">
+      {{ system.name }}
+      {% if system.abbreviation %}&nbsp;·&nbsp;<span class="mono">{{ system.abbreviation }}</span>{% endif %}
+      &nbsp;·&nbsp; Control × Finding × POA&amp;M cross-reference
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="/systems/{{ system.id }}/export-ato-package"
+       class="btn btn-primary btn-sm">⬇ Export Auth Package</a>
+    <a href="/systems/{{ system.id }}/controls" class="btn btn-ghost btn-sm">Control Plan</a>
+    <a href="/systems/{{ system.id }}" class="btn btn-ghost btn-sm">System</a>
+  </div>
+</div>
+
+{# ── Summary strip ──────────────────────────────────────────────────────────── #}
+{% set impl_ct = controls | selectattr('status', 'equalto', 'implemented') | list | length %}
+{% set na_ct   = controls | selectattr('status', 'equalto', 'not_applicable') | list | length %}
+{% set inh_ct  = controls | selectattr('status', 'equalto', 'inherited') | list | length %}
+{% set ip_ct   = controls | selectattr('status', 'equalto', 'in_progress') | list | length %}
+{% set ns_ct   = controls | selectattr('status', 'equalto', 'not_started') | list | length %}
+{% set findings_ct = obs_by_ctrl.values() | sum(start=[]) | list | length %}
+{% set poam_ct  = poam_by_ctrl.values() | sum(start=[]) | list | length %}
+<div class="summary-strip">
+  <div class="sum-item">
+    <span class="sum-val">{{ controls | length }}</span>
+    <span class="sum-lbl">Controls</span>
+  </div>
+  <div class="sum-item">
+    <span class="sum-val" style="color:var(--green)">{{ impl_ct }}</span>
+    <span class="sum-lbl">Implemented</span>
+  </div>
+  <div class="sum-item">
+    <span class="sum-val" style="color:var(--cyan)">{{ inh_ct }}</span>
+    <span class="sum-lbl">Inherited</span>
+  </div>
+  <div class="sum-item">
+    <span class="sum-val" style="color:var(--muted)">{{ na_ct }}</span>
+    <span class="sum-lbl">N/A</span>
+  </div>
+  <div class="sum-item">
+    <span class="sum-val" style="color:var(--yellow)">{{ ip_ct }}</span>
+    <span class="sum-lbl">In Progress</span>
+  </div>
+  <div class="sum-item">
+    <span class="sum-val" style="color:var(--red)">{{ ns_ct }}</span>
+    <span class="sum-lbl">Not Started</span>
+  </div>
+  <div class="sum-item" style="border-left:1px solid var(--border);padding-left:16px">
+    <span class="sum-val" style="color:{% if findings_ct > 0 %}var(--red){% else %}var(--green){% endif %}">{{ findings_ct }}</span>
+    <span class="sum-lbl">Findings</span>
+  </div>
+  <div class="sum-item">
+    <span class="sum-val" style="color:{% if poam_ct > 0 %}var(--yellow){% else %}var(--green){% endif %}">{{ poam_ct }}</span>
+    <span class="sum-lbl">POA&amp;Ms</span>
+  </div>
+</div>
+
+{# ── Family filter strip ─────────────────────────────────────────────────────── #}
+<div class="filter-strip">
+  <a href="/systems/{{ system.id }}/rtm"
+     class="filter-pill {% if not family %}active{% endif %}">All Families</a>
+  {% for fam in families %}
+  <a href="/systems/{{ system.id }}/rtm?family={{ fam }}"
+     class="filter-pill {% if family == fam %}active{% endif %}">{{ fam }}</a>
+  {% endfor %}
+</div>
+
+{# ── RTM table ──────────────────────────────────────────────────────────────── #}
+{% if controls %}
+<div style="overflow-x:auto">
+<table class="rtm-table">
+  <thead>
+    <tr>
+      <th style="width:110px">Control ID</th>
+      <th style="width:80px">Family</th>
+      <th style="width:120px">Status</th>
+      <th style="width:130px">Impl. Type</th>
+      <th>Title</th>
+      <th style="width:80px">Findings</th>
+      <th style="width:80px">POA&amp;Ms</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for ctrl in controls %}
+    {% set cid = (ctrl.control_id or '').upper() %}
+    {% set ctrl_obs   = obs_by_ctrl.get(cid, []) %}
+    {% set ctrl_poams = poam_by_ctrl.get(cid, []) %}
+    {% set st = ctrl.status or 'not_started' %}
+    <tr id="ctrl-{{ cid }}">
+      <td>
+        <a href="/systems/{{ system.id }}/workspace/{{ ctrl.control_id }}"
+           class="rtm-ctrl-id" title="Open workspace for {{ cid }}">{{ cid }}</a>
+      </td>
+      <td>
+        <a href="/systems/{{ system.id }}/rtm?family={{ ctrl.control_family }}"
+           class="mono" style="font-size:0.78em;color:var(--cyan);text-decoration:none">
+          {{ ctrl.control_family or '—' }}
+        </a>
+      </td>
+      <td>
+        <span class="rtm-st-{{ st }}" style="font-size:0.82em;font-weight:700">
+          {{ st.replace('_', ' ').title() }}
+        </span>
+      </td>
+      <td style="font-size:0.78em;color:var(--muted)">
+        {{ (ctrl.implementation_type or '—').replace('_', ' ').title() }}
+      </td>
+      <td style="max-width:280px">
+        <div style="font-size:0.84em;color:var(--text);overflow:hidden;text-overflow:ellipsis;
+                    white-space:nowrap" title="{{ ctrl.control_title or '' }}">
+          {{ ctrl.control_title or '—' }}
+        </div>
+        {% if ctrl.implementation_narrative %}
+        <div style="font-size:0.7em;color:var(--muted);margin-top:2px;overflow:hidden;
+                    text-overflow:ellipsis;white-space:nowrap"
+             title="{{ ctrl.implementation_narrative }}">
+          {{ ctrl.implementation_narrative[:80] }}{% if ctrl.implementation_narrative | length > 80 %}…{% endif %}
+        </div>
+        {% endif %}
+      </td>
+      <td>
+        {% if ctrl_obs %}
+        <div style="display:flex;flex-direction:column;gap:2px">
+          {% for ob in ctrl_obs %}
+          <a href="/observations/{{ ob.id }}"
+             class="rtm-badge {% if ob.status == 'open' %}sev-high{% else %}sev-info{% endif %}"
+             title="{{ ob.title }}">
+            {{ ob.title[:20] }}{% if ob.title | length > 20 %}…{% endif %}
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <span style="font-size:0.72em;color:rgba(158,158,158,.4)">—</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if ctrl_poams %}
+        <div style="display:flex;flex-direction:column;gap:2px">
+          {% for pm in ctrl_poams %}
+          <a href="/poam/{{ pm.id }}"
+             class="rtm-badge sev-{{ (pm.severity or 'moderate') | lower }}"
+             title="{{ pm.weakness_name }}">
+            {{ pm.weakness_name[:20] }}{% if pm.weakness_name | length > 20 %}…{% endif %}
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <span style="font-size:0.72em;color:rgba(158,158,158,.4)">—</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="card" style="padding:48px;text-align:center">
+  <div style="font-size:0.88em;color:var(--muted)">No controls found{% if family %} for family <strong>{{ family }}</strong>{% endif %}.</div>
+</div>
+{% endif %}
+
+{% endblock %}

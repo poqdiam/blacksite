@@ -28,6 +28,21 @@ GITHUB_API_URL = (
     "&per_page=1"
 )
 
+# NIST SP 800-53 Rev 4 — static (no longer updated; download once)
+REV4_CATALOG_URL = (
+    "https://raw.githubusercontent.com/usnistgov/oscal-content/main"
+    "/nist.gov/SP800-53/rev4/json/NIST_SP-800-53_rev4_catalog.json"
+)
+REV4_LOCAL_PATH = "nist_800_53r4.json"
+
+_BASE = "https://raw.githubusercontent.com/usnistgov/oscal-content/main/nist.gov/SP800-53/rev5/json"
+BASELINE_PROFILE_URLS: Dict[str, str] = {
+    "nist_low":     f"{_BASE}/NIST_SP-800-53_rev5_LOW-baseline_profile.json",
+    "nist_mod":     f"{_BASE}/NIST_SP-800-53_rev5_MODERATE-baseline_profile.json",
+    "nist_high":    f"{_BASE}/NIST_SP-800-53_rev5_HIGH-baseline_profile.json",
+    "nist_privacy": f"{_BASE}/NIST_SP-800-53_rev5_PRIVACY-baseline_profile.json",
+}
+
 
 def load_meta(meta_path: Path) -> dict:
     if meta_path.exists():
@@ -80,6 +95,55 @@ def download_catalog(catalog_path: Path, timeout: int = 60) -> bool:
         return False
 
 
+def download_baselines(controls_dir: Path, timeout: int = 60) -> Dict[str, bool]:
+    """Download NIST SP 800-53B OSCAL baseline profiles. Only fetches missing files."""
+    results: Dict[str, bool] = {}
+    for name, url in BASELINE_PROFILE_URLS.items():
+        dest = controls_dir / f"{name}_profile.json"
+        if dest.exists():
+            results[name] = True
+            continue
+        try:
+            log.info("Downloading %s baseline profile…", name)
+            r = requests.get(url, timeout=timeout, stream=True)
+            r.raise_for_status()
+            controls_dir.mkdir(parents=True, exist_ok=True)
+            with open(dest, "wb") as f:
+                for chunk in r.iter_content(chunk_size=65536):
+                    f.write(chunk)
+            log.info("Downloaded %s baseline → %s", name, dest)
+            results[name] = True
+        except Exception as e:
+            log.error("Failed to download %s baseline: %s", name, e)
+            results[name] = False
+    return results
+
+
+def load_baselines(controls_dir: Path) -> Dict[str, list]:
+    """
+    Parse downloaded NIST SP 800-53B OSCAL baseline profile files.
+    Returns {short_name: [control_id, ...]} for each available profile.
+    """
+    out: Dict[str, list] = {}
+    for name in BASELINE_PROFILE_URLS:
+        path = controls_dir / f"{name}_profile.json"
+        if not path.exists():
+            continue
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            profile = raw.get("profile", raw)
+            ids: list = []
+            for imp in profile.get("imports", []):
+                for ic in imp.get("include-controls", []):
+                    for cid in ic.get("with-ids", []):
+                        ids.append(cid.lower())
+            out[name] = ids
+            log.info("Loaded %d controls from %s baseline.", len(ids), name)
+        except Exception as e:
+            log.error("Failed to parse %s baseline profile: %s", name, e)
+    return out
+
+
 def update_if_needed(config: dict) -> bool:
     """
     Check if the local catalog is current. If not, download the latest.
@@ -101,12 +165,14 @@ def update_if_needed(config: dict) -> bool:
                 "last_updated": datetime.now(timezone.utc).isoformat(),
                 "source": CATALOG_URL,
             })
+        download_baselines(controls_dir)
         return ok
 
     # Check remote SHA — skip download if unchanged
     remote_sha = latest_remote_sha()
     if remote_sha and remote_sha == meta.get("git_sha"):
         log.info("NIST catalog is current (SHA %s).", remote_sha[:8])
+        download_baselines(controls_dir)   # no-op if all profiles already cached
         return True
 
     # Update needed
@@ -117,6 +183,10 @@ def update_if_needed(config: dict) -> bool:
             "last_updated": datetime.now(timezone.utc).isoformat(),
             "source": CATALOG_URL,
         })
+
+    # Always ensure baseline profiles are present (only downloads if missing)
+    download_baselines(controls_dir)
+
     return ok
 
 
@@ -239,6 +309,161 @@ def get_control_families(catalog: dict) -> Dict[str, str]:
         if fid not in seen:
             seen[fid] = ctrl["family_title"]
     return dict(sorted(seen.items()))
+
+
+def ensure_rev4_catalog(controls_dir: Path, timeout: int = 60) -> bool:
+    """Download Rev 4 catalog if not already on disk. Rev 4 is static — download once."""
+    dest = controls_dir / REV4_LOCAL_PATH
+    if dest.exists():
+        return True
+    try:
+        log.info("Downloading NIST 800-53 Rev 4 OSCAL catalog (one-time)…")
+        r = requests.get(REV4_CATALOG_URL, timeout=timeout, stream=True)
+        r.raise_for_status()
+        controls_dir.mkdir(parents=True, exist_ok=True)
+        with open(dest, "wb") as f:
+            for chunk in r.iter_content(chunk_size=65536):
+                f.write(chunk)
+        log.info("Rev 4 catalog saved → %s", dest)
+        return True
+    except Exception as e:
+        log.warning("Could not download Rev 4 catalog: %s", e)
+        return False
+
+
+def load_rev4_catalog(controls_dir: Path) -> dict:
+    """Load and parse the NIST 800-53 Rev 4 OSCAL catalog from disk.
+    Returns the same flat dict format as load_catalog() — keyed by lowercase control ID."""
+    path = controls_dir / REV4_LOCAL_PATH
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        log.error("Failed to parse Rev 4 catalog: %s", e)
+        return {}
+    catalog = raw.get("catalog", raw)
+    controls: dict = {}
+    for group in catalog.get("groups", []):
+        family_id    = group.get("id", "??")
+        family_title = group.get("title", "Unknown")
+        _extract_controls(group, family_id, family_title, controls)
+    log.info("Loaded %d controls from NIST 800-53 Rev 4 catalog.", len(controls))
+    return controls
+
+
+# ── Supplemental catalog definitions ──────────────────────────────────────────
+
+SUPPLEMENTAL_CATALOGS: Dict[str, dict] = {
+    "sp800_171r2": {
+        "url": "https://raw.githubusercontent.com/FATHOM5CORP/oscal/main/content/SP800-171/oscal-content/catalogs/NIST_SP-800-171_rev2_catalog.json",
+        "local": "sp800_171r2.json",
+        "label": "NIST SP 800-171 Rev 2",
+    },
+    "sp800_171r3": {
+        "url": "https://raw.githubusercontent.com/usnistgov/oscal-content/main/nist.gov/SP800-171/rev3/json/NIST_SP800-171_rev3_catalog.json",
+        "local": "sp800_171r3.json",
+        "label": "NIST SP 800-171 Rev 3",
+    },
+    "csf2": {
+        "url": "https://raw.githubusercontent.com/usnistgov/oscal-content/main/nist.gov/CSF/v2.0/json/NIST_CSF_v2.0_catalog.json",
+        "local": "csf_2_0.json",
+        "label": "NIST CSF 2.0",
+    },
+    "fedramp_high": {
+        "url": "https://raw.githubusercontent.com/GSA/fedramp-automation/master/dist/content/rev5/baselines/json/FedRAMP_rev5_HIGH-baseline-resolved-profile_catalog.json",
+        "local": "fedramp_high_resolved.json",
+        "label": "FedRAMP High",
+    },
+    "fedramp_mod": {
+        "url": "https://raw.githubusercontent.com/GSA/fedramp-automation/master/dist/content/rev5/baselines/json/FedRAMP_rev5_MODERATE-baseline-resolved-profile_catalog.json",
+        "local": "fedramp_mod_resolved.json",
+        "label": "FedRAMP Moderate",
+    },
+    "fedramp_low": {
+        "url": "https://raw.githubusercontent.com/GSA/fedramp-automation/master/dist/content/rev5/baselines/json/FedRAMP_rev5_LOW-baseline-resolved-profile_catalog.json",
+        "local": "fedramp_low_resolved.json",
+        "label": "FedRAMP Low",
+    },
+}
+
+
+def ensure_supplemental_catalogs(controls_dir: Path, timeout: int = 120) -> None:
+    """Download any missing supplemental catalog files. Skips files already on disk."""
+    controls_dir.mkdir(parents=True, exist_ok=True)
+    for key, meta in SUPPLEMENTAL_CATALOGS.items():
+        dest = controls_dir / meta["local"]
+        if dest.exists():
+            log.info("Supplemental catalog already cached: %s", meta["label"])
+            continue
+        try:
+            log.info("Downloading %s…", meta["label"])
+            r = requests.get(meta["url"], timeout=timeout, stream=True)
+            r.raise_for_status()
+            with open(dest, "wb") as f:
+                for chunk in r.iter_content(chunk_size=65536):
+                    f.write(chunk)
+            log.info("Downloaded %s → %s", meta["label"], dest)
+        except Exception as e:
+            log.warning("Could not download %s: %s", meta["label"], e)
+
+
+def _parse_oscal_group(group: dict, family_id: str, family_title: str, out: dict) -> None:
+    """Recursively parse an OSCAL group — handles sub-groups and controls."""
+    # Recurse into nested groups (CSF 2.0 pattern: groups inside groups)
+    for sub_group in group.get("groups", []):
+        sub_fid   = sub_group.get("id", family_id)
+        sub_ftit  = sub_group.get("title", family_title)
+        _parse_oscal_group(sub_group, sub_fid, sub_ftit, out)
+
+    # Extract controls at this level
+    for ctrl in group.get("controls", []):
+        ctrl_id = ctrl.get("id", "").lower()
+        if not ctrl_id:
+            continue
+        parts = ctrl.get("parts", [])
+        statement = next(
+            (_extract_prose(p) for p in parts if p.get("name") == "statement"), ""
+        )
+        guidance = next(
+            (_extract_prose(p) for p in parts if p.get("name") == "guidance"), ""
+        )
+        out[ctrl_id] = {
+            "id":           ctrl_id,
+            "title":        ctrl.get("title", ""),
+            "family_id":    family_id.upper(),
+            "family_title": family_title,
+            "statement":    statement,
+            "guidance":     guidance,
+        }
+        # Control enhancements (controls nested under controls)
+        _parse_oscal_group(ctrl, family_id, family_title, out)
+
+
+def load_oscal_catalog_file(path: Path) -> dict:
+    """
+    Generic OSCAL catalog parser — handles both:
+      - Standard pattern: catalog.groups[].controls[] (800-53, 800-171)
+      - Nested groups:    catalog.groups[].groups[].controls[] (CSF 2.0)
+    Returns a flat dict keyed by lowercase control/requirement ID:
+      {ctrl_id: {id, title, family_id, family_title, statement, guidance}}
+    """
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        log.error("Failed to parse OSCAL file %s: %s", path, e)
+        return {}
+
+    catalog = raw.get("catalog", raw)
+    out: dict = {}
+    for group in catalog.get("groups", []):
+        family_id    = group.get("id", "??")
+        family_title = group.get("title", "Unknown")
+        _parse_oscal_group(group, family_id, family_title, out)
+
+    return out
 
 
 if __name__ == "__main__":

@@ -107,29 +107,37 @@
   /* ── System Info Card ────────────────────────────────────────────────────── */
   .sysinfo-meta-bar {
     display: flex;
-    align-items: center;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 8px;
     margin-bottom: 16px;
     padding-bottom: 14px;
     border-bottom: 1px solid var(--border);
+  }
+  .sysinfo-name-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sysinfo-badges-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
   }
   .sysinfo-name {
     font-size: 1.15em;
     font-weight: 800;
     color: var(--text);
     letter-spacing: 0.5px;
-    margin-right: 4px;
   }
   .sysinfo-desc-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
     margin-bottom: 16px;
     padding-bottom: 16px;
     border-bottom: 1px solid var(--border);
   }
-  @media (max-width: 640px) { .sysinfo-desc-grid { grid-template-columns: 1fr; } }
   .sysinfo-desc-panel {}
   .sysinfo-desc-label {
     font-size: 0.6em;
@@ -182,6 +190,20 @@
     text-decoration: none;
     word-break: break-all;
   }
+  .personnel-show-contact {
+    font-size: 0.68em;
+    color: var(--muted);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 7px;
+    cursor: pointer;
+    margin-top: 4px;
+    display: inline-block;
+    font-family: inherit;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .personnel-show-contact:hover { color: var(--cyan); border-color: var(--cyan); }
   .personnel-empty {
     font-size: 0.8em;
     color: var(--muted);
@@ -268,6 +290,37 @@
   .ato-status-in_review{ background: rgba(255,179,0,0.15);   color: var(--yellow); }
   .ato-status-approved { background: rgba(0,255,204,0.1);    color: var(--cyan);   }
   .ato-status-finalized{ background: rgba(0,200,83,0.15);    color: var(--green);  }
+
+  /* ── Auth Package collapsible ─────────────────────────────────────────── */
+  .auth-pkg-details summary {
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 4px;
+  }
+  .auth-pkg-details summary::-webkit-details-marker { display: none; }
+  .auth-pkg-details summary .ac-arrow {
+    font-size: 0.7em;
+    color: var(--muted);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .auth-pkg-details[open] summary .ac-arrow { transform: rotate(90deg); }
+  .auth-pkg-type-section { margin-bottom: 20px; }
+  .auth-pkg-type-section:last-child { margin-bottom: 0; }
+  .auth-pkg-type-label {
+    font-size: 0.6em;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
 
   /* ── Stat cards (assessment / risk / inventory / obs) ────────────────────── */
   .stat-cards-2col {
@@ -473,12 +526,12 @@
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <a href="/systems/{{ system.id }}/controls" class="btn btn-primary btn-sm">Control Plan</a>
-    <a href="/systems/{{ system.id }}/evidence" class="btn btn-ghost btn-sm" style="color:var(--cyan);border-color:rgba(0,255,204,.4)">Evidence</a>
+    <a href="/systems/{{ system.id }}/evidence" class="btn btn-ghost btn-sm" style="color:var(--cyan);border-color:rgba(0,255,204,.4)">Artifact Archive</a>
     <a href="/systems/{{ system.id }}/rtm" class="btn btn-ghost btn-sm" style="color:var(--muted)">RTM</a>
     <a href="/systems/{{ system.id }}/frameworks" class="btn btn-ghost btn-sm" style="color:var(--muted)">Frameworks</a>
-    <a href="/systems/{{ system.id }}/export-ato-package" class="btn btn-ghost btn-sm" style="color:var(--muted)">ATO Pkg</a>
+    <a href="/systems/{{ system.id }}/export-ato-package" class="btn btn-ghost btn-sm" style="color:var(--muted)">Auth Pkg</a>
     <a href="/systems/{{ system.id }}/report" class="btn btn-ghost btn-sm" style="color:var(--muted)">Report</a>
-    <a href="/systems/{{ system.id }}/submit" class="btn btn-ghost btn-sm" style="color:var(--gold);border-color:var(--gold)">Submit for ATO</a>
+    <a href="/systems/{{ system.id }}/submit" class="btn btn-ghost btn-sm" style="color:var(--gold);border-color:var(--gold)">Submit for Authorization</a>
     {% if is_admin %}
     <button class="btn btn-danger btn-sm" onclick="document.getElementById('deleteModal').classList.add('open')">Delete</button>
     {% endif %}
@@ -486,8 +539,9 @@
 </div>
 
 {# ═══════════════════════════════════════════════════════════════════════════ #}
-{# 1. RMF LIFECYCLE BANNER                                                     #}
+{# 1. RMF LIFECYCLE BANNER (federal systems only)                               #}
 {# ═══════════════════════════════════════════════════════════════════════════ #}
+{% if system.is_federal %}
 {% set step_keys   = ['prepare','categorize','select','implement','assess','authorize','monitor'] %}
 {% set step_labels = ['Prepare','Categorize','Select','Implement','Assess','Authorize','Monitor'] %}
 {% set ns = namespace(complete=0) %}
@@ -523,6 +577,7 @@
     <div class="rmf-progress-fill" style="width:{{ pct }}%"></div>
   </div>
 </a>
+{% endif %}
 
 {# ═══════════════════════════════════════════════════════════════════════════ #}
 {# 2. SYSTEM INFO BLOCK (ONE card)                                             #}
@@ -538,74 +593,78 @@
 
   {# ── Row 1: Metadata bar ── #}
   <div class="sysinfo-meta-bar">
-    <span class="sysinfo-name">{{ system.name }}</span>
+    {# Name row: program name left, created-by right #}
+    <div class="sysinfo-name-row">
+      <span class="sysinfo-name">{{ system.name }}</span>
+      <span style="font-size:0.72em;color:var(--muted)">Created by: {{ system.created_by or '—' }}</span>
+    </div>
 
-    {# System type badge #}
-    {% if system.system_type == 'major_application' %}
-      <span class="badge" style="background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2)">Major App</span>
-    {% elif system.system_type == 'general_support_system' %}
-      <span class="badge" style="background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2)">GSS</span>
-    {% elif system.system_type == 'minor_application' %}
-      <span class="badge" style="background:rgba(136,136,136,0.1);color:var(--muted);border:1px solid rgba(136,136,136,0.2)">Minor App</span>
-    {% elif system.system_type %}
-      <span class="badge">{{ system.system_type }}</span>
-    {% endif %}
+    {# Badges row: type, environment, auth status, dates, FIPS, data sensitivity #}
+    <div class="sysinfo-badges-row">
+      {# System type badge #}
+      {% if system.system_type == 'major_application' %}
+        <span class="badge" style="background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2)">Major App</span>
+      {% elif system.system_type == 'general_support_system' %}
+        <span class="badge" style="background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2)">GSS</span>
+      {% elif system.system_type == 'minor_application' %}
+        <span class="badge" style="background:rgba(136,136,136,0.1);color:var(--muted);border:1px solid rgba(136,136,136,0.2)">Minor App</span>
+      {% elif system.system_type %}
+        <span class="badge">{{ system.system_type }}</span>
+      {% endif %}
 
-    {# Environment badge #}
-    {% if system.environment == 'on_prem' %}
-      <span class="badge" style="background:rgba(136,136,136,0.1);color:var(--muted);border:1px solid rgba(136,136,136,0.2)">On-Prem</span>
-    {% elif system.environment == 'cloud' %}
-      <span class="badge" style="background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.2)">Cloud</span>
-    {% elif system.environment == 'hybrid' %}
-      <span class="badge" style="background:rgba(255,179,0,0.1);color:var(--yellow);border:1px solid rgba(255,179,0,0.2)">Hybrid</span>
-    {% elif system.environment == 'saas' %}
-      <span class="badge" style="background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2)">SaaS</span>
-    {% elif system.environment == 'paas' %}
-      <span class="badge" style="background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2)">PaaS</span>
-    {% elif system.environment == 'iaas' %}
-      <span class="badge" style="background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2)">IaaS</span>
-    {% elif system.environment %}
-      <span class="badge">{{ system.environment }}</span>
-    {% endif %}
+      {# Environment badge #}
+      {% if system.environment == 'on_prem' %}
+        <span class="badge" style="background:rgba(136,136,136,0.1);color:var(--muted);border:1px solid rgba(136,136,136,0.2)">On-Prem</span>
+      {% elif system.environment == 'cloud' %}
+        <span class="badge" style="background:rgba(0,200,83,0.1);color:var(--green);border:1px solid rgba(0,200,83,0.2)">Cloud</span>
+      {% elif system.environment == 'hybrid' %}
+        <span class="badge" style="background:rgba(255,179,0,0.1);color:var(--yellow);border:1px solid rgba(255,179,0,0.2)">Hybrid</span>
+      {% elif system.environment == 'saas' %}
+        <span class="badge" style="background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2)">SaaS</span>
+      {% elif system.environment == 'paas' %}
+        <span class="badge" style="background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2)">PaaS</span>
+      {% elif system.environment == 'iaas' %}
+        <span class="badge" style="background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2)">IaaS</span>
+      {% elif system.environment %}
+        <span class="badge">{{ system.environment }}</span>
+      {% endif %}
 
-    {# Auth status badge #}
-    {% if system.auth_status == 'authorized' %}
-      <span class="badge badge-auth-authorized">Authorized</span>
-    {% elif system.auth_status == 'in_progress' %}
-      <span class="badge badge-auth-in_progress">In Progress</span>
-    {% elif system.auth_status == 'expired' %}
-      <span class="badge badge-auth-expired">Expired ATO</span>
-    {% else %}
-      <span class="badge badge-auth-not_auth">Not Authorized</span>
-    {% endif %}
+      {# Auth status badge #}
+      {% if system.auth_status == 'authorized' %}
+        <span class="badge badge-auth-authorized">Authorized</span>
+      {% elif system.auth_status == 'in_progress' %}
+        <span class="badge badge-auth-in_progress">In Progress</span>
+      {% elif system.auth_status == 'expired' %}
+        <span class="badge badge-auth-expired">Expired ATO</span>
+      {% else %}
+        <span class="badge badge-auth-not_auth">Not Authorized</span>
+      {% endif %}
 
-    {# Auth dates #}
-    {% if system.auth_date %}
-    <span style="font-size:0.75em;color:var(--muted)">ATO: <span class="mono" style="color:var(--text)">{{ system.auth_date }}</span></span>
-    {% endif %}
-    {% if system.auth_expiry %}
-    <span style="font-size:0.75em;color:var(--muted)">Exp: <span class="mono" style="color:{% if system.auth_status == 'expired' %}var(--red){% else %}var(--text){% endif %}">{{ system.auth_expiry }}</span></span>
-    {% endif %}
+      {# Auth dates #}
+      {% if system.auth_date %}
+      <span style="font-size:0.75em;color:var(--muted)">ATO: <span class="mono" style="color:var(--text)">{{ system.auth_date }}</span></span>
+      {% endif %}
+      {% if system.auth_expiry %}
+      <span style="font-size:0.75em;color:var(--muted)">Exp: <span class="mono" style="color:{% if system.auth_status == 'expired' %}var(--red){% else %}var(--text){% endif %}">{{ system.auth_expiry }}</span></span>
+      {% endif %}
 
-    {# FIPS impact #}
-    {% if system.overall_impact %}
-    {% set ov = system.overall_impact | lower %}
-    <span style="font-size:0.73em;font-weight:700;color:{% if ov == 'high' %}var(--red){% elif ov == 'moderate' %}var(--yellow){% else %}var(--green){% endif %}">
-      FIPS: {{ system.overall_impact }}{% if system.categorization_approved_by %} <span style="font-size:0.85em;color:var(--muted)">(overridden)</span>{% endif %}
-    </span>
-    {% endif %}
+      {# FIPS impact #}
+      {% if system.overall_impact %}
+      {% set ov = system.overall_impact | lower %}
+      <span style="font-size:0.73em;font-weight:700;color:{% if ov == 'high' %}var(--red){% elif ov == 'moderate' %}var(--yellow){% else %}var(--green){% endif %}">
+        FIPS: {{ system.overall_impact }}{% if system.categorization_approved_by %} <span style="font-size:0.85em;color:var(--muted)">(overridden)</span>{% endif %}
+      </span>
+      {% endif %}
 
-    {# Data sensitivity badges #}
-    {% if system.has_ephi %}<span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid var(--red);color:var(--red);background:rgba(0,0,0,0.2)">ePHI</span>{% endif %}
-    {% if system.has_phi %}<span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid #ff6b35;color:#ff6b35;background:rgba(0,0,0,0.2)">PHI</span>{% endif %}
-    {% if system.has_pii %}<span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid var(--yellow);color:var(--yellow);background:rgba(0,0,0,0.2)">PII</span>{% endif %}
-    {% if system.has_cui %}<span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid #c084fc;color:#c084fc;background:rgba(0,0,0,0.2)">CUI</span>{% endif %}
-    {% if system.has_financial_data %}<span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid var(--gold);color:var(--gold);background:rgba(0,0,0,0.2)">Financial</span>{% endif %}
-    {% if system.connects_to_federal %}<span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid var(--cyan);color:var(--cyan);background:rgba(0,0,0,0.2)">Federal Conn.</span>{% endif %}
-    {% if system.is_public_facing %}<span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid var(--muted);color:var(--muted);background:rgba(0,0,0,0.2)">Public Facing</span>{% endif %}
-
-    {# Created by (far right, muted) #}
-    <span style="margin-left:auto;font-size:0.72em;color:var(--muted)">Created by: {{ system.created_by or '—' }}</span>
+      {# Data sensitivity badges #}
+      {% if system.has_ephi %}<span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid var(--red);color:var(--red);background:rgba(0,0,0,0.2)">ePHI</span>{% endif %}
+      {% if system.has_phi %}<span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid #ff6b35;color:#ff6b35;background:rgba(0,0,0,0.2)">PHI</span>{% endif %}
+      {% if system.has_pii %}<span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid var(--yellow);color:var(--yellow);background:rgba(0,0,0,0.2)">PII</span>{% endif %}
+      {% if system.has_cui %}<span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid #c084fc;color:#c084fc;background:rgba(0,0,0,0.2)">CUI</span>{% endif %}
+      {% if system.has_financial_data %}<span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid var(--gold);color:var(--gold);background:rgba(0,0,0,0.2)">Financial</span>{% endif %}
+      {% if system.connects_to_federal %}<span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid var(--cyan);color:var(--cyan);background:rgba(0,0,0,0.2)">Federal Conn.</span>{% endif %}
+      {% if system.is_public_facing %}<span style="font-size:0.65em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid var(--muted);color:var(--muted);background:rgba(0,0,0,0.2)">Public Facing</span>{% endif %}
+    </div>
   </div>
 
   {# ── Row 2: Description + Boundary ── #}
@@ -638,7 +697,8 @@
       {% if system.owner_name %}
         <div class="personnel-name">{{ system.owner_name }}</div>
         {% if system.owner_email %}
-          <a href="mailto:{{ system.owner_email }}" class="personnel-email">{{ system.owner_email }}</a>
+          <button class="personnel-show-contact" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Show contact</button>
+          <div style="display:none"><a href="mailto:{{ system.owner_email }}" class="personnel-email">{{ system.owner_email }}</a></div>
         {% endif %}
       {% else %}
         <div class="personnel-empty">—</div>
@@ -650,7 +710,8 @@
       {% if system.ao_name %}
         <div class="personnel-name">{{ system.ao_name }}</div>
         {% if system.ao_email %}
-          <a href="mailto:{{ system.ao_email }}" class="personnel-email">{{ system.ao_email }}</a>
+          <button class="personnel-show-contact" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Show contact</button>
+          <div style="display:none"><a href="mailto:{{ system.ao_email }}" class="personnel-email">{{ system.ao_email }}</a></div>
         {% endif %}
       {% else %}
         <div class="personnel-empty">—</div>
@@ -662,7 +723,8 @@
       {% if system.issm_name %}
         <div class="personnel-name">{{ system.issm_name }}</div>
         {% if system.issm_email %}
-          <a href="mailto:{{ system.issm_email }}" class="personnel-email">{{ system.issm_email }}</a>
+          <button class="personnel-show-contact" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Show contact</button>
+          <div style="display:none"><a href="mailto:{{ system.issm_email }}" class="personnel-email">{{ system.issm_email }}</a></div>
         {% endif %}
       {% else %}
         <div class="personnel-empty">—</div>
@@ -674,7 +736,8 @@
       {% if system.isso_name %}
         <div class="personnel-name">{{ system.isso_name }}</div>
         {% if system.isso_email %}
-          <a href="mailto:{{ system.isso_email }}" class="personnel-email">{{ system.isso_email }}</a>
+          <button class="personnel-show-contact" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Show contact</button>
+          <div style="display:none"><a href="mailto:{{ system.isso_email }}" class="personnel-email">{{ system.isso_email }}</a></div>
         {% endif %}
       {% else %}
         <div class="personnel-empty">—</div>
@@ -686,7 +749,8 @@
       {% if system.sca_name is defined and system.sca_name %}
         <div class="personnel-name">{{ system.sca_name }}</div>
         {% if system.sca_email is defined and system.sca_email %}
-          <a href="mailto:{{ system.sca_email }}" class="personnel-email">{{ system.sca_email }}</a>
+          <button class="personnel-show-contact" onclick="this.style.display='none';this.nextElementSibling.style.display='block'">Show contact</button>
+          <div style="display:none"><a href="mailto:{{ system.sca_email }}" class="personnel-email">{{ system.sca_email }}</a></div>
         {% endif %}
       {% else %}
         <div class="personnel-empty">—</div>
@@ -707,11 +771,11 @@
         <table style="margin-bottom:14px">
           <thead>
             <tr>
-              <th>Username</th>
-              <th>Assigned By</th>
-              <th>Assigned At</th>
-              <th>Note</th>
-              <th></th>
+              <th scope="col">Username</th>
+              <th scope="col">Assigned By</th>
+              <th scope="col">Assigned At</th>
+              <th scope="col">Note</th>
+              <th scope="col"></th>
             </tr>
           </thead>
           <tbody>
@@ -790,116 +854,235 @@
 </div>{# /system info card #}
 
 {# ═══════════════════════════════════════════════════════════════════════════ #}
-{# 3. ATO PROCESS MAP                                                          #}
+{# 3. AUTHORIZATION PACKAGE (collapsible, all types)                           #}
 {# ═══════════════════════════════════════════════════════════════════════════ #}
-<div class="card" style="margin-bottom:16px">
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px">
-    <div class="card-title" style="margin-bottom:0">Authorization Package</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <a href="/systems/{{ system.id }}/rtm" class="btn btn-ghost btn-sm" style="color:var(--muted)">View RTM →</a>
-      <a href="/systems/{{ system.id }}/export-ato-package" class="btn btn-ghost btn-sm" style="color:var(--cyan);border-color:rgba(0,255,204,.4)">Export ATO Package →</a>
-    </div>
-  </div>
+<div class="card" style="margin-bottom:16px" id="auth-packages">
+  <details class="auth-pkg-details" open>
+    <summary>
+      <span class="ac-arrow">▶</span>
+      <span class="card-title" style="margin-bottom:0;flex:1">Authorization Packages</span>
+      {% if system.is_federal or sys_auth_packages %}
+      <a href="/systems/{{ system.id }}/ato" class="btn btn-ghost btn-sm" style="color:var(--cyan);border-color:rgba(0,255,204,.4);font-size:0.72em" onclick="event.stopPropagation()">Auth Documents →</a>
+      {% endif %}
+      {% if system.is_federal %}
+      <a href="/systems/{{ system.id }}/rtm" class="btn btn-ghost btn-sm" style="color:var(--muted);font-size:0.72em" onclick="event.stopPropagation()">View RTM →</a>
+      <a href="/systems/{{ system.id }}/export-ato-package" class="btn btn-ghost btn-sm" style="color:var(--cyan);border-color:rgba(0,255,204,.4);font-size:0.72em" onclick="event.stopPropagation()">Export Auth Package →</a>
+      {% endif %}
+      {% if can_edit %}
+      <button class="btn btn-ghost btn-sm" style="font-size:0.72em;border-color:rgba(0,255,204,.3);color:var(--cyan)"
+        onclick="event.stopPropagation();event.preventDefault();document.getElementById('add-pkg-modal').style.display='flex'">+ Add Package</button>
+      {% endif %}
+    </summary>
 
-  {% if ato_docs %}
-  {# Build lookup by doc_type #}
-  {% set ato_map = {} %}
-  {% for doc in ato_docs %}
-    {% set _ = ato_map.update({doc.doc_type: doc}) %}
-  {% endfor %}
-
-  <div class="ato-phases">
-    {# Phase 1: Categorize #}
-    <div class="ato-phase">
-      <div class="ato-phase-label">Phase 1 — Categorize</div>
-      {% for dt in ['FIPS199'] %}
-        {% if ato_map.get(dt) %}
-        {% set doc = ato_map[dt] %}
-        <div class="ato-doc-row">
-          <span class="ato-doc-type">{{ dt }}</span>
-          <span class="badge ato-status-{{ doc.status | replace(' ','_') }}">{{ doc.status | replace('_',' ') | title }}</span>
-        </div>
-        {% else %}
-        <div class="ato-doc-row">
-          <span class="ato-doc-ghost">{{ dt }}</span>
-          <span class="badge" style="background:transparent;color:var(--muted);border:1px solid var(--border)">—</span>
-        </div>
-        {% endif %}
+    <div style="padding-top:14px">
+      {# Build ATO doc lookup for federal workflow phases #}
+      {% set ato_map = {} %}
+      {% for doc in ato_docs %}
+        {% set _ = ato_map.update({doc.doc_type: doc}) %}
       {% endfor %}
-    </div>
 
-    {# Phase 2: Plan #}
-    <div class="ato-phase">
-      <div class="ato-phase-label">Phase 2 — Plan</div>
-      {% for dt in ['SSP','SAP','ABD'] %}
-        {% if ato_map.get(dt) %}
-        {% set doc = ato_map[dt] %}
-        <div class="ato-doc-row">
-          <span class="ato-doc-type">{{ dt }}</span>
-          <span class="badge ato-status-{{ doc.status | replace(' ','_') }}">{{ doc.status | replace('_',' ') | title }}</span>
-        </div>
-        {% else %}
-        <div class="ato-doc-row">
-          <span class="ato-doc-ghost">{{ dt }}</span>
-          <span class="badge" style="background:transparent;color:var(--muted);border:1px solid var(--border)">—</span>
-        </div>
-        {% endif %}
-      {% endfor %}
-    </div>
+      {% if sys_auth_packages %}
+        {% for pkg in sys_auth_packages %}
+        <div class="auth-pkg-type-section">
+          {# Package header row #}
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+            <div class="auth-pkg-type-label" style="margin-bottom:0">
+              {{ pkg.pkg_name }}{% if pkg.sub_category %} — <span style="color:var(--cyan)">{{ pkg.sub_category }}</span>{% endif %}
+            </div>
+            {# Status badge #}
+            {% if pkg.status == 'achieved' %}
+              <span class="badge badge-success">Achieved</span>
+            {% elif pkg.status == 'expired' %}
+              <span class="badge badge-danger">Expired</span>
+            {% elif pkg.status == 'withdrawn' %}
+              <span class="badge badge-muted">Withdrawn</span>
+            {% else %}
+              <span class="badge badge-warn">In Progress</span>
+            {% endif %}
+            {# Category pill #}
+            <span style="font-size:0.65em;letter-spacing:1px;text-transform:uppercase;color:var(--muted);padding:1px 6px;border:1px solid var(--border);border-radius:3px">{{ pkg.pkg_category }}</span>
+            {# Dates #}
+            {% if pkg.achieved_at %}
+              <span style="font-size:0.75em;color:var(--muted)">Achieved: <span class="mono">{{ pkg.achieved_at[:10] }}</span></span>
+            {% endif %}
+            {% if pkg.expires_at %}
+              <span style="font-size:0.75em;color:var(--muted)">Expires: <span class="mono">{{ pkg.expires_at[:10] }}</span></span>
+            {% endif %}
+            {# Remove button (admin/ao/ciso only) #}
+            {% if can_edit %}
+            <form method="post" action="/systems/{{ system.id }}/auth-packages/{{ pkg.id }}/remove" style="margin-left:auto"
+                  onsubmit="return confirm('Remove this authorization package from the system?')">
+              <button type="submit" class="btn btn-ghost btn-sm" style="font-size:0.65em;color:var(--muted);padding:2px 6px">Remove</button>
+            </form>
+            {% endif %}
+          </div>
 
-    {# Phase 3: Assess #}
-    <div class="ato-phase">
-      <div class="ato-phase-label">Phase 3 — Assess</div>
-      {% for dt in ['SAR','POAM'] %}
-        {% if ato_map.get(dt) %}
-        {% set doc = ato_map[dt] %}
-        <div class="ato-doc-row">
-          {% if dt == 'POAM' %}
-          <a href="/poam?system_id={{ system.id }}" class="ato-doc-type" style="color:var(--cyan);text-decoration:none">{{ dt }}</a>
-          {% else %}
-          <span class="ato-doc-type">{{ dt }}</span>
+          {# For federal types with ATO doc phases (short_name matches legacy types) #}
+          {% set fed_phases = auth_type_phases.get(pkg.pkg_short) %}
+          {% if fed_phases %}
+          <div class="ato-phases">
+            {% for phase in fed_phases %}
+            <div class="ato-phase">
+              <div class="ato-phase-label">{{ phase.label }}</div>
+              {% for dt in phase.docs %}
+                {% if ato_map.get(dt) %}
+                {% set doc = ato_map[dt] %}
+                <div class="ato-doc-row">
+                  {% if dt == 'POAM' %}
+                  <a href="/poam?system_id={{ system.id }}" class="ato-doc-type" style="color:var(--cyan);text-decoration:none">{{ dt }}</a>
+                  {% else %}
+                  <a href="/ato/{{ system.id }}/{{ dt }}" class="ato-doc-type" style="color:var(--fg);text-decoration:none">{{ dt }}</a>
+                  {% endif %}
+                  <span class="badge ato-status-{{ doc.status | replace(' ','_') }}">{{ doc.status | replace('_',' ') | title }}</span>
+                </div>
+                {% else %}
+                <div class="ato-doc-row">
+                  {% if dt == 'POAM' %}
+                  <a href="/poam?system_id={{ system.id }}" class="ato-doc-ghost" style="color:var(--muted);text-decoration:none">{{ dt }}</a>
+                  {% else %}
+                  <a href="/ato/{{ system.id }}/{{ dt }}" class="ato-doc-ghost" style="color:var(--muted);text-decoration:none">{{ dt }}</a>
+                  {% endif %}
+                  <span class="badge" style="background:transparent;color:var(--muted);border:1px solid var(--border)">—</span>
+                </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+          {% elif pkg.phases %}
+          {# Non-federal package with phases defined #}
+          <div class="ato-phases">
+            {% for phase in pkg.phases %}
+            <div class="ato-phase">
+              <div class="ato-phase-label">{{ phase.label }}</div>
+              {% for doc_label in phase.docs %}
+              <div class="ato-doc-row">
+                <span class="ato-doc-ghost" style="color:var(--muted)">{{ doc_label }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            {% endfor %}
+          </div>
           {% endif %}
-          <span class="badge ato-status-{{ doc.status | replace(' ','_') }}">{{ doc.status | replace('_',' ') | title }}</span>
-        </div>
-        {% else %}
-        <div class="ato-doc-row">
-          {% if dt == 'POAM' %}
-          <a href="/poam?system_id={{ system.id }}" class="ato-doc-ghost" style="color:var(--muted);text-decoration:none">{{ dt }}</a>
-          {% else %}
-          <span class="ato-doc-ghost">{{ dt }}</span>
+
+          {% if pkg.notes %}
+          <div style="font-size:0.78em;color:var(--muted);margin-top:6px;font-style:italic">{{ pkg.notes }}</div>
           {% endif %}
-          <span class="badge" style="background:transparent;color:var(--muted);border:1px solid var(--border)">—</span>
         </div>
-        {% endif %}
-      {% endfor %}
-    </div>
+        {% endfor %}
 
-    {# Phase 4: Finalize #}
-    <div class="ato-phase">
-      <div class="ato-phase-label">Phase 4 — Finalize</div>
-      {% for dt in ['IRP','CP','CMP','ConMon','RoB','PTA','ISA'] %}
-        {% if ato_map.get(dt) %}
-        {% set doc = ato_map[dt] %}
-        <div class="ato-doc-row">
-          <span class="ato-doc-type">{{ dt }}</span>
-          <span class="badge ato-status-{{ doc.status | replace(' ','_') }}">{{ doc.status | replace('_',' ') | title }}</span>
-        </div>
-        {% else %}
-        <div class="ato-doc-row">
-          <span class="ato-doc-ghost">{{ dt }}</span>
-          <span class="badge" style="background:transparent;color:var(--muted);border:1px solid var(--border)">—</span>
-        </div>
+        {# Legacy: if federal and has ATO docs but no sys_auth_packages yet with matching short_names #}
+        {% set covered_shorts = sys_auth_packages | map(attribute='pkg_short') | list %}
+        {% if system.is_federal and ato_docs %}
+          {% for t in sys_auth_types %}
+            {% if t not in covered_shorts %}
+            <div class="auth-pkg-type-section">
+              <div class="auth-pkg-type-label" style="color:var(--muted)">{{ auth_type_labels.get(t, t) }} <span style="font-size:0.8em">(legacy)</span></div>
+              <div class="ato-phases">
+                {% for phase in auth_type_phases.get(t, []) %}
+                <div class="ato-phase">
+                  <div class="ato-phase-label">{{ phase.label }}</div>
+                  {% for dt in phase.docs %}
+                    {% if ato_map.get(dt) %}
+                    {% set doc = ato_map[dt] %}
+                    <div class="ato-doc-row">
+                      <a href="/ato/{{ system.id }}/{{ dt }}" class="ato-doc-type" style="color:var(--fg);text-decoration:none">{{ dt }}</a>
+                      <span class="badge ato-status-{{ doc.status | replace(' ','_') }}">{{ doc.status | replace('_',' ') | title }}</span>
+                    </div>
+                    {% else %}
+                    <div class="ato-doc-row">
+                      <a href="/ato/{{ system.id }}/{{ dt }}" class="ato-doc-ghost" style="color:var(--muted);text-decoration:none">{{ dt }}</a>
+                      <span class="badge" style="background:transparent;color:var(--muted);border:1px solid var(--border)">—</span>
+                    </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
+          {% endfor %}
         {% endif %}
-      {% endfor %}
-    </div>
-  </div>
 
-  {% else %}
-  <div style="font-size:0.85em;color:var(--muted);font-style:italic;padding:10px 0">
-    No ATO documents initialized. <a href="/systems/{{ system.id }}/ato" style="color:var(--cyan)">Initialize package →</a>
-  </div>
-  {% endif %}
+      {% else %}
+      <div style="font-size:0.85em;color:var(--muted);font-style:italic;padding:10px 0">
+        No authorization packages tracked for this system.
+        {% if can_edit %}<button class="btn btn-ghost btn-sm" style="font-size:0.8em;margin-left:8px"
+          onclick="document.getElementById('add-pkg-modal').style.display='flex'">+ Add Package</button>{% endif %}
+        {% if system.is_federal or sys_auth_packages %}
+        &nbsp;<a href="/systems/{{ system.id }}/ato" style="color:var(--cyan)">Auth Documents →</a>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </details>
 </div>
+
+{# ── Add Package Modal ─────────────────────────────────────────────────────── #}
+{% if can_edit %}
+<div id="add-pkg-modal" role="dialog" aria-modal="true" aria-labelledby="add-pkg-modal-heading" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:1000;align-items:center;justify-content:center"
+     onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:28px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto">
+    <div id="add-pkg-modal-heading" style="font-size:1em;font-weight:700;color:var(--fg);margin-bottom:18px">Add Authorization Package</div>
+    <form method="post" action="/systems/{{ system.id }}/auth-packages/add">
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Package Type</label>
+        <select name="package_type_id" id="pkg-type-select" class="form-control" onchange="updateSubCats(this)" required>
+          <option value="">— select —</option>
+          {% set cat_order = ['federal','healthcare','financial','privacy','contractor','other'] %}
+          {% for cat in cat_order %}
+            {% set cat_pkgs = auth_pkg_catalog | selectattr('category','equalto',cat) | list %}
+            {% if cat_pkgs %}
+            <optgroup label="{{ cat | title }}">
+              {% for pt in cat_pkgs %}
+              <option value="{{ pt.id }}" data-subcats="{{ pt.sub_categories | tojson if pt.sub_categories else '' }}">{{ pt.name }} ({{ pt.short_name }})</option>
+              {% endfor %}
+            </optgroup>
+            {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" id="sub-cat-group" style="margin-bottom:14px;display:none">
+        <label class="form-label">Sub-Category <span style="color:var(--muted);font-size:0.85em">(optional)</span></label>
+        <select name="sub_category" id="sub-cat-select" class="form-control">
+          <option value="">— none —</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Notes <span style="color:var(--muted);font-size:0.85em">(optional)</span></label>
+        <textarea name="notes" class="form-control" rows="2" placeholder="Scope, rationale, contract references..."></textarea>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button type="submit" class="btn btn-primary">Add Package</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('add-pkg-modal').style.display='none'">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function updateSubCats(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const raw = opt.getAttribute('data-subcats');
+  const grp = document.getElementById('sub-cat-group');
+  const sub = document.getElementById('sub-cat-select');
+  sub.innerHTML = '<option value="">— none —</option>';
+  if (raw) {
+    try {
+      JSON.parse(raw).forEach(function(sc) {
+        const o = document.createElement('option');
+        o.value = sc; o.textContent = sc;
+        sub.appendChild(o);
+      });
+      grp.style.display = '';
+    } catch(e) { grp.style.display = 'none'; }
+  } else { grp.style.display = 'none'; }
+}
+// Open modal if anchor is #auth-packages and no packages exist
+if (window.location.hash === '#auth-packages') {
+  document.getElementById('add-pkg-modal') && setTimeout(function(){}, 100);
+}
+</script>
+{% endif %}
 
 {# ═══════════════════════════════════════════════════════════════════════════ #}
 {# 4. ASSESSMENT + RISK STAT CARDS (2-col), then Inventory + Observations      #}
@@ -971,18 +1154,18 @@
     <div class="stat-value">{{ asmt_total_ct }}</div>
     <div class="stat-label">Assessments</div>
   </a>
-  <a href="/poam?system_id={{ system.id }}" class="stat" style="text-decoration:none;cursor:pointer" title="View POA&amp;M items">
+  <a href="/poam?system_id={{ system.id }}" class="stat" style="text-decoration:none;cursor:pointer" title="View {{ terms.poam_items }}">
     <div class="stat-value" style="color:{% if poam_overdue > 0 %}var(--red){% else %}var(--cyan){% endif %}">
       {{ poam_open_ct }}
     </div>
     <div class="stat-label">
-      Open POA&amp;Ms
+      Open {{ terms.poam_items }}
       {% if poam_overdue > 0 %}
         <span style="display:block;color:var(--red);font-size:0.85em">({{ poam_overdue }} overdue)</span>
       {% endif %}
     </div>
   </a>
-  <a href="/poam?system_id={{ system.id }}&due_week=1" class="stat" style="text-decoration:none;cursor:pointer" title="POA&amp;Ms due this week">
+  <a href="/poam?system_id={{ system.id }}&due_week=1" class="stat" style="text-decoration:none;cursor:pointer" title="{{ terms.poam_items }} due this week">
     <div class="stat-value" style="color:var(--yellow)">{{ poam_due_week }}</div>
     <div class="stat-label">Due This Week</div>
   </a>
@@ -1002,12 +1185,12 @@
 </div>
 
 {# ═══════════════════════════════════════════════════════════════════════════ #}
-{# 6. CONTROL COVERAGE BY FAMILY                                               #}
+{# 6. CONTROL COVERAGE BY DOMAIN                                               #}
 {# ═══════════════════════════════════════════════════════════════════════════ #}
 {% if family_coverage %}
 <div class="card" style="margin-bottom:16px;padding:20px">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-    <div class="card-title" style="margin-bottom:0">Control Coverage by Family</div>
+    <div class="card-title" style="margin-bottom:0">Control Coverage by Domain</div>
     <a href="/systems/{{ system.id }}/controls" class="btn btn-ghost btn-sm">
       Full Plan →
     </a>
@@ -1042,37 +1225,40 @@
 <div class="card" style="padding:0;overflow:hidden">
 
   <div class="tab-nav" role="tablist">
-    <button class="tab-btn active" role="tab" onclick="switchTab(event,'tab-assessments')">
+    <button class="tab-btn active" role="tab" id="tab-btn-assessments" aria-selected="true" aria-controls="tab-assessments" tabindex="0" onclick="switchTab(event,'tab-assessments')">
       Assessments <span class="tab-count">{{ asmt_total_ct }}</span>
     </button>
-    <button class="tab-btn" role="tab" onclick="switchTab(event,'tab-poam')">
-      POA&amp;M <span class="tab-count" style="{% if poam_overdue > 0 %}background:rgba(244,67,54,0.2);color:var(--red){% endif %}">{{ poam_total_ct }}</span>
+    <button class="tab-btn" role="tab" id="tab-btn-poam" aria-selected="false" aria-controls="tab-poam" tabindex="-1" onclick="switchTab(event,'tab-poam')">
+      {{ terms.poam }} <span class="tab-count" style="{% if poam_overdue > 0 %}background:rgba(244,67,54,0.2);color:var(--red){% endif %}">{{ poam_total_ct }}</span>
     </button>
-    <button class="tab-btn" role="tab" onclick="switchTab(event,'tab-risks')">
+    <button class="tab-btn" role="tab" id="tab-btn-risks" aria-selected="false" aria-controls="tab-risks" tabindex="-1" onclick="switchTab(event,'tab-risks')">
       Risks <span class="tab-count">{{ risk_total_ct }}</span>
     </button>
-    <button class="tab-btn" role="tab" onclick="switchTab(event,'tab-audit')">
+    <button class="tab-btn" role="tab" id="tab-btn-audit" aria-selected="false" aria-controls="tab-audit" tabindex="-1" onclick="switchTab(event,'tab-audit')">
       Audit History <span class="tab-count">{{ audit_entries | length }}</span>
     </button>
-    <button class="tab-btn" role="tab" onclick="switchTab(event,'tab-daily')">
+    <button class="tab-btn" role="tab" id="tab-btn-daily" aria-selected="false" aria-controls="tab-daily" tabindex="-1" onclick="switchTab(event,'tab-daily')">
       Daily Ops <span class="tab-count" style="{% if daily_tasks_done is defined and daily_tasks_total is defined and daily_tasks_done == daily_tasks_total and daily_tasks_total > 0 %}background:rgba(76,175,80,0.2);color:var(--green){% endif %}">
         {% if daily_tasks_done is defined %}{{ daily_tasks_done }}/{{ daily_tasks_total }}{% else %}—{% endif %}
       </span>
     </button>
+    <button class="tab-btn" role="tab" id="tab-btn-scans" aria-selected="false" aria-controls="tab-scans" tabindex="-1" onclick="switchTab(event,'tab-scans');loadScans()">
+      Security Scans
+    </button>
   </div>
 
   {# ── Tab 1: Assessments ────────────────────────────────────────────────── #}
-  <div id="tab-assessments" class="tab-panel active" style="overflow-x:auto">
+  <div id="tab-assessments" class="tab-panel active" role="tabpanel" aria-labelledby="tab-btn-assessments" style="overflow-x:auto">
     {% if assessments %}
     <table>
       <thead>
         <tr>
-          <th>Candidate</th>
-          <th>File</th>
-          <th>SSP Score</th>
-          <th>Combined</th>
-          <th>Date</th>
-          <th></th>
+          <th scope="col">Candidate</th>
+          <th scope="col">File</th>
+          <th scope="col">SSP Score</th>
+          <th scope="col">Combined</th>
+          <th scope="col">Date</th>
+          <th scope="col"></th>
         </tr>
       </thead>
       <tbody>
@@ -1118,18 +1304,18 @@
     {% endif %}
   </div>
 
-  {# ── Tab 2: POA&M ──────────────────────────────────────────────────────── #}
-  <div id="tab-poam" class="tab-panel" style="overflow-x:auto">
+  {# ── Tab 2: POA&M / Corrective Actions ─────────────────────────────────── #}
+  <div id="tab-poam" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-poam" style="overflow-x:auto">
     {% if poam_items %}
     <table>
       <thead>
         <tr>
-          <th>Control</th>
-          <th>Weakness</th>
-          <th>Severity</th>
-          <th>Responsible</th>
-          <th>Due Date</th>
-          <th>Status</th>
+          <th scope="col">Control</th>
+          <th scope="col">{{ terms.weakness }}</th>
+          <th scope="col">Severity</th>
+          <th scope="col">Responsible</th>
+          <th scope="col">Due Date</th>
+          <th scope="col">Status</th>
         </tr>
       </thead>
       <tbody>
@@ -1166,30 +1352,30 @@
     {% if poam_total_ct > poam_items | length %}
     <div style="padding:10px 16px;border-top:1px solid var(--border);text-align:right">
       <a href="/poam?system_id={{ system.id }}" style="font-size:0.8em;color:var(--cyan)">
-        View all {{ poam_total_ct }} POA&amp;M items →
+        View all {{ poam_total_ct }} {{ terms.poam_items }} →
       </a>
     </div>
     {% endif %}
     {% else %}
     <div style="padding:48px;text-align:center">
       <div style="color:var(--green);font-size:1.8em;margin-bottom:10px;font-family:var(--mono)">[OK]</div>
-      <div class="text-muted" style="font-size:0.88em">No open POA&amp;M items for this system.</div>
+      <div class="text-muted" style="font-size:0.88em">No open {{ terms.poam_items | lower }} for this system.</div>
     </div>
     {% endif %}
   </div>
 
   {# ── Tab 3: Risks ──────────────────────────────────────────────────────── #}
-  <div id="tab-risks" class="tab-panel" style="overflow-x:auto">
+  <div id="tab-risks" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-risks" style="overflow-x:auto">
     {% if risks %}
     <table>
       <thead>
         <tr>
-          <th>Risk Name</th>
-          <th>Likelihood</th>
-          <th>Impact</th>
-          <th>Score</th>
-          <th>Level</th>
-          <th>Treatment</th>
+          <th scope="col">Risk Name</th>
+          <th scope="col">Likelihood</th>
+          <th scope="col">Impact</th>
+          <th scope="col">Score</th>
+          <th scope="col">Level</th>
+          <th scope="col">Treatment</th>
         </tr>
       </thead>
       <tbody>
@@ -1234,15 +1420,15 @@
   </div>
 
   {# ── Tab 4: Audit History ──────────────────────────────────────────────── #}
-  <div id="tab-audit" class="tab-panel" style="overflow-x:auto">
+  <div id="tab-audit" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-audit" style="overflow-x:auto">
     {% if audit_entries %}
     <table>
       <thead>
         <tr>
-          <th>Timestamp</th>
-          <th>User</th>
-          <th>Action</th>
-          <th>Details</th>
+          <th scope="col">Timestamp</th>
+          <th scope="col">User</th>
+          <th scope="col">Action</th>
+          <th scope="col">Details</th>
         </tr>
       </thead>
       <tbody>
@@ -1280,7 +1466,7 @@
   </div>
 
   {# ── Tab 5: Daily Ops ───────────────────────────────────────────────────── #}
-  <div id="tab-daily" class="tab-panel" style="padding:20px">
+  <div id="tab-daily" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-daily" style="padding:20px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
       <h3 style="margin:0;font-size:0.95em;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Daily Operations</h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1323,13 +1509,96 @@
     {% endif %}
   </div>
 
+  {# ── Tab 6: SCAP Scans ──────────────────────────────────────────────────── #}
+  <div id="tab-scans" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-scans" style="padding:20px">
+    {% if scan_feature_enabled %}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <h3 style="margin:0;font-size:0.95em;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Security Scans</h3>
+      <button class="btn btn-primary btn-sm" onclick="openScanModal()">+ New Scan</button>
+    </div>
+
+    <div id="scans-list" aria-live="polite" aria-atomic="false">
+      <div style="color:var(--muted);font-size:0.85em">Loading scans…</div>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:3rem 2rem;max-width:480px;margin:0 auto">
+      <div style="font-size:2.5rem;margin-bottom:1rem">&#128274;</div>
+      <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:0.5rem">Security Scanning — Premium Feature</h3>
+      <p style="color:var(--muted);font-size:0.875rem;margin-bottom:1.5rem;line-height:1.6">
+        Automated SCAP/XCCDF security scanning, finding import, and POA&amp;M integration
+        are available on Team and Agency plans. Upload pre-generated ARF result files or
+        run live scans directly against target hosts.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:0.5rem;text-align:left;
+                  background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+                  padding:1rem 1.25rem;margin-bottom:1.5rem;font-size:0.82rem">
+        <div><span style="color:var(--green);margin-right:0.5rem">&#10003;</span>SCAP datastream scanning (DISA STIGs, CIS Benchmarks)</div>
+        <div><span style="color:var(--green);margin-right:0.5rem">&#10003;</span>ARF result file upload &amp; parsing</div>
+        <div><span style="color:var(--green);margin-right:0.5rem">&#10003;</span>Automatic POA&amp;M item creation from failures</div>
+        <div><span style="color:var(--green);margin-right:0.5rem">&#10003;</span>NIST 800-53 control mapping per finding</div>
+        <div><span style="color:var(--green);margin-right:0.5rem">&#10003;</span>Pass/fail/error trend tracking over time</div>
+      </div>
+      {% if is_admin %}
+      <p style="font-size:0.8rem;color:var(--muted)">
+        Enable scanning for this organization at
+        <a href="/admin/orgs" style="color:var(--cyan)">Admin → Organizations</a>.
+      </p>
+      {% else %}
+      <p style="font-size:0.8rem;color:var(--muted)">
+        Contact your platform administrator to enable this feature.
+      </p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
 </div>{# /tabbed card #}
+
+{# ── SCAP New Scan Modal ──────────────────────────────────────────────────── #}
+<div id="scanModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="scanModal-heading" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal-box" style="max-width:520px">
+    <h2 id="scanModal-heading" style="margin-bottom:16px">New Security Scan</h2>
+    <form id="scan-form" onsubmit="submitScan(event)">
+      <div style="margin-bottom:12px">
+        <label style="font-size:0.8em;color:var(--muted);display:block;margin-bottom:4px">Datastream (SCAP content file)</label>
+        <select id="ds-select" class="form-control" onchange="loadProfiles()" required>
+          <option value="">— select datastream —</option>
+        </select>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:0.8em;color:var(--muted);display:block;margin-bottom:4px">Profile</label>
+        <select id="profile-select" class="form-control" required>
+          <option value="">— select datastream first —</option>
+        </select>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:0.8em;color:var(--muted);display:block;margin-bottom:4px">Target host</label>
+        <input id="target-host" class="form-control" type="text" value="localhost" placeholder="localhost or IP/hostname" />
+        <div style="font-size:0.72em;color:var(--muted);margin-top:3px">Use <code>localhost</code> to scan this server. Remote hosts require SSH access from the Blacksite server.</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div>
+          <label style="font-size:0.8em;color:var(--muted);display:block;margin-bottom:4px">SSH Port</label>
+          <input id="target-port" class="form-control" type="number" value="22" min="1" max="65535" />
+        </div>
+        <div>
+          <label style="font-size:0.8em;color:var(--muted);display:block;margin-bottom:4px">SSH User</label>
+          <input id="target-user" class="form-control" type="text" value="root" />
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('scanModal').classList.remove('open')">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm" id="scan-submit-btn">Start Scan</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 {# ── Delete confirmation modal ───────────────────────────────────────────── #}
 {% if is_admin %}
-<div id="deleteModal" class="modal-overlay" onclick="if(event.target===this)this.classList.remove('open')">
+<div id="deleteModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="deleteModal-heading" onclick="if(event.target===this)this.classList.remove('open')">
   <div class="modal-box">
-    <h2>Delete System</h2>
+    <h2 id="deleteModal-heading">Delete System</h2>
     <p>
       Are you sure you want to delete <strong style="color:var(--text)">{{ system.name }}</strong>?
       This will unlink all associated assessments, POA&amp;M items, and risks.
@@ -1352,9 +1621,15 @@
 {% block scripts %}
 <script>
 function switchTab(e, panelId) {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.remove('active');
+    b.setAttribute('aria-selected', 'false');
+    b.setAttribute('tabindex', '-1');
+  });
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   e.currentTarget.classList.add('active');
+  e.currentTarget.setAttribute('aria-selected', 'true');
+  e.currentTarget.setAttribute('tabindex', '0');
   document.getElementById(panelId).classList.add('active');
 }
 
@@ -1393,5 +1668,156 @@ async function removeUser(systemId, username) {
     const d = await r.json();
     if (d.status === 'removed') location.reload();
 }
+
+// ── Phase 35: SCAP Scan UI ───────────────────────────────────────────────────
+const _SYS_ID = '{{ system.id }}';
+let _scansLoaded = false;
+
+async function loadScans() {
+    if (_scansLoaded) return;
+    _scansLoaded = true;
+    const el = document.getElementById('scans-list');
+    const r = await fetch(`/api/systems/${_SYS_ID}/scans`);
+    if (!r.ok) { el.innerHTML = '<p style="color:var(--red)">Failed to load scans.</p>'; return; }
+    const {scans} = await r.json();
+    if (!scans.length) {
+        el.innerHTML = '<p style="color:var(--muted);font-size:0.85em">No scans yet. Click <strong>+ New Scan</strong> to scan the system and automatically generate POA&amp;M items from findings.</p>';
+        return;
+    }
+    const _color = {complete:'var(--green)', failed:'var(--red)', running:'var(--cyan)', queued:'var(--muted)'};
+    const _badge = (s) => `<span style="background:rgba(128,128,128,0.15);color:${_color[s]||'var(--muted)'};padding:2px 8px;border-radius:4px;font-size:0.7em;letter-spacing:1px;text-transform:uppercase">${s}</span>`;
+    el.innerHTML = '<table style="width:100%;border-collapse:collapse"><thead><tr>' +
+        '<th style="text-align:left;font-size:0.72em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border)" scope="col">Profile</th>' +
+        '<th style="text-align:left;font-size:0.72em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border)" scope="col">Target</th>' +
+        '<th style="text-align:center;font-size:0.72em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border)" scope="col">Pass</th>' +
+        '<th style="text-align:center;font-size:0.72em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border)" scope="col">Fail</th>' +
+        '<th style="text-align:left;font-size:0.72em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border)" scope="col">Status</th>' +
+        '<th style="text-align:left;font-size:0.72em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--border)" scope="col">Date</th>' +
+        '<th style="padding:6px 8px;border-bottom:1px solid var(--border)" scope="col"></th>' +
+        '</tr></thead><tbody>' +
+        scans.map(s => `<tr>
+            <td style="padding:7px 8px;font-size:0.82em;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${s.profile_title||s.profile_id}">${(s.profile_title||s.profile_id).replace('xccdf_org.ssgproject.content_profile_','')}</td>
+            <td style="padding:7px 8px;font-size:0.82em;color:var(--muted)">${s.target_host||'localhost'}</td>
+            <td style="padding:7px 8px;text-align:center;font-size:0.82em;color:var(--green);font-weight:600">${s.pass_count||'—'}</td>
+            <td style="padding:7px 8px;text-align:center;font-size:0.82em;color:${s.fail_count>0?'var(--red)':'var(--muted)'};font-weight:600">${s.fail_count||'—'}</td>
+            <td style="padding:7px 8px">${_badge(s.status)}</td>
+            <td style="padding:7px 8px;font-size:0.75em;color:var(--muted)">${s.completed_at?s.completed_at.split('T')[0]:s.created_at.split('T')[0]}</td>
+            <td style="padding:7px 8px;white-space:nowrap">
+                ${s.status==='complete'?`<button class="btn btn-ghost btn-sm" style="font-size:0.72em;padding:3px 8px" onclick="openFindings('${s.id}','${(s.profile_title||s.profile_id).replace(/'/g,'').slice(0,50)}')">Findings</button>
+                <a class="btn btn-ghost btn-sm" style="font-size:0.72em;padding:3px 8px" href="/api/systems/${_SYS_ID}/scans/${s.id}/report" target="_blank">Report</a>
+                <button class="btn btn-ghost btn-sm" style="font-size:0.72em;padding:3px 8px;color:var(--yellow)" onclick="importPoam('${s.id}')">→ POA&M</button>`:''}
+                ${s.status==='running'?'<span style="color:var(--cyan);font-size:0.75em">scanning…</span>':''}
+                ${s.status==='failed'?`<span style="color:var(--red);font-size:0.75em" title="${s.error_msg||''}">failed</span>`:''}
+            </td>
+        </tr>`).join('') + '</tbody></table>';
+}
+
+async function openScanModal() {
+    const modal = document.getElementById('scanModal');
+    modal.classList.add('open');
+    const focusable = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    if (focusable.length) focusable[0].focus();
+    const dsSel = document.getElementById('ds-select');
+    if (dsSel.options.length <= 1) {
+        const r = await fetch('/api/scap/datastreams');
+        const {datastreams} = await r.json();
+        datastreams.forEach(ds => {
+            const o = document.createElement('option');
+            o.value = ds.name; o.textContent = ds.label + ' (' + ds.name + ')';
+            dsSel.appendChild(o);
+        });
+    }
+}
+
+async function loadProfiles() {
+    const ds = document.getElementById('ds-select').value;
+    const pSel = document.getElementById('profile-select');
+    pSel.innerHTML = '<option value="">Loading…</option>';
+    if (!ds) return;
+    const r = await fetch(`/api/scap/profiles?datastream=${encodeURIComponent(ds)}`);
+    const {profiles} = await r.json();
+    pSel.innerHTML = '<option value="">— choose profile —</option>' +
+        profiles.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
+}
+
+async function submitScan(e) {
+    e.preventDefault();
+    const btn = document.getElementById('scan-submit-btn');
+    btn.disabled = true; btn.textContent = 'Starting…';
+    const body = {
+        datastream:  document.getElementById('ds-select').value,
+        profile_id:  document.getElementById('profile-select').value,
+        target_host: document.getElementById('target-host').value,
+        target_port: parseInt(document.getElementById('target-port').value),
+        target_user: document.getElementById('target-user').value,
+    };
+    const r = await fetch(`/api/systems/${_SYS_ID}/scans`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+    });
+    btn.disabled = false; btn.textContent = 'Start Scan';
+    if (r.ok) {
+        document.getElementById('scanModal').classList.remove('open');
+        _scansLoaded = false;
+        loadScans();
+        document.getElementById('tab-scans').scrollIntoView({behavior:'smooth'});
+        setTimeout(() => { _scansLoaded = false; loadScans(); }, 5000);
+    } else {
+        const d = await r.json().catch(()=>({}));
+        alert('Error: ' + (d.detail || r.statusText));
+    }
+}
+
+async function importPoam(scanId) {
+    if (!confirm('Create POA&M items from all failed findings in this scan?')) return;
+    const r = await fetch(`/api/systems/${_SYS_ID}/scans/${scanId}/import-poam`, {method:'POST'});
+    const d = await r.json();
+    if (d.ok) alert(`Created ${d.created} new POA&M item(s) from scan failures.`);
+    else alert('Error: ' + (d.detail || 'Unknown error'));
+}
+
+async function openFindings(scanId, profileLabel) {
+    const r = await fetch(`/api/systems/${_SYS_ID}/scans/${scanId}/findings`);
+    const {findings} = await r.json();
+    const fails = findings.filter(f=>f.result==='fail'||f.result==='error');
+    const passes = findings.filter(f=>f.result==='pass');
+    const _sev = {High:'var(--red)',Moderate:'var(--yellow)',Low:'var(--cyan)',Informational:'var(--muted)'};
+    const rows = fails.map(f =>
+        `<tr>
+            <td style="padding:5px 8px;font-size:0.78em;font-weight:600;color:${_sev[f.severity]||'var(--muted)'}">${f.severity}</td>
+            <td style="padding:5px 8px;font-size:0.78em">${f.title||f.short_id}</td>
+            <td style="padding:5px 8px;font-size:0.75em;color:var(--muted)">${(f.nist_controls||[]).join(', ')||'—'}</td>
+            <td style="padding:5px 8px;font-size:0.75em;color:${f.result==='fail'?'var(--red)':'var(--yellow)'}">● ${f.result}</td>
+        </tr>`
+    ).join('');
+    const html = `<h3 style="margin:0 0 8px">Failures — ${profileLabel}</h3>
+        <p style="font-size:0.82em;color:var(--muted);margin-bottom:12px">${fails.length} failed / ${passes.length} passed</p>
+        <div style="overflow-x:auto;max-height:60vh;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+            <th style="font-size:0.72em;color:var(--muted);padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)" scope="col">Severity</th>
+            <th style="font-size:0.72em;color:var(--muted);padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)" scope="col">Rule</th>
+            <th style="font-size:0.72em;color:var(--muted);padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)" scope="col">NIST Controls</th>
+            <th style="font-size:0.72em;color:var(--muted);padding:5px 8px;text-align:left;border-bottom:1px solid var(--border)" scope="col">Result</th>
+        </tr></thead>
+        <tbody>${rows||'<tr><td colspan="4" style="padding:12px;color:var(--green)">No failures ✓</td></tr>'}</tbody>
+        </table></div>`;
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay open';
+    modal.innerHTML = `<div class="modal-box" style="max-width:780px">${html}
+        <div style="margin-top:16px;text-align:right">
+        <button class="btn btn-ghost btn-sm" onclick="this.closest('.modal-overlay').remove()">Close</button></div></div>`;
+    modal.onclick = e => { if(e.target===modal) modal.remove(); };
+    document.body.appendChild(modal);
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        var scanM = document.getElementById('scanModal');
+        if (scanM && scanM.classList.contains('open')) { scanM.classList.remove('open'); return; }
+        var delM = document.getElementById('deleteModal');
+        if (delM && delM.classList.contains('open')) { delM.classList.remove('open'); return; }
+        var pkgM = document.getElementById('add-pkg-modal');
+        if (pkgM && pkgM.style.display === 'flex') { pkgM.style.display = 'none'; return; }
+    }
+});
 </script>
 {% endblock %}

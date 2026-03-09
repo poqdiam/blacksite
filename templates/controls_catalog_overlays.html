@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — {{ catalog.name }} Overlays{% endblock %}
+
+{% block head %}
+<style>
+  .ovl-label {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background 0.12s; user-select: none;
+  }
+  .ovl-label:hover { background: rgba(0,255,204,0.04); }
+  .ovl-label:last-child { border-bottom: none; }
+  .ovl-label.checked { background: rgba(0,255,204,0.04); }
+  .ovl-name { font-size: 0.9em; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+  .ovl-desc { font-size: 0.76em; color: var(--muted); line-height: 1.4; }
+  .ovl-count { font-size: 0.78em; color: var(--muted); white-space: nowrap; }
+  .ovl-check {
+    width: 18px; height: 18px; flex-shrink: 0; cursor: pointer;
+    accent-color: var(--cyan);
+  }
+  .cat-pill {
+    font-size: 0.65em; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 3px;
+    background: rgba(0,255,204,0.08); color: var(--cyan); border: 1px solid rgba(0,255,204,0.2);
+  }
+  .baseline-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    background: rgba(0,255,204,0.04); border: 1px solid rgba(0,255,204,0.15);
+    border-radius: 6px; padding: 12px 18px; margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .baseline-banner-info { font-size: 0.82em; color: var(--muted); }
+  .baseline-banner-name { font-weight: 700; color: var(--text); }
+  .no-ovl-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    text-decoration: none; color: inherit; transition: background 0.12s;
+    background: rgba(255,255,255,0.015);
+  }
+  .no-ovl-row:hover { background: rgba(0,255,204,0.04); }
+  #apply-btn { transition: opacity 0.15s; }
+  #apply-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/controls">Control Catalog</a>
+  <span class="sep">/</span>
+  <a href="{{ catalog.link }}">{{ catalog.name }}</a>
+  <span class="sep">/</span>
+  <span>Select Overlays</span>
+</div>
+
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap">
+  <h1 style="margin:0">Select Overlays</h1>
+  <span class="cat-pill">{{ catalog.name }}</span>
+</div>
+<p style="color:var(--muted);font-size:0.84em;margin-bottom:20px">
+  Choose one or more overlays to apply on top of your baseline, then click <strong>View Control Set</strong>.
+  Or skip overlays to browse the baseline controls directly.
+  Multiple overlays are common — e.g. FedRAMP + Privacy Overlay for systems handling PII.
+</p>
+
+{# ── Baseline context banner ── #}
+{% if baseline_name %}
+<div class="baseline-banner">
+  <div class="baseline-banner-info">
+    Baseline: <span class="baseline-banner-name">{{ baseline_name }}</span>
+    <span style="margin-left:8px;font-size:0.88em">— controls from this baseline will be included</span>
+  </div>
+  <a href="/controls/catalog/{{ catalog.short_name }}/overlays"
+     style="font-size:0.75em;color:var(--muted);text-decoration:none;white-space:nowrap">
+    ✕ Clear baseline
+  </a>
+</div>
+{% endif %}
+
+<form id="ovl-form" action="/controls/build" method="get">
+  <input type="hidden" name="base" value="{{ baseline_sn or catalog.short_name }}">
+
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
+
+    {# ── No Overlay shortcut ── #}
+    <a href="{{ no_overlay_link }}" class="no-ovl-row">
+      <div>
+        <div style="font-size:0.88em;font-weight:700;color:var(--text)">No Overlay</div>
+        <div style="font-size:0.74em;color:var(--muted);margin-top:2px">
+          {% if baseline_name %}Browse {{ baseline_name }} controls without any additional overlay.
+          {% else %}Browse the full {{ catalog.name }} control set.{% endif %}
+        </div>
+      </div>
+      <span style="font-size:0.78em;font-weight:700;padding:4px 10px;border-radius:3px;
+                   background:rgba(0,255,204,0.08);color:var(--cyan);border:1px solid rgba(0,255,204,0.2);
+                   white-space:nowrap">Skip →</span>
+    </a>
+
+    {# ── Overlay checkboxes ── #}
+    {% if overlays %}
+    {% for ov in overlays %}
+    <label class="ovl-label{% if ov.short_name in selected_ovl_sns %} checked{% endif %}"
+           id="lbl-{{ ov.short_name }}"
+           onclick="updateLabel(this)">
+      <div style="flex:1;min-width:0">
+        <div class="ovl-name">{{ ov.name }}</div>
+        {% if ov.description %}
+        <div class="ovl-desc">{{ ov.description[:180] }}{% if ov.description|length > 180 %}…{% endif %}</div>
+        {% endif %}
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
+        {% if ov.ctrl_count %}<span class="ovl-count">{{ ov.ctrl_count }} controls</span>{% endif %}
+        <input type="checkbox" name="ovl" value="{{ ov.short_name }}" class="ovl-check"
+               {% if ov.short_name in selected_ovl_sns %}checked{% endif %}
+               onclick="event.stopPropagation()">
+      </div>
+    </label>
+    {% endfor %}
+    {% else %}
+    <div style="padding:48px;text-align:center;color:var(--muted);font-size:0.88em">
+      No overlays registered for this catalog.
+    </div>
+    {% endif %}
+
+  </div>
+
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <button type="submit" id="apply-btn" class="btn btn-primary">View Control Set →</button>
+    <a href="{{ no_overlay_link }}" class="btn btn-ghost">Skip Overlays</a>
+    {% if overlays %}
+    <button type="button" id="sel-all-btn" class="btn btn-ghost">Select All</button>
+    {% endif %}
+    <span id="sel-count" style="font-size:0.78em;color:var(--muted);margin-left:4px"></span>
+  </div>
+</form>
+
+<script>
+function updateLabel(lbl) {
+  const cb = lbl.querySelector('input[type=checkbox]');
+  cb.checked = !cb.checked;
+  lbl.classList.toggle('checked', cb.checked);
+  syncCount();
+}
+function syncCount() {
+  const all     = document.querySelectorAll('#ovl-form input[name=ovl]');
+  const checked = document.querySelectorAll('#ovl-form input[name=ovl]:checked');
+  const btn     = document.getElementById('apply-btn');
+  const cnt     = document.getElementById('sel-count');
+  const saBtn   = document.getElementById('sel-all-btn');
+  btn.disabled = checked.length === 0;
+  cnt.textContent = checked.length > 0
+    ? checked.length + ' overlay' + (checked.length > 1 ? 's' : '') + ' selected'
+    : '';
+  if (saBtn) saBtn.textContent = checked.length === all.length && all.length > 0 ? 'Clear All' : 'Select All';
+}
+document.querySelectorAll('.ovl-check').forEach(cb => {
+  cb.addEventListener('change', syncCount);
+});
+const _saBtn = document.getElementById('sel-all-btn');
+if (_saBtn) {
+  _saBtn.addEventListener('click', function() {
+    const all = document.querySelectorAll('#ovl-form input[name=ovl]');
+    const anyUnchecked = [...all].some(cb => !cb.checked);
+    all.forEach(cb => {
+      cb.checked = anyUnchecked;
+      const lbl = document.getElementById('lbl-' + cb.value);
+      if (lbl) lbl.classList.toggle('checked', anyUnchecked);
+    });
+    syncCount();
+    // Auto-submit when selecting all (all overlays now checked)
+    if (anyUnchecked && all.length > 0) {
+      document.getElementById('ovl-form').submit();
+    }
+  });
+}
+syncCount();
+</script>
+{% endblock %}

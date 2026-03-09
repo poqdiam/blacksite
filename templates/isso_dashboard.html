@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — ISSO Dashboard{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/isso/dashboard">Dashboard</a>
+  <span class="sep">/</span>
+  <span>ISSO Dashboard</span>
+</div>
+
+<div style="margin-bottom:28px">
+  <h1 style="margin:0;margin-bottom:4px">ISSO Dashboard</h1>
+  <p class="text-muted" style="font-size:0.88em">Control implementation status, POA&amp;M tracking, and authorization readiness for assigned systems</p>
+</div>
+
+{# ── Stats ── #}
+<div class="stats" style="margin-bottom:28px">
+  <div class="stat">
+    <div class="stat-value">{{ assigned_systems | length }}</div>
+    <div class="stat-label">Assigned Systems</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" style="color:{% if (poam_counts.get('Critical',0) + poam_counts.get('High',0)) > 0 %}var(--red){% else %}var(--green){% endif %}">
+      {{ poam_counts.get('Critical', 0) + poam_counts.get('High', 0) }}
+    </div>
+    <div class="stat-label">Critical / High POA&amp;Ms</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{{ open_poams | length }}</div>
+    <div class="stat-label">Open POA&amp;Ms</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">{{ recent_assessments | length }}</div>
+    <div class="stat-label">Recent Assessments</div>
+  </div>
+</div>
+
+{# ── Control Implementation Coverage ── #}
+<div class="card" style="margin-bottom:20px">
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Control Implementation Coverage</div>
+    <a href="/systems" style="font-size:0.75em;color:var(--cyan);text-decoration:none">All Systems →</a>
+  </div>
+  {% if assigned_systems %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.83em">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)">
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">System</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Total</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Complete</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">In Progress</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Gaps</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Coverage</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sys in assigned_systems %}
+      {% set stats = ctrl_stats.get(sys.id, {}) %}
+      {% set total    = stats.get('total', 0) %}
+      {% set complete = stats.get('complete', 0) %}
+      {% set inprog   = stats.get('inprog', 0) %}
+      {% set gap      = stats.get('gap', 0) %}
+      {% set pct = ((complete / total * 100) | round | int) if total > 0 else 0 %}
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:10px 20px">
+          <a href="/systems/{{ sys.id }}/controls" style="color:var(--cyan);font-weight:600">{{ sys.name }}</a>
+        </td>
+        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono)">{{ total }}</td>
+        <td style="padding:10px 20px;color:var(--green);font-family:var(--mono)">{{ complete }}</td>
+        <td style="padding:10px 20px;color:var(--yellow);font-family:var(--mono)">{{ inprog }}</td>
+        <td style="padding:10px 20px;color:{% if gap > 0 %}var(--red){% else %}var(--muted){% endif %};font-family:var(--mono)">{{ gap }}</td>
+        <td style="padding:10px 20px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="flex:1;background:var(--border);border-radius:4px;height:6px;overflow:hidden">
+              <div style="width:{{ pct }}%;height:100%;background:{% if pct >= 80 %}var(--green){% elif pct >= 50 %}var(--yellow){% else %}var(--red){% endif %};border-radius:4px"></div>
+            </div>
+            <span class="mono" style="font-size:0.82em;color:var(--muted);width:36px">{{ pct }}%</span>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:24px 20px;color:var(--muted);font-size:0.85em">No systems assigned yet.</div>
+  {% endif %}
+</div>
+
+{# ── POA&M Summary ── #}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+
+  {# POA&M by Severity ── #}
+  <div class="card">
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">POA&amp;M by Severity</div>
+      <a href="/poam" style="font-size:0.75em;color:var(--cyan);text-decoration:none">View All →</a>
+    </div>
+    <div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+      {% for sev, color in [('Critical','var(--red)'),('High','#ff6b35'),('Moderate','var(--yellow)'),('Low','var(--green)')] %}
+      {% set cnt = poam_counts.get(sev, 0) %}
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="width:72px;font-size:0.78em;color:{{ color }};font-weight:700">{{ sev }}</span>
+        <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
+          {% set max_cnt = [poam_counts.get('Critical',0), poam_counts.get('High',0), poam_counts.get('Moderate',0), poam_counts.get('Low',0)] | max %}
+          <div style="width:{% if max_cnt > 0 %}{{ (cnt / max_cnt * 100) | round | int }}{% else %}0{% endif %}%;height:100%;background:{{ color }};border-radius:3px"></div>
+        </div>
+        <span style="font-family:var(--mono);font-size:0.8em;color:var(--muted);width:24px;text-align:right">{{ cnt }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# Recent Assessments ── #}
+  <div class="card">
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+      <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Recent Assessments</div>
+    </div>
+    {% if recent_assessments %}
+    <div style="padding:0">
+      {% for asmt in recent_assessments %}
+      <div style="padding:10px 20px;border-bottom:1px solid rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:space-between">
+        <a href="/assessments/{{ asmt.id }}" style="color:var(--cyan);font-family:var(--mono);font-size:0.82em">{{ asmt.id[:8] }}…</a>
+        <span style="color:var(--muted);font-size:0.78em">
+          {{ asmt.uploaded_at.strftime('%Y-%m-%d') if asmt.uploaded_at and asmt.uploaded_at.strftime is defined else '—' }}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="padding:24px 20px;color:var(--muted);font-size:0.85em">No assessments found.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+{# ── Today's Work ── #}
+<div class="card" style="margin-bottom:20px">
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Today's Work</div>
+    <div id="workload-status" class="text-muted mono" style="font-size:0.75em">Loading…</div>
+  </div>
+  <div id="workload-list" aria-live="polite" aria-atomic="false" style="padding:12px 20px;font-size:0.85em;color:var(--muted)">
+    Loading assignments…
+  </div>
+</div>
+
+{# ── Open POA&Ms ── #}
+<div class="card">
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+    <div style="font-size:0.88em;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Open POA&amp;M Items</div>
+    <div style="display:flex;gap:10px">
+      <a href="/poam/new" style="font-size:0.75em;color:var(--cyan);text-decoration:none">+ New</a>
+      <a href="/poam" style="font-size:0.75em;color:var(--cyan);text-decoration:none">All POA&Ms →</a>
+    </div>
+  </div>
+  {% if open_poams %}
+  <table style="width:100%;border-collapse:collapse;font-size:0.83em">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02)">
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">ID</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Weakness</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Severity</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Status</th>
+        <th style="text-align:left;padding:10px 20px;font-size:0.72em;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Due</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in open_poams %}
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+        <td style="padding:10px 20px">
+          <a href="/poam/{{ p.id }}" style="color:var(--cyan);font-family:var(--mono);font-size:0.85em">
+            {{ p.poam_id or p.id[:6] }}
+          </a>
+        </td>
+        <td style="padding:10px 20px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.weakness_name }}</td>
+        <td style="padding:10px 20px">
+          {% set sev = p.severity or 'Low' %}
+          {% if sev == 'Critical' %}<span style="color:var(--red)">Critical</span>
+          {% elif sev == 'High' %}<span style="color:#ff6b35">High</span>
+          {% elif sev == 'Moderate' %}<span style="color:var(--yellow)">Moderate</span>
+          {% else %}<span style="color:var(--green)">Low</span>{% endif %}
+        </td>
+        <td style="padding:10px 20px;color:var(--muted)">{{ p.status | replace('_',' ') | title }}</td>
+        <td style="padding:10px 20px;color:var(--muted);font-family:var(--mono);font-size:0.85em">{{ p.scheduled_completion or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:24px 20px;color:var(--muted);font-size:0.85em">No open POA&amp;M items for your systems.</div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(async function() {
+  const list   = document.getElementById('workload-list');
+  const status = document.getElementById('workload-status');
+  if (!list) return;
+  try {
+    const tasks = await fetch('/api/workload/today').then(r => r.json());
+    if (!tasks.length) {
+      list.textContent = 'No assignments for today — all caught up!';
+      if (status) status.textContent = '0 tasks';
+      return;
+    }
+    const done  = tasks.filter(t => t.status === 'done').length;
+    const total = tasks.length;
+    if (status) status.textContent = `${done}/${total} done`;
+
+    list.innerHTML = tasks.map(t => {
+      const label = t.task_type === 'control_review'
+        ? `<span class="mono" style="color:var(--cyan)">${t.control_id}</span> — Control Review`
+        : `POA&M Check`;
+      const statusColor = {done:'var(--green)', skipped:'var(--yellow)', pending:'var(--border)'}[t.status] || 'var(--border)';
+      return `
+        <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+          <div style="width:8px;height:8px;border-radius:50%;background:${statusColor};flex-shrink:0"></div>
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:0.88em">${label}</div>
+            <div style="color:var(--muted);font-size:0.78em">${t.system_abbr} — ${t.system_name}</div>
+          </div>
+          ${t.status === 'pending' ? `
+            <button onclick="wlDone('${t.id}',this)" class="btn btn-ghost" style="font-size:0.72em;padding:3px 10px">Done</button>
+            <button onclick="wlSkip('${t.id}',this)" class="btn btn-ghost" style="font-size:0.72em;padding:3px 10px;color:var(--muted)">Skip</button>
+          ` : `<span style="font-size:0.78em;color:var(--muted)">${t.status}</span>`}
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    if (list) list.textContent = 'Could not load workload.';
+  }
+})();
+
+async function wlDone(id, btn) {
+  btn.disabled = true;
+  await fetch(`/api/workload/${id}/complete`, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+  location.reload();
+}
+async function wlSkip(id, btn) {
+  btn.disabled = true;
+  await fetch(`/api/workload/${id}/skip`, {method:'POST'});
+  location.reload();
+}
+</script>
+{% endblock %}

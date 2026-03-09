@@ -1,0 +1,568 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — VPAT® Accessibility Conformance Report{% endblock %}
+
+{% block content %}
+<div style="max-width:900px;margin:0 auto;padding:24px 16px">
+
+  <h1 style="font-family:var(--mono);font-size:1.4em;color:var(--cyan);
+             letter-spacing:1px;margin-bottom:4px">
+    Voluntary Product Accessibility Template® (VPAT®)
+  </h1>
+  <p style="color:var(--muted);font-size:0.85em;margin-bottom:8px">
+    Accessibility Conformance Report (ACR) · VPAT 2.5 · Version assessed: build date 2026-03-09
+  </p>
+  <p style="color:var(--muted);font-size:0.82em;margin-bottom:32px">
+    <a href="/accessibility" style="color:var(--cyan)">← Back to Accessibility Statement</a>
+  </p>
+
+  {# ── Product info ─────────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <table style="width:100%;border-collapse:collapse;font-size:0.88em">
+      <tbody>
+        <tr>
+          <td style="padding:6px 12px 6px 0;color:var(--muted);white-space:nowrap;vertical-align:top;width:180px">Product</td>
+          <td style="padding:6px 0;color:var(--text)">BLACKSITE GRC Platform (Web Application)</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 12px 6px 0;color:var(--muted);vertical-align:top">Report Version</td>
+          <td style="padding:6px 0;color:var(--text)">VPAT 2.5 ACR</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 12px 6px 0;color:var(--muted);vertical-align:top">Report Date</td>
+          <td style="padding:6px 0;color:var(--text)">2026-03-09</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 12px 6px 0;color:var(--muted);vertical-align:top">Prepared By</td>
+          <td style="padding:6px 0;color:var(--text)">BLACKSITE Development Team</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 12px 6px 0;color:var(--muted);vertical-align:top">Standards Covered</td>
+          <td style="padding:6px 0;color:var(--text)">WCAG 2.1 (Levels A and AA) · Section 508 (36 CFR Part 1194, 2018 Refresh) · EN 301 549 v3.2.1</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  {# ── Terms ────────────────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 12px;font-weight:700">Terms Used in This Report</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:0.85em">
+      <thead>
+        <tr style="background:var(--surface)">
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted);width:180px">Term</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Meaning</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>Supports</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">The functionality meets the criterion without known defects</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>Partially Supports</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Some functionality meets the criterion; known deficiencies exist</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>Does Not Support</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">The functionality does not meet the criterion</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>Not Applicable</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">The criterion is not relevant to this product</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>Not Evaluated</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">The criterion has not been evaluated</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  {# ── WCAG 2.1 Table 1: Level A ────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 4px;font-weight:700">WCAG 2.1 Report</h2>
+    <h3 style="font-size:0.9em;color:var(--cyan);margin:0 0 14px;font-weight:700">Table 1: Success Criteria, Level A</h3>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:0.83em;min-width:600px">
+      <thead>
+        <tr style="background:var(--surface)">
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted);width:200px">Criterion</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted);width:150px">Conformance Level</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.1.1 Non-text Content</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">All images include descriptive <code>alt</code> attributes. Icon-only buttons include <code>aria-label</code>. Color-only status indicators include <code>aria-label</code>.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.2.1 Audio-only and Video-only (Prerecorded)</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Applicable</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Product contains no audio or video content.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.2.2 Captions (Prerecorded)</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Applicable</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No multimedia content present.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.2.3 Audio Description or Media Alternative (Prerecorded)</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Applicable</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No multimedia content present.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.3.1 Info and Relationships</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Semantic HTML throughout. Tables include <code>scope</code> attributes. Form inputs associated with labels. ARIA roles applied to custom components.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.3.2 Meaningful Sequence</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Content is presented in a logical reading order in source markup.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.3.3 Sensory Characteristics</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Instructions do not rely solely on shape, size, color, or location.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.4.1 Use of Color</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Status indicators include both color and text labels or <code>aria-label</code> attributes.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.4.2 Audio Control</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Applicable</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No auto-playing audio present.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.1.1 Keyboard</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--yellow)">Partially Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Primary navigation and most interactive controls are keyboard-accessible. Some complex AJAX interactions may have keyboard limitations. Full keyboard regression testing in progress.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.1.2 No Keyboard Trap</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Modal dialogs implement focus traps with Escape key dismissal and focus restoration.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.1.4 Character Key Shortcuts</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Applicable</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No single-character key shortcuts implemented.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.2.1 Timing Adjustable</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--yellow)">Partially Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Session idle timeout enforced via Authelia (configurable). Application-layer timeout warning implemented. Users can extend sessions.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.2.2 Pause, Stop, Hide</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No auto-moving, auto-updating, or auto-scrolling content.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.3.1 Three Flashes or Below Threshold</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No flashing content present.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.4.1 Bypass Blocks</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Skip navigation link ("Skip to main content") is the first focusable element on every page.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.4.2 Page Titled</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">All pages include a descriptive <code>&lt;title&gt;</code> with application name and page context.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.4.3 Focus Order</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Focus order follows a logical sequence. Modals move focus to first focusable element on open and restore on close.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.4.4 Link Purpose (In Context)</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">All links include descriptive text or <code>aria-label</code>. Symbol-only links include <code>aria-label</code>.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.5.1 Pointer Gestures</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Applicable</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No multi-point or path-based gestures required.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.5.2 Pointer Cancellation</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Click events on mouseup/standard click; no down-event-only actions.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.5.3 Label in Name</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Visible labels match or are contained within accessible names.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.5.4 Motion Actuation</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Applicable</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No motion-activated functionality present.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>3.1.1 Language of Page</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><code>lang="en"</code> declared on the <code>&lt;html&gt;</code> element.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>3.2.1 On Focus</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No context changes occur on focus alone.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>3.2.2 On Input</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--yellow)">Partially Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Auto-submitting <code>&lt;select&gt;</code> elements are labeled to inform users of auto-apply behavior.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>3.3.1 Error Identification</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--yellow)">Partially Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Most form errors are displayed inline. Some API error states surface as toast messages only.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>3.3.2 Labels or Instructions</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">All form inputs have associated labels. Required fields include <code>aria-required="true"</code>.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>4.1.1 Parsing</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">HTML is validated. No duplicate IDs on interactive elements. ARIA used per specification.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>4.1.2 Name, Role, Value</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">All interactive elements have accessible names, roles, and states. Custom components use appropriate ARIA.</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  {# ── WCAG 2.1 Table 2: Level AA ───────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h3 style="font-size:0.9em;color:var(--cyan);margin:0 0 14px;font-weight:700">Table 2: Success Criteria, Level AA</h3>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:0.83em;min-width:600px">
+      <thead>
+        <tr style="background:var(--surface)">
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted);width:200px">Criterion</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted);width:150px">Conformance Level</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.2.4 Captions (Live)</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Applicable</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No live multimedia content.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.2.5 Audio Description (Prerecorded)</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Applicable</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No multimedia content.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.3.4 Orientation</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Interface is functional in both portrait and landscape orientations.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.3.5 Identify Input Purpose</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--yellow)">Partially Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Standard profile fields (name, email) do not yet include <code>autocomplete</code> attributes. Planned Q2 2026.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.4.3 Contrast (Minimum)</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Evaluated</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Dark theme designed for high contrast. Formal contrast ratio measurement in progress (Q2 2026).</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.4.4 Resize Text</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Interface uses relative units (em, rem). Text resizes to 200% without loss of content.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.4.5 Images of Text</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No images of text used. All text rendered as HTML.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.4.10 Reflow</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--yellow)">Partially Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Most pages reflow at 320px without horizontal scrolling. Complex data tables require horizontal scroll at narrow widths.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.4.11 Non-text Contrast</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Evaluated</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">UI components designed with contrast in mind. Formal measurement pending (Q2 2026).</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.4.12 Text Spacing</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No loss of content or functionality when text spacing properties are overridden.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>1.4.13 Content on Hover or Focus</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Tooltips are dismissible and persistent. No hover content that obscures other content.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.4.5 Multiple Ways</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Navigation sidebar, page titles, and URL structure provide multiple means of locating pages.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.4.6 Headings and Labels</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Descriptive headings used throughout. Form labels are descriptive and associated with controls.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>2.4.7 Focus Visible</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--yellow)">Partially Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Browser default focus indicators present. Custom focus styles in some areas. Comprehensive styled focus rings in progress.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>3.1.2 Language of Parts</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Applicable</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">All content is in English. No foreign-language passages.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>3.2.3 Consistent Navigation</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Navigation sidebar and header are consistent across all pages.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>3.2.4 Consistent Identification</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Components with the same function are identified consistently throughout.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>3.3.3 Error Suggestion</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--yellow)">Partially Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Most validation errors include suggested corrections. Some API-level errors surface generic messages.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>3.3.4 Error Prevention (Legal, Financial, Binding)</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Destructive actions require confirmation. ATO decisions include explicit confirmation dialogs.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>4.1.3 Status Messages</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Dynamic content regions include <code>aria-live="polite"</code>. Toast notifications are announced.</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  {# ── Section 508 ──────────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 4px;font-weight:700">Section 508 Report</h2>
+    <h3 style="font-size:0.9em;color:var(--cyan);margin:0 0 14px;font-weight:700">Chapter 3: Functional Performance Criteria</h3>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:0.83em;min-width:600px">
+      <thead>
+        <tr style="background:var(--surface)">
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted);width:200px">Criteria</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted);width:150px">Conformance</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>302.1 Without Vision</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--yellow)">Partially Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Screen reader support implemented via ARIA. Full regression testing (NVDA, JAWS, VoiceOver) in progress.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>302.2 With Limited Vision</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Interface scales to 200% text size. High-contrast dark theme is default.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>302.3 Without Perception of Color</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Information is not conveyed by color alone.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>302.4 Without Hearing</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Applicable</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No audio content.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>302.5 Without Speech</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Applicable</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No speech input required.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>302.6 With Limited Manipulation</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--yellow)">Partially Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">All controls are keyboard-accessible. Touch target sizes generally adequate. Full testing in progress.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>302.7 With Limited Reach and Strength</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">No time limits that cannot be extended. No actions requiring sustained physical effort.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>302.8 With Limited Language</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Applicable</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Product designed for GRC professionals; simplified language version not applicable.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>302.9 With Limited Cognitive</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Not Applicable</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Product is a specialized professional tool.</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p style="color:var(--muted);font-size:0.82em;margin:16px 0 4px">
+      <strong style="color:var(--text)">Chapter 4: Hardware</strong> — Not Applicable. BLACKSITE is a web application.
+    </p>
+
+    <h3 style="font-size:0.9em;color:var(--cyan);margin:14px 0 10px;font-weight:700">Chapter 5: Software</h3>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:0.83em;min-width:500px">
+      <thead>
+        <tr style="background:var(--surface)">
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted);width:200px">Criteria</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted);width:150px">Conformance</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>502 Interoperability with Assistive Technology</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--yellow)">Partially Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Web-based; relies on browser accessibility APIs. ARIA implementation follows WAI-ARIA 1.2.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>503 Applications</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Application-level accessibility features implemented per WCAG 2.1 AA.</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3 style="font-size:0.9em;color:var(--cyan);margin:14px 0 10px;font-weight:700">Chapter 6: Support Documentation and Services</h3>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:0.83em;min-width:500px">
+      <thead>
+        <tr style="background:var(--surface)">
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted);width:200px">Criteria</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted);width:150px">Conformance</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>601.1 Scope</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">This VPAT constitutes the accessibility conformance documentation.</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>602 Support Documentation</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--yellow)">Partially Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">User documentation is in development. Accessibility-specific guidance will be included.</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><strong>603 Support Services</strong></td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--green)">Supports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Support available via platform administrator. Accessibility issues reported via the Accessibility Statement page.</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  {# ── Remediation Roadmap ───────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">Known Limitations and Remediation Roadmap</h2>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:0.85em;min-width:500px">
+      <thead>
+        <tr style="background:var(--surface)">
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted)">Issue</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted);width:120px">Status</th>
+          <th scope="col" style="text-align:left;padding:8px 10px;border:1px solid var(--border);color:var(--muted);width:100px">Target</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Color contrast ratios not formally measured</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--yellow)">In Progress</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Q2 2026</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Keyboard regression testing (NVDA, JAWS, VoiceOver)</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Planned</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Q2 2026</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)"><code>autocomplete</code> attributes on profile fields</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Planned</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Q2 2026</td>
+        </tr>
+        <tr style="background:var(--surface)">
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Focus ring styling consistency</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--yellow)">In Progress</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Q2 2026</td>
+        </tr>
+        <tr>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Complex data tables on narrow viewports</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--muted)">Known limitation</td>
+          <td style="padding:7px 10px;border:1px solid var(--border);color:var(--text)">Q3 2026</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  {# ── Legal Disclaimer ─────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">Legal Disclaimer</h2>
+    <p style="color:var(--muted);font-size:0.85em;line-height:1.7;margin:0 0 10px">
+      This VPAT was prepared based on evaluation by the BLACKSITE development team. It represents a
+      good-faith assessment of the product's conformance as of the date indicated. Conformance claims
+      reflect testing performed on the current build using Chrome and Firefox desktop browsers. Screen
+      reader testing with NVDA/JAWS/VoiceOver is ongoing. This document will be updated as issues are
+      identified and remediated.
+    </p>
+    <p style="color:var(--muted);font-size:0.82em;margin:0">
+      VPAT® is a registered trademark of the Information Technology Industry Council (ITI).
+    </p>
+  </div>
+
+  <p style="color:var(--muted);font-size:0.78em;text-align:center;padding:8px 0 16px">
+    <a href="/accessibility" style="color:var(--muted);text-decoration:none"
+       onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Accessibility Statement</a>
+    &nbsp;·&nbsp;
+    <a href="/privacy" style="color:var(--muted);text-decoration:none"
+       onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Privacy Notice</a>
+    &nbsp;·&nbsp;
+    <a href="/compliance-info" style="color:var(--muted);text-decoration:none"
+       onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Platform Compliance</a>
+  </p>
+
+</div>
+{% endblock %}

@@ -530,6 +530,8 @@ const AdminChat = (() => {
     ws.send(JSON.stringify({type: "status", status, away_msg: msg || ""}));
     const myDot = document.getElementById("myStatusDot");
     if (myDot) myDot.className = `status-dot status-${status}`;
+    const navDot = document.getElementById("navStatusDot");
+    if (navDot) navDot.style.background = status === "away" ? "var(--red)" : "var(--green)";
   }
 
   // ── WebSocket lifecycle ───────────────────────────────────────────────────────
@@ -627,27 +629,24 @@ const AdminChat = (() => {
           : "Away — Click to go Online · Right-click to set away message";
       });
 
-      nameEl.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        if (!awayCtx) return;
-        const x = Math.min(e.clientX, window.innerWidth  - 240);
-        const y = Math.max(10, e.clientY - awayCtx.offsetHeight - 8);
-        awayCtx.style.left    = x + "px";
-        awayCtx.style.top     = y + "px";
-        awayCtx.style.display = "block";
-        const input = document.getElementById("sb-away-ctx-input");
-        if (input) { input.value = ""; setTimeout(() => input.focus(), 50); }
-      });
+      // contextmenu on sb-name-status is handled by sbOpenNameCtx() in base.html
     }
   }
 
   // ── Public init ───────────────────────────────────────────────────────────────
+
+  function updateMyName(newName) {
+    // Called by base.html after a successful chat name save
+    const el = document.getElementById("sbMyDisplayName");
+    if (el && newName) el.textContent = newName;
+  }
 
   function init(username, opts) {
     myUsername = username || "";
     if (opts) {
       if (typeof opts.visibleCount === "number") SIDEBAR_VISIBLE = Math.max(1, opts.visibleCount);
       if (typeof opts.showAwayMsg  === "boolean") SHOW_AWAY_MSG  = opts.showAwayMsg;
+      // chatName is used by base.html; nothing extra needed here
     }
     // Also check per-user localStorage override
     const localCount = parseInt(localStorage.getItem("bsv-chat-visible-count") || "");
@@ -660,5 +659,5 @@ const AdminChat = (() => {
     connect();         // connect WS (will push live presence updates)
   }
 
-  return { init, setMyStatus };
+  return { init, setMyStatus, updateMyName };
 })();

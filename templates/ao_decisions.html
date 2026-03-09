@@ -113,15 +113,21 @@
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1>⊕ Authorizing Official — Decision Queue</h1>
-  <p>Review ATO packages and record authorization decisions.</p>
+<div class="breadcrumb">
+  <a href="/dashboard">Dashboard</a>
+  <span class="sep">/</span>
+  <span>AO Decision Queue</span>
 </div>
 
-{# ── Section 1: Pending ATO Decisions ── #}
+<div class="page-header">
+  <h1>⊕ Authorizing Official — Decision Queue</h1>
+  <p>Review authorization packages and record authorization decisions.</p>
+</div>
+
+{# ── Section 1: Pending Authorization Decisions ── #}
 <div class="section-card">
   <div class="section-head">
-    <h2>Pending ATO Review</h2>
+    <h2>Pending Authorization Review</h2>
     <span class="section-count">{{ pending_systems|length }} pending</span>
   </div>
   {% if pending_systems %}
@@ -163,7 +169,7 @@
     </div>
     {% endfor %}
   {% else %}
-    <div class="empty-note">No systems pending ATO decision.</div>
+    <div class="empty-note">No systems pending authorization decision.</div>
   {% endif %}
 </div>
 
@@ -204,15 +210,15 @@
     </tbody>
   </table>
   {% else %}
-    <div class="empty-note">No ATO decisions recorded yet.</div>
+    <div class="empty-note">No authorization decisions recorded yet.</div>
   {% endif %}
 </div>
 
-{# ── Section 3: Expiring ATOs ── #}
+{# ── Section 3: Expiring Authorizations ── #}
 {% if expiring_systems %}
 <div class="section-card">
   <div class="section-head">
-    <h2>Expiring ATOs (within 90 days)</h2>
+    <h2>Expiring Authorizations (within 90 days)</h2>
     <span class="section-count expiry-warn">{{ expiring_systems|length }} expiring</span>
   </div>
   <table class="decision-table">
@@ -244,9 +250,9 @@
 
 {# ── Pending Risk Acceptances ── #}
 {# ── AO Approval Modal ── #}
-<div id="ao-approve-modal" role="dialog" aria-modal="true">
+<div id="ao-approve-modal" role="dialog" aria-modal="true" aria-labelledby="ao-modal-heading">
   <div class="ao-modal-box">
-    <h3>⊕ Record Authorization Decision</h3>
+    <h3 id="ao-modal-heading">⊕ Record Authorization Decision</h3>
     <div class="ao-modal-sub" id="ao-modal-sysname">Loading…</div>
 
     <form id="ao-approve-form" method="post">

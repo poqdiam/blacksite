@@ -2,6 +2,12 @@
 {% block title %}Import Preview — {{ job.ingest_type | title }}{% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <a href="/admin">Admin</a>
+  <span class="sep">/</span>
+  <span>Ingest Preview</span>
+</div>
+
 <div class="page-header" style="margin-bottom:8px">
   <div style="display:flex;align-items:center;gap:14px">
     <a href="/admin/ingest" class="btn btn-ghost btn-sm" style="font-size:0.78em">← Back</a>

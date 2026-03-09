@@ -7,7 +7,7 @@ BLACKSITE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$BLACKSITE_DIR"
 
 PORT="${BLACKSITE_PORT:-8100}"
-HOST="${BLACKSITE_HOST:-0.0.0.0}"
+HOST="${BLACKSITE_HOST:-127.0.0.1}"
 
 # Check Python 3.11+
 if ! python3 -c "import sys; assert sys.version_info >= (3,11)" 2>/dev/null; then
@@ -31,4 +31,8 @@ pip install -q -r requirements.txt
 mkdir -p uploads results controls static
 
 echo "[BLACKSITE] Starting on http://localhost:${PORT}"
-exec uvicorn app.main:app --host "$HOST" --port "$PORT" --reload
+RELOAD_FLAG=""
+if [[ "${BLACKSITE_DEV:-}" == "true" ]]; then
+    RELOAD_FLAG="--reload"
+fi
+exec uvicorn app.main:app --host "$HOST" --port "$PORT" $RELOAD_FLAG

@@ -1,0 +1,156 @@
+# BLACKSITE LLM Integration Configuration
+# llm_config.yaml — model settings, endpoint, RAG behavior, redaction rules
+
+##############################################################################
+# Model Backend
+# Supported backends: ollama | openai | anthropic
+##############################################################################
+backend: openai
+
+openai:
+  base_url: "https://api.groq.com/openai/v1"
+  api_key_env: "GROQ_API_KEY"
+  model: "llama-3.3-70b-versatile"
+  options:
+    temperature: 0.2
+    max_tokens: 1024
+
+# Self-contained future: GPU Ollama (swap back when RTX 3080 rig is online)
+# backend: ollama
+# ollama:
+#   base_url: "http://localhost:11434"
+#   model: "llama3.1:8b"   # fits in 5.5GB VRAM, ~80 tok/sec
+#   options:
+#     temperature: 0.2
+#     top_p: 0.9
+#     num_ctx: 4096
+#     num_predict: 512
+
+# Uncomment for Anthropic Claude API
+# backend: anthropic
+# anthropic:
+#   api_key_env: "ANTHROPIC_API_KEY"       # env var name (never hardcode)
+#   model: "claude-haiku-4-5-20251001"     # or claude-sonnet-4-6
+#   options:
+#     max_tokens: 1024
+#     temperature: 0.2
+
+##############################################################################
+# RAG (Retrieval-Augmented Generation) Settings
+##############################################################################
+rag:
+  enabled: true
+  knowledge_base_path: "llm/knowledge"
+  runtime_snapshots_path: "llm/runtime"
+  index_path: "llm/index"
+
+  # Chunking settings for knowledge base documents
+  chunk_size: 1000            # characters per chunk
+  chunk_overlap: 200          # overlap between adjacent chunks
+  max_chunks_per_query: 2     # 2 chunks — limits prompt to ~500 tokens from RAG
+
+  # Search settings
+  search_method: "bm25"       # bm25 | tfidf | semantic (semantic requires embeddings)
+  min_score_threshold: 0.1    # minimum relevance score to include chunk
+
+  # Runtime snapshot injection
+  inject_runtime_context: true
+  runtime_fields_to_inject:
+    - "route_map"
+    - "db_schema"
+    - "audit_vocab"
+
+  # What to always include in context regardless of query
+  # Disabled for CPU performance — system context adds ~750 tokens to every prompt
+  always_include: []
+
+##############################################################################
+# System Prompt Selection
+##############################################################################
+prompts:
+  base_prompt: "llm/prompts/system_prompt_base--grc-assistant-all-roles.txt"
+  role_prompts:
+    isso: "llm/prompts/system_prompt_isso--daily-ops-specialist.txt"
+    issm: "llm/prompts/system_prompt_base--grc-assistant-all-roles.txt"
+    ao: "llm/prompts/system_prompt_base--grc-assistant-all-roles.txt"
+    sca: "llm/prompts/system_prompt_base--grc-assistant-all-roles.txt"
+    admin: "llm/prompts/system_prompt_base--grc-assistant-all-roles.txt"
+
+  few_shot_file: "llm/prompts/few_shot_examples--grc-qa-pairs.json"
+  max_few_shot_examples: 3    # Re-enabled — API backend handles larger context fine
+
+  # Template variables injected into system prompt
+  template_vars:
+    - "ROLE"                  # Current user's role
+    - "SYSTEM_NAME"           # Current system name
+    - "SYSTEM_ABBR"           # System abbreviation
+    - "IMPACT_LEVEL"          # FIPS impact level
+    - "TODAY"                 # Today's date
+    - "OPEN_POAM_COUNT"       # Count of open POA&Ms for system
+    - "ATO_EXPIRY"            # ATO expiration date
+
+##############################################################################
+# Safety and Redaction
+##############################################################################
+safety:
+  # Redact these patterns from any content before sending to LLM
+  redact_patterns:
+    - pattern: "secret_key"
+      action: "redact"
+    - pattern: "api_key"
+      action: "redact"
+    - pattern: "smtp_password"
+      action: "redact"
+    - pattern: "password"
+      action: "redact"
+    - pattern: "token"
+      action: "redact"
+    - pattern: "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b"
+      action: "hash"          # Hash email addresses in context
+    - pattern: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+      action: "redact"        # SSN pattern
+
+  # Never include these files in LLM context
+  blocked_paths:
+    - "data/.app_secret"
+    - ".secrets.env"
+    - "*.key"
+    - "*.pem"
+    - ".env"
+
+  # Maximum user query length
+  max_query_length: 2000
+
+  # Rate limiting (per user, per minute)
+  rate_limit_rpm: 20
+
+##############################################################################
+# Chat Interface Settings
+##############################################################################
+chat:
+  enabled: true               # Controlled by admin/system-settings chat_enabled flag
+  history_turns: 6            # Number of conversation turns to maintain in context
+  max_context_tokens: 6000    # Maximum total context tokens (leave room for output)
+  show_sources: true          # Show source citations in UI
+  show_confidence: false      # Show confidence scores (experimental)
+
+  # UI settings
+  placeholder_text: "Ask about RMF, controls, POA&Ms, BLACKSITE workflows..."
+  assistant_name: "BLACKSITE Assistant"
+  assistant_avatar: "🔒"
+
+##############################################################################
+# Logging and Monitoring
+##############################################################################
+logging:
+  log_queries: true           # Log all queries (anonymized) for quality review
+  log_path: "data/llm_logs"
+  retention_days: 90
+  log_level: "INFO"
+
+  # Track quality metrics
+  track_metrics:
+    - "response_time_ms"
+    - "tokens_used"
+    - "chunks_retrieved"
+    - "sources_cited"

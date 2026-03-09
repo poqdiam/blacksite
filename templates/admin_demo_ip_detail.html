@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Visitor: {{ ip }}{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <a href="/admin/demo-access?days={{ days }}" style="font-size:0.8em;color:var(--muted);text-decoration:none">← Demo Visitor Log</a>
+    <h1 class="page-title" style="margin-top:0.25rem">
+      {% if geo.flag %}<span style="margin-right:0.4rem">{{ geo.flag }}</span>{% endif %}
+      <code style="font-size:0.85em">{{ ip }}</code>
+    </h1>
+    <p class="page-sub" style="margin-bottom:0">
+      {% if geo.city %}{{ geo.city }}, {% endif %}{{ geo.country or '—' }}
+      {% if geo.org %}&nbsp;·&nbsp;<span style="color:var(--muted)">{{ geo.org }}</span>{% endif %}
+      &nbsp;·&nbsp;
+      <a href="https://www.shodan.io/host/{{ ip }}" target="_blank" rel="noopener" style="color:var(--muted);font-size:0.85em">Shodan ↗</a>
+      &nbsp;
+      <a href="https://search.censys.io/hosts/{{ ip }}" target="_blank" rel="noopener" style="color:var(--muted);font-size:0.85em">Censys ↗</a>
+    </p>
+  </div>
+  <form method="get" style="display:flex;gap:0.5rem;align-items:center">
+    <label for="demo-ip-days" style="font-size:0.8em;color:var(--muted)">Last</label>
+    <select name="days" id="demo-ip-days" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()" aria-label="Date range (auto-applies on change)">
+      {% for d in [7, 14, 30, 60, 90] %}
+      <option value="{{ d }}" {% if d == days %}selected{% endif %}>{{ d }} days</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% elif not records %}
+<div class="alert alert-info">No meaningful activity from this IP in the last {{ days }} days.</div>
+{% else %}
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="stat-card text-center p-3">
+      <div class="stat-card-n" style="color:var(--cyan)">{{ records | length }}</div>
+      <div class="stat-card-l">Actions</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card text-center p-3">
+      <div class="stat-card-n">{{ records | map(attribute='path') | list | unique | list | length }}</div>
+      <div class="stat-card-l">Unique Pages</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card text-center p-3">
+      <div class="stat-card-n" style="font-size:0.75em">{{ records[-1].ts | replace("T"," ") | truncate(16, killwords=True, end="") }}</div>
+      <div class="stat-card-l">First Seen</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card text-center p-3">
+      <div class="stat-card-n" style="font-size:0.75em">{{ records[0].ts | replace("T"," ") | truncate(16, killwords=True, end="") }}</div>
+      <div class="stat-card-l">Last Seen</div>
+    </div>
+  </div>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-hover table-sm">
+    <thead>
+      <tr>
+        <th style="white-space:nowrap;width:160px" scope="col">Time</th>
+        <th scope="col">Activity</th>
+        <th style="width:60px" scope="col">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in records %}
+      <tr>
+        <td style="white-space:nowrap;color:var(--muted);font-size:0.8em;vertical-align:middle">
+          {{ r.ts | replace("T"," ") | truncate(19, killwords=True, end="") }}
+        </td>
+        <td style="vertical-align:middle">
+          <span title="{{ r.path }}">{{ r.label }}</span>
+          {% if r.details %}
+          <span style="font-size:0.75em;color:var(--muted);margin-left:0.4rem">— {{ r.details }}</span>
+          {% endif %}
+        </td>
+        <td style="vertical-align:middle">
+          {% if r.status_code and r.status_code != 200 %}
+          <span style="font-size:0.8em;font-weight:600;color:
+            {% if r.status_code < 300 %}var(--cyan)
+            {% elif r.status_code < 400 %}var(--muted)
+            {% elif r.status_code >= 400 %}var(--red)
+            {% endif %}">{{ r.status_code }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if records | length >= 500 %}
+<p style="font-size:0.8em;color:var(--muted);margin-top:0.5rem">Showing up to 2000 most recent actions (after filtering noise).</p>
+{% endif %}
+
+{% endif %}
+{% endblock %}

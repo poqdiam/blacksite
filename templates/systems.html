@@ -469,12 +469,16 @@
 {% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <span>System Catalog</span>
+</div>
+
 
 {# ── Page header ──────────────────────────────────────────────────────────── #}
 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
   <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap">
     <h1 style="margin:0">System Catalog</h1>
-    <span class="text-muted" style="font-size:0.85em">FIPS 199 registered information systems</span>
+    <span class="text-muted" style="font-size:0.85em">registered information systems</span>
   </div>
   {% if is_admin %}
   <a href="/systems/new" class="btn btn-primary">+ New System</a>
@@ -516,7 +520,7 @@
   <div class="empty-state">
     <div class="empty-state-icon">[ ]</div>
     <h2>No systems registered yet</h2>
-    <p>Add your first information system to begin tracking authorization status, FIPS 199 impact levels, and assessments.</p>
+    <p>Add your first information system to begin tracking authorization status, impact levels, and assessments.</p>
     {% if is_admin %}
     <a href="/systems/new" class="btn btn-primary">+ Register System</a>
     {% else %}
@@ -621,7 +625,7 @@
             {% endif %}
           </div>
         </div>
-        <div class="fips-cia" title="FIPS 199 C/I/A">
+        <div class="fips-cia" title="Confidentiality / Integrity / Availability">
           {% for key, val in [('C', sys.confidentiality_impact), ('I', sys.integrity_impact), ('A', sys.availability_impact)] %}
           <div class="fips-item">
             <span class="fips-key">{{ key }}</span>
@@ -687,7 +691,7 @@
           {% endif %}
 
           {# View → #}
-          <a href="/systems/{{ sys.id }}" class="sc-btn sc-btn-view" title="View system">→</a>
+          <a href="/systems/{{ sys.id }}" class="sc-btn sc-btn-view" title="View system" aria-label="View system">→</a>
         </div>
       </div>
 

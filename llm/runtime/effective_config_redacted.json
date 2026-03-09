@@ -1,0 +1,98 @@
+{
+  "snapshot": "effective_config_redacted",
+  "generated_at_utc": "2026-03-01T19:09:24.666241+00:00",
+  "config": {
+    "app.name": "BLACKSITE",
+    "app.brand": "TheKramerica",
+    "app.tagline": "Security Assessment Platform",
+    "app.host": "127.0.0.1",
+    "app.port": 8100,
+    "app.secret_key": "[REDACTED]",
+    "app.base_url": "https://blacksite.borisov.network",
+    "app.authelia_logout_url": "https://auth.borisov.network/logout?rd=https://blacksite.borisov.network",
+    "app.admin_users": [
+      "dan"
+    ],
+    "employees": [
+      {
+        "username": "alice.chen",
+        "name": "Alice Chen",
+        "email": "alice.chen@thekramerica.com"
+      },
+      {
+        "username": "marcus.okafor",
+        "name": "Marcus Okafor",
+        "email": "marcus.okafor@thekramerica.com"
+      },
+      {
+        "username": "priya.sharma",
+        "name": "Priya Sharma",
+        "email": "priya.sharma@thekramerica.com"
+      },
+      {
+        "username": "derek.holloway",
+        "name": "Derek Holloway",
+        "email": "derek.holloway@thekramerica.com"
+      },
+      {
+        "username": "samira.nazari",
+        "name": "Samira Nazari",
+        "email": "samira.nazari@thekramerica.com"
+      },
+      {
+        "username": "james.trent",
+        "name": "James Trent",
+        "email": "james.trent@thekramerica.com"
+      },
+      {
+        "username": "lucia.reyes",
+        "name": "Lucia Reyes",
+        "email": "lucia.reyes@thekramerica.com"
+      },
+      {
+        "username": "ben.ashworth",
+        "name": "Ben Ashworth",
+        "email": "ben.ashworth@thekramerica.com"
+      },
+      {
+        "username": "kwame.asante",
+        "name": "Kwame Asante",
+        "email": "kwame.asante@thekramerica.com"
+      },
+      {
+        "username": "nadia.volkov",
+        "name": "Nadia Volkov",
+        "email": "nadia.volkov@thekramerica.com"
+      },
+      {
+        "username": "dickie",
+        "name": "Dickie",
+        "email": ""
+      }
+    ],
+    "quiz.daily": true,
+    "quiz.question_count": 15,
+    "quiz.pass_threshold": 75,
+    "db.path": "blacksite.db",
+    "storage.uploads_dir": "uploads",
+    "storage.results_dir": "results",
+    "storage.controls_dir": "controls",
+    "nist.catalog_url": "https://raw.githubusercontent.com/usnistgov/oscal-content/main/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_catalog.json",
+    "nist.github_api_url": "https://api.github.com/repos/usnistgov/oscal-content/commits?path=nist.gov%2FSP800-53%2Frev5%2Fjson%2FNIST_SP-800-53_rev5_catalog.json&per_page=1",
+    "nist.local_path": "controls/nist_800_53r5.json",
+    "nist.local_meta": "controls/meta.json",
+    "nist.update_cron": "0 0 * * *",
+    "email.enabled": "[REDACTED]",
+    "email.from_address": "[REDACTED]",
+    "email.to_address": "[REDACTED]",
+    "scoring.ssp_weight": 0.7,
+    "scoring.quiz_weight": 0.3,
+    "scoring.allstar_combined_min": 80,
+    "scoring.allstar_quiz_min": 80,
+    "ai.enabled": false,
+    "ai.provider": "claude",
+    "ai.api_key": "[REDACTED]",
+    "ai.model": "claude-haiku-4-5-20251001",
+    "ai.review_on_complete": false
+  }
+}

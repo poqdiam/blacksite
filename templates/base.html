@@ -4,6 +4,9 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg:          #060608;
@@ -22,7 +25,8 @@
       --sans:        'Inter',system-ui,-apple-system,sans-serif;
       --sidebar-w:        260px;
       --sidebar-w-col:    52px;
-      --topbar-h:         64px;
+      --topbar-h:         80px;
+      --demo-banner-h:    28px;
       --role-banner-h:    32px;
       --sidebar-bg:       #0c0c18;
       --sidebar-border:   #1e1e2e;
@@ -37,36 +41,33 @@
       --sidebar-bg:#0d0919; --sidebar-border:#1e1430;
       --sidebar-active:rgba(176,140,255,0.1); --sidebar-hover:rgba(255,255,255,0.04);
     }
-    html[data-theme="void"] {
-      --bg:#030508; --surface:#080d14; --card:#0d1220; --border:#141e30;
-      --text:#c8d4e8; --muted:#5878a0; --cyan:#00c8ff; --gold:#ffc060;
-      --sidebar-bg:#060910; --sidebar-border:#101820;
-      --sidebar-active:rgba(0,200,255,0.1); --sidebar-hover:rgba(255,255,255,0.04);
+    html[data-theme="rose"] {
+      --bg:#fdf0f3; --surface:#f5dde4; --card:#fff6f8; --border:#e0b4c0;
+      --text:#280810; --muted:#7a3848; --cyan:#b02040; --gold:#8c4800;
+      --red:#b01020; --green:#386020; --yellow:#7a4800;
+      --sidebar-bg:#f0ccd6; --sidebar-border:#d8a0b0;
+      --sidebar-active:rgba(176,32,64,0.12); --sidebar-hover:rgba(0,0,0,0.05);
     }
-    html[data-theme="ember"] {
-      --bg:#0c0600; --surface:#180e00; --card:#201200; --border:#351e00;
-      --text:#f0d8c0; --muted:#907060; --cyan:#ff8c1a; --gold:#ffd060;
-      --sidebar-bg:#100800; --sidebar-border:#281400;
-      --sidebar-active:rgba(255,140,26,0.1); --sidebar-hover:rgba(255,255,255,0.04);
+    html[data-theme="cloud"] {
+      --bg:#f8fafb; --surface:#ecf0f4; --card:#ffffff; --border:#c8d2dc;
+      --text:#141a22; --muted:#546070; --cyan:#0066cc; --gold:#a05800;
+      --red:#b81010; --green:#056822; --yellow:#826000;
+      --sidebar-bg:#e2e8f0; --sidebar-border:#bac6d2;
+      --sidebar-active:rgba(0,102,204,0.1); --sidebar-hover:rgba(0,0,0,0.04);
     }
-    html[data-theme="pine"] {
-      --bg:#020c06; --surface:#081810; --card:#0c2016; --border:#153020;
-      --text:#c8ecd8; --muted:#507860; --cyan:#00e870; --gold:#d0e040;
-      --sidebar-bg:#040e08; --sidebar-border:#0e2018;
-      --sidebar-active:rgba(0,232,112,0.1); --sidebar-hover:rgba(255,255,255,0.04);
-    }
-    html[data-theme="steel"] {
-      --bg:#04080f; --surface:#0a1020; --card:#0e1628; --border:#182540;
-      --text:#d0dff4; --muted:#608090; --cyan:#4da6ff; --gold:#ffc040;
-      --sidebar-bg:#060c18; --sidebar-border:#10203a;
-      --sidebar-active:rgba(77,166,255,0.1); --sidebar-hover:rgba(255,255,255,0.04);
+    html[data-theme="slate"] {
+      --bg:#c8d8ec; --surface:#b8cce0; --card:#dae6f2; --border:#96b4cc;
+      --text:#08162a; --muted:#2e4a66; --cyan:#0c3ca0; --gold:#804800;
+      --red:#a01010; --green:#0a5418; --yellow:#685200;
+      --sidebar-bg:#b0c4da; --sidebar-border:#88a8c2;
+      --sidebar-active:rgba(12,60,160,0.14); --sidebar-hover:rgba(0,0,0,0.06);
     }
     html[data-theme="arctic"] {
-      --bg:#eef3f8; --surface:#dce8f0; --card:#f4f8fc; --border:#c0d0e0;
-      --text:#1a2840; --muted:#506070; --cyan:#0064cc; --gold:#c07000;
-      --red:#c41010; --green:#006820; --yellow:#886000;
-      --sidebar-bg:#d4e4f0; --sidebar-border:#b0c8dc;
-      --sidebar-active:rgba(0,100,204,0.1); --sidebar-hover:rgba(0,0,0,0.05);
+      --bg:#d4ecfa; --surface:#bcdff5; --card:#eaf6ff; --border:#90c8ec;
+      --text:#041828; --muted:#285878; --cyan:#004e96; --gold:#b06000;
+      --red:#b01010; --green:#0a6020; --yellow:#7c5800;
+      --sidebar-bg:#a8d4f0; --sidebar-border:#7abce4;
+      --sidebar-active:rgba(0,78,150,0.12); --sidebar-hover:rgba(0,0,0,0.05);
     }
     html[data-theme="parchment"] {
       --bg:#f4ede0; --surface:#e8dcc8; --card:#f8f2e6; --border:#d0c0a0;
@@ -104,35 +105,33 @@
         linear-gradient(90deg, rgba(0,255,255,0.02) 1px, transparent 1px);
       background-size: 40px 40px;
     }
-    html[data-theme="crimson"] {
-      --bg:#0a0000; --surface:#140003; --card:#1c0005; --border:#3d0010;
-      --text:#f2d8dc; --muted:#8a4050; --cyan:#ff2244; --gold:#ff8800;
-      --red:#ff4466; --green:#44ff88; --yellow:#ffaa00;
-      --sidebar-bg:#0c0002; --sidebar-border:#2e0008;
-      --sidebar-active:rgba(255,34,68,0.1); --sidebar-hover:rgba(255,255,255,0.04);
+    html[data-theme="linen"] {
+      --bg:#fde8d0; --surface:#f4d8ba; --card:#fff4ea; --border:#deb888;
+      --text:#28100a; --muted:#7a4828; --cyan:#9a3800; --gold:#804000;
+      --red:#b01010; --green:#385e10; --yellow:#7c4200;
+      --sidebar-bg:#f0d0a8; --sidebar-border:#d4a870;
+      --sidebar-active:rgba(154,56,0,0.12); --sidebar-hover:rgba(0,0,0,0.05);
     }
-    html[data-theme="ocean"] {
-      --bg:#010810; --surface:#041828; --card:#072038; --border:#0e3858;
-      --text:#c0dff5; --muted:#4880b0; --cyan:#00e5ff; --gold:#40b8ff;
-      --red:#ff4466; --green:#00ffcc; --yellow:#80ddff;
-      --sidebar-bg:#030e18; --sidebar-border:#0c2840;
-      --sidebar-active:rgba(0,229,255,0.1); --sidebar-hover:rgba(0,229,255,0.04);
-    }
-    html[data-theme="ocean"] body {
-      background-image: radial-gradient(ellipse at 20% 50%, rgba(0,80,160,0.06) 0%, transparent 60%),
-        radial-gradient(circle, rgba(0,200,255,0.015) 1px, transparent 1px);
-      background-size: 100% 100%, 32px 32px;
+    html[data-theme="ember"] {
+      --bg:#0c0600; --surface:#180e00; --card:#201200; --border:#351e00;
+      --text:#f0d8c0; --muted:#907060; --cyan:#ff8c1a; --gold:#ffd060;
+      --red:#ff4400; --green:#aacc00; --yellow:#ffcc00;
+      --sidebar-bg:#100800; --sidebar-border:#281400;
+      --sidebar-active:rgba(255,140,26,0.1); --sidebar-hover:rgba(255,255,255,0.04);
     }
     html[data-theme="amber"] {
-      --bg:#0a0600; --surface:#140c00; --card:#1c1200; --border:#3a2800;
-      --text:#ffcc66; --muted:#a07030; --cyan:#ffb300; --gold:#ff8c00;
-      --red:#ff4400; --green:#aacc00; --yellow:#ffcc00;
-      --sidebar-bg:#0c0800; --sidebar-border:#2a1c00;
-      --sidebar-active:rgba(255,179,0,0.12); --sidebar-hover:rgba(255,179,0,0.05);
+      --bg:#0d0800; --surface:#1a1000; --card:#221600; --border:#3d2800;
+      --text:#f0d890; --muted:#907840; --cyan:#e8a800; --gold:#ffd060;
+      --red:#ff6600; --green:#aacc00; --yellow:#ffcc00;
+      --sidebar-bg:#100c00; --sidebar-border:#2a1e00;
+      --sidebar-active:rgba(232,168,0,0.1); --sidebar-hover:rgba(255,255,255,0.04);
     }
-    html[data-theme="amber"] body {
-      background-image: radial-gradient(circle, rgba(255,179,0,0.025) 1px, transparent 1px);
-      background-size: 28px 28px;
+    html[data-theme="sage"] {
+      --bg:#eef5ee; --surface:#ddeedd; --card:#f6faf6; --border:#b4d0b4;
+      --text:#0d1e0d; --muted:#3a663a; --cyan:#1a8040; --gold:#7a5800;
+      --red:#b01010; --green:#1a6030; --yellow:#686000;
+      --sidebar-bg:#d4e8d4; --sidebar-border:#a8c8a8;
+      --sidebar-active:rgba(26,128,64,0.12); --sidebar-hover:rgba(0,0,0,0.05);
     }
     html[data-theme="noir"] {
       --bg:#000000; --surface:#0d0d0d; --card:#141414; --border:#2a2a2a;
@@ -146,15 +145,32 @@
     }
     /* Light-theme overrides for elements with hardcoded dark colors */
     html[data-theme="arctic"] body,
-    html[data-theme="parchment"] body {
-      background-image: radial-gradient(circle, rgba(0,0,0,0.04) 1px, transparent 1px);
+    html[data-theme="parchment"] body,
+    html[data-theme="cloud"] body,
+    html[data-theme="slate"] body,
+    html[data-theme="linen"] body,
+    html[data-theme="rose"] body,
+    html[data-theme="sage"] body {
+      background-image: radial-gradient(circle, rgba(0,0,0,0.035) 1px, transparent 1px);
+      background-size: 28px 28px;
     }
     html[data-theme="arctic"] .topbar,
-    html[data-theme="parchment"] .topbar {
+    html[data-theme="parchment"] .topbar,
+    html[data-theme="cloud"] .topbar,
+    html[data-theme="slate"] .topbar,
+    html[data-theme="linen"] .topbar,
+    html[data-theme="rose"] .topbar,
+    html[data-theme="sage"] .topbar {
       background: var(--card); border-color: var(--border);
+      box-shadow: 0 1px 0 var(--border), 0 2px 8px rgba(0,0,0,0.1);
     }
     html[data-theme="arctic"] aside,
-    html[data-theme="parchment"] aside {
+    html[data-theme="parchment"] aside,
+    html[data-theme="cloud"] aside,
+    html[data-theme="slate"] aside,
+    html[data-theme="linen"] aside,
+    html[data-theme="rose"] aside,
+    html[data-theme="sage"] aside {
       background: var(--sidebar-bg); border-color: var(--sidebar-border);
     }
 
@@ -170,7 +186,7 @@
       background-attachment: fixed, fixed, fixed;
       color: var(--text);
       font-family: var(--sans);
-      font-size: 15px;
+      font-size: var(--ui-font-size, 15px);
       line-height: 1.6;
       min-height: 100vh;
     }
@@ -182,7 +198,8 @@
       left: 0;
       right: 0;
       height: var(--topbar-h);
-      background: var(--surface);
+      background-color: var(--surface);
+      background-image: none;
       border-bottom: 1px solid var(--border);
       box-shadow: 0 1px 0 var(--border), 0 4px 16px rgba(0,0,0,0.35);
       display: flex;
@@ -190,19 +207,43 @@
       gap: 12px;
       padding: 0 16px;
       z-index: 300;
+      overflow: visible;
+      isolation: isolate;
     }
     .topbar-brand {
-      font-size: 2.56em;
-      font-weight: 900;
-      letter-spacing: 4px;
-      color: #fff;
       text-decoration: none;
       flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 2px;
+    }
+    .topbar-wordmark {
+      font-family: 'Orbitron', var(--mono);
+      font-size: 1.72em;
+      font-weight: 900;
+      letter-spacing: 6px;
+      color: #fff;
       white-space: nowrap;
-      text-shadow: 0 0 18px rgba(0,255,204,0.18);
+      line-height: 1;
+      text-shadow: 0 0 22px rgba(0,255,204,0.28), 0 0 6px rgba(0,255,204,0.12);
+    }
+    .topbar-site { color: var(--cyan); }
+    .topbar-aegis {
+      font-family: var(--mono);
+      font-size: 0.6em;
+      font-weight: 500;
+      letter-spacing: 1.8px;
+      color: var(--muted);
+      white-space: nowrap;
       line-height: 1;
     }
-    .topbar-brand span { color: var(--cyan); }
+    .topbar-aegis .aegis-l {
+      color: var(--cyan);
+      font-weight: 800;
+      font-size: 1.08em;
+    }
 
     /* ── Sidebar ─────────────────────────────── */
     .sidebar {
@@ -384,7 +425,7 @@
       flex-shrink: 0;
     }
 
-    /* ── Sidebar Daily Challenge widget ─────────────── */
+    /* ── Sidebar Skill Builder widget ─────────────── */
     .sb-quiz-widget {
       flex-shrink: 0;
       border-bottom: 1px solid var(--sidebar-border);
@@ -416,10 +457,40 @@
       white-space: nowrap;
       flex-shrink: 0;
     }
+    @keyframes legendPulse {
+      0%,100% { box-shadow: 0 0 4px 1px rgba(255,215,0,0.5); }
+      50%      { box-shadow: 0 0 12px 4px rgba(255,215,0,0.9); }
+    }
+    .sb-quiz-streak-legend {
+      animation: legendPulse 2s ease-in-out infinite;
+    }
     .sb-quiz-done-pass { color: var(--green); font-weight: 700; }
     .sb-quiz-done-fail { color: var(--yellow); font-weight: 700; }
     .sb-quiz-pending {
       color: var(--cyan); font-weight: 700; text-decoration: none;
+    }
+
+    /* ── Training resource links (Skill Builder) ────── */
+    .sb-training-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px 8px;
+      padding-top: 6px;
+      border-top: 1px solid var(--sidebar-border);
+      margin-top: 6px;
+    }
+    .sb-training-links a {
+      font-size: 0.72em;
+      color: var(--muted);
+      text-decoration: none;
+      white-space: nowrap;
+      opacity: 0.75;
+      transition: color .15s, opacity .15s;
+    }
+    .sb-training-links a:hover {
+      color: var(--cyan);
+      opacity: 1;
+      text-decoration: none;
     }
 
     /* ── Sidebar advisory feed ─────────────────────── */
@@ -508,6 +579,30 @@
     .has-role-banner .sidebar { top: calc(var(--topbar-h) + var(--role-banner-h)); }
     .has-role-banner #main-wrapper { padding-top: calc(var(--topbar-h) + var(--role-banner-h)); }
 
+    /* ── View-As banner — shifts everything down ── */
+    .has-view-as-banner .topbar  { top: var(--role-banner-h); }
+    .has-view-as-banner .sidebar { top: calc(var(--topbar-h) + var(--role-banner-h)); }
+    .has-view-as-banner #main-wrapper { padding-top: calc(var(--topbar-h) + var(--role-banner-h)); }
+    /* Both banners active — double-shift */
+    .has-role-banner.has-view-as-banner .topbar  { top: calc(var(--role-banner-h) * 2); }
+    .has-role-banner.has-view-as-banner .sidebar { top: calc(var(--topbar-h) + var(--role-banner-h) * 2); }
+    .has-role-banner.has-view-as-banner #main-wrapper { padding-top: calc(var(--topbar-h) + var(--role-banner-h) * 2); }
+
+    /* ── Demo banner — always fixed at top: 0, pushes everything else down ── */
+    .has-demo-banner .topbar  { top: var(--demo-banner-h); }
+    .has-demo-banner .sidebar { top: calc(var(--topbar-h) + var(--demo-banner-h)); }
+    .has-demo-banner #main-wrapper { padding-top: calc(var(--topbar-h) + var(--demo-banner-h)); }
+    .has-demo-banner .role-banner { top: var(--demo-banner-h); }
+    .has-demo-banner.has-role-banner .topbar  { top: calc(var(--demo-banner-h) + var(--role-banner-h)); }
+    .has-demo-banner.has-role-banner .sidebar { top: calc(var(--topbar-h) + var(--demo-banner-h) + var(--role-banner-h)); }
+    .has-demo-banner.has-role-banner #main-wrapper { padding-top: calc(var(--topbar-h) + var(--demo-banner-h) + var(--role-banner-h)); }
+    .has-demo-banner.has-view-as-banner .topbar  { top: calc(var(--demo-banner-h) + var(--role-banner-h)); }
+    .has-demo-banner.has-view-as-banner .sidebar { top: calc(var(--topbar-h) + var(--demo-banner-h) + var(--role-banner-h)); }
+    .has-demo-banner.has-view-as-banner #main-wrapper { padding-top: calc(var(--topbar-h) + var(--demo-banner-h) + var(--role-banner-h)); }
+    .has-demo-banner.has-role-banner.has-view-as-banner .topbar  { top: calc(var(--demo-banner-h) + var(--role-banner-h) * 2); }
+    .has-demo-banner.has-role-banner.has-view-as-banner .sidebar { top: calc(var(--topbar-h) + var(--demo-banner-h) + var(--role-banner-h) * 2); }
+    .has-demo-banner.has-role-banner.has-view-as-banner #main-wrapper { padding-top: calc(var(--topbar-h) + var(--demo-banner-h) + var(--role-banner-h) * 2); }
+
     /* ── Layout ─────────────────────────────── */
     .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
     .page { padding: 32px 0 80px; }
@@ -519,20 +614,9 @@
       align-items: center;
       overflow: hidden;
       min-width: 0;
-      gap: 20px;
-      margin-left: 54px;
+      margin-left: 24px;
       margin-right: 20px;
     }
-    .ticker-label {
-      font-size: 0.6em;
-      color: var(--muted);
-      white-space: nowrap;
-      flex-shrink: 0;
-      font-family: var(--mono);
-      line-height: 1.3;
-    }
-    .argus-l   { color: var(--cyan); font-size: 1.25em; font-weight: 900; vertical-align: baseline; }
-    .argus-sub { color: var(--muted); font-size: 0.82em; }
     .ticker-mask {
       flex: 1;
       overflow: hidden;
@@ -770,7 +854,7 @@
     table { width: 100%; border-collapse: collapse; }
     th {
       text-align: left;
-      padding: 8px 12px;
+      padding: calc(8px * var(--ui-density, 1)) 12px;
       font-size: 0.66em;
       font-weight: 700;
       letter-spacing: 1.5px;
@@ -779,7 +863,7 @@
       border-bottom: 1px solid var(--border);
     }
     td {
-      padding: 8px 12px;
+      padding: calc(8px * var(--ui-density, 1)) 12px;
       border-bottom: 1px solid rgba(30,30,48,0.6);
       vertical-align: middle;
     }
@@ -798,7 +882,7 @@
       transition: border-color 0.15s, transform 0.15s;
     }
     .stat:hover { border-color: #2a2a40; transform: translateY(-1px); }
-    .stat-active { border-color: rgba(0,255,204,0.5) !important; background: rgba(0,255,204,0.06) !important; }
+    .stat-active { border-color: rgba(0,255,204,0.5) !important; background: var(--surface) !important; box-shadow: inset 0 0 0 9999px rgba(0,255,204,0.07); }
     .stat-value { font-size: 1.9em; font-weight: 900; color: var(--cyan); line-height: 1; }
     .stat-label { font-size: 0.62em; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 5px; }
 
@@ -915,8 +999,11 @@
       .sidebar, .topbar { display: none !important; }
       #main-wrapper { margin-left: 0 !important; padding-top: 0 !important; }
     }
+    /* ── Skip navigation (Section 508 / WCAG 2.4.1) ─────────────── */
+    .skip-link { position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
+    .skip-link:focus { position:static; width:auto; height:auto; padding:0.5rem 1rem; background:var(--cyan); color:#000; font-weight:700; z-index:9999; }
   </style>
-  {% if is_admin and chat_enabled %}
+  {% if (is_admin or is_staff_chat) and chat_enabled %}
   <link rel="stylesheet" href="/static/admin-chat.css">
   {% endif %}
   {% block head %}{% endblock %}
@@ -925,8 +1012,10 @@
           integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2uFgteaCF7KM2/2T6n5vw5F7QoS04cxTW2"
           crossorigin="anonymous" defer></script>
 </head>
-<body{% if is_role_view|default(false) %} class="has-role-banner"{% endif %}
+<body class="{% if demo_mode|default(false) %}has-demo-banner {% endif %}{% if is_role_view|default(false) or demo_mode|default(false) %}has-role-banner{% endif %}{% if is_view_as|default(false) %} has-view-as-banner{% endif %}"
   style="--ui-font-size:{{ pref_font_size|default('14px') }};--ui-density:{% if pref_density|default('comfortable') == 'compact' %}0.85{% elif pref_density|default('comfortable') == 'spacious' %}1.15{% else %}1{% endif %}"
+  data-idle-warn="25"
+  data-idle-timeout="30"
   hx-boost="true"
   hx-target="#main-content"
   hx-select="#main-content"
@@ -934,9 +1023,9 @@
   hx-indicator="#hx-indicator"
   hx-on:htmx:before-request="sessionStorage.setItem('bsv-sb-scroll', document.getElementById('sidebar')?.scrollTop || 0)"
   hx-on:htmx:after-settle="(function(){var sb=document.getElementById('sidebar');if(sb){sb.scrollTop=parseInt(sessionStorage.getItem('bsv-sb-scroll')||'0',10);}if(typeof initPage==='function')initPage();})()">
-
+<a href="#main-content" class="skip-link">Skip to main content</a>
 {# ── Role Shell banner — fixed above topbar, role-colored ─────────────────── #}
-{% if is_role_view|default(false) %}
+{% if is_role_view|default(false) or demo_mode|default(false) %}
 {% set _role_colors = {
   'ao':                 ('#f44336', 'rgba(244,67,54,0.18)'),
   'ciso':               ('#e040fb', 'rgba(224,64,251,0.18)'),
@@ -951,23 +1040,42 @@
   'data_owner':         ('#40c4ff', 'rgba(64,196,255,0.18)'),
   'pmo':                ('#69f0ae', 'rgba(105,240,174,0.18)'),
   'incident_responder': ('#ffd740', 'rgba(255,215,64,0.18)'),
+  'risk_manager':       ('#b2ff59', 'rgba(178,255,89,0.18)'),
+  'privacy_officer':    ('#ea80fc', 'rgba(234,128,252,0.18)'),
 } %}
 {% set _rc = _role_colors.get(user_role|default('employee'), ('#9e9e9e','rgba(158,158,158,0.15)')) %}
 <div class="role-banner"
      style="color:{{ _rc[0] }};background:var(--surface);border-bottom:2px solid {{ _rc[0] }};border-left:4px solid {{ _rc[0] }}">
-  <span>⬡ WORKING AS {{ user_role | replace('_',' ') | upper }}</span>
-  <a href="/exit-shell" style="color:{{ _rc[0] }};text-decoration:none;opacity:0.85">← Reset Role</a>
+  <span>⬡ {{ 'DEMO — ' if demo_mode|default(false) else '' }}VIEWING AS {{ user_role | replace('_',' ') | upper }}</span>
+  {% if is_role_view|default(false) %}
+  <a href="/exit-shell" style="color:{{ _rc[0] }};text-decoration:none;opacity:0.85">← Exit Role</a>
+  {% endif %}
 </div>
 {% endif %}
 
-{# ── View-As banner (manager viewing employee workspace) ──────────────────── #}
+{# ── Demo banner — fixed at absolute top, above all other chrome ── #}
+{% if demo_mode|default(false) %}
+<div style="position:fixed;top:0;left:0;right:0;height:var(--demo-banner-h);
+            background:#0f1e4a;border-bottom:1px solid #2546a0;
+            display:flex;align-items:center;justify-content:center;gap:16px;
+            font-size:0.68em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+            color:#7eb3ff;z-index:401;overflow:hidden">
+  <span>&#9679; LIVE DEMO &nbsp;&middot;&nbsp; Explore freely &nbsp;&middot;&nbsp; Exports &amp; scans disabled &nbsp;&middot;&nbsp; Session resets on browser close &nbsp;&middot;&nbsp; <a href="/privacy" style="color:inherit;text-decoration:underline;font-weight:400">Privacy</a></span>
+  <a href="mailto:{{ contact_email | default('dan@borisov.network') }}"
+     style="color:#fff;background:rgba(37,99,235,0.55);padding:1px 10px;border-radius:3px;text-decoration:none;font-size:0.95em;flex-shrink:0">
+    Request a Walkthrough &rarr;
+  </a>
+</div>
+{% endif %}
+
+{# ── View-As banner — stacks below demo banner if present ── #}
 {% if is_view_as %}
-<div style="position:fixed;top:{% if is_role_view %}var(--role-banner-h){% else %}0{% endif %};
+<div style="position:fixed;top:{% if demo_mode|default(false) %}var(--demo-banner-h){% elif is_role_view %}var(--role-banner-h){% else %}0{% endif %};
             left:0;right:0;height:var(--role-banner-h);
             background:rgba(118,255,3,0.10);border-bottom:1px solid rgba(118,255,3,0.3);
             display:flex;align-items:center;justify-content:center;gap:14px;
             font-size:0.72em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
-            color:#76ff03;z-index:{% if is_role_view %}399{% else %}400{% endif %}">
+            color:#76ff03;z-index:399">
   <span>👤 VIEWING {{ viewed_user | upper }} WORKSPACE</span>
   <a href="/exit-view-as" style="color:#76ff03;opacity:0.75;text-decoration:none;font-size:0.9em">← Exit View</a>
 </div>
@@ -975,12 +1083,21 @@
 
 {# ── Topbar ────────────────────────────────────────────────────────────────── #}
 <header class="topbar">
-  {# Brand (small in topbar) #}
-  <a class="topbar-brand" href="/">{{ app_name[:5] }}<span>{{ app_name[5:] }}</span></a>
+  {# Brand #}
+  {# Brand home link — always routes admin back to /admin cleanly, clearing any shell or mode state #}
+  {% if is_admin and is_role_view %}
+  <a class="topbar-brand" href="/exit-shell" title="Exit role shell and return to admin">
+  {% elif is_admin %}
+  <a class="topbar-brand" href="/switch-view?mode=admin">
+  {% else %}
+  <a class="topbar-brand" href="/">
+  {% endif %}
+    <span class="topbar-wordmark">BLACK<span class="topbar-site">SITE</span></span>
+    <span class="topbar-aegis"><span class="aegis-l">A</span>daptive <span class="aegis-l">E</span>nterprise <span class="aegis-l">G</span>overnance <span class="aegis-l">I</span>ntelligence <span class="aegis-l">S</span>ystem</span>
+  </a>
 
-  {# Security advisory ticker — ARGUS feed #}
-  <div class="ticker-wrap" aria-live="polite" aria-label="ARGUS security feed">
-    <span class="ticker-label"><span class="argus-l">A</span><span class="argus-sub">utomated</span> <span class="argus-l">R</span><span class="argus-sub">econnaissance</span> &amp; <span class="argus-l">G</span><span class="argus-sub">overnance</span> <span class="argus-l">U</span><span class="argus-sub">nified</span> <span class="argus-l">S</span><span class="argus-sub">ystem</span></span>
+  {# Security advisory ticker feed #}
+  <div class="ticker-wrap" aria-live="polite" aria-label="Security advisory feed">
     <div class="ticker-mask">
       <div class="ticker-content" id="ticker-content">Initializing…</div>
     </div>
@@ -1004,6 +1121,58 @@
                 box-shadow:0 6px 16px rgba(0,0,0,0.4)">
     </div>
   </form>
+
+  {# Org switcher — shown when user has org context #}
+  {% if remote_user and active_org_id %}
+  <details class="nav-org-menu" style="position:relative;flex-shrink:0;">
+    <summary style="list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;
+                    padding:4px 10px;border-radius:6px;border:1px solid var(--border);
+                    background:var(--card);font-size:0.75em;color:var(--muted);
+                    white-space:nowrap;transition:border-color 0.15s,color 0.15s"
+             onmouseover="this.style.borderColor='rgba(0,255,204,0.3)';this.style.color='var(--text)'"
+             onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+      </svg>
+      <span id="nav-org-name">{{ active_org_name if active_org_name else "Default Org" }}</span>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+    </summary>
+    <div style="position:absolute;top:calc(100% + 6px);right:0;min-width:220px;
+                background:var(--card);border:1px solid var(--border);border-radius:8px;
+                padding:6px 0;z-index:400;box-shadow:0 6px 16px rgba(0,0,0,0.4)">
+      {% if user_orgs %}
+        {% for o_id, o_name, o_role in user_orgs %}
+        <form method="post" action="/switch-org" style="margin:0">
+          <input type="hidden" name="org_id" value="{{ o_id }}">
+          <button type="submit"
+                  style="width:100%;text-align:left;background:{% if o_id == active_org_id %}var(--bg2){% else %}transparent{% endif %};
+                         border:none;padding:7px 14px;color:var(--text);cursor:pointer;
+                         font-size:0.8em;display:flex;align-items:center;gap:8px"
+                  onmouseover="this.style.background='var(--bg2)'"
+                  onmouseout="this.style.background='{% if o_id == active_org_id %}var(--bg2){% else %}transparent{% endif %}'">
+            {% if o_id == active_org_id %}
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+            {% else %}
+            <span style="display:inline-block;width:10px"></span>
+            {% endif %}
+            <span>{{ o_name }}</span>
+            <span style="margin-left:auto;color:var(--muted);font-size:0.85em">{{ o_role }}</span>
+          </button>
+        </form>
+        {% endfor %}
+      {% endif %}
+      {% if is_admin %}
+      <hr style="border:none;border-top:1px solid var(--border);margin:4px 0">
+      <a href="/admin/orgs" style="display:block;padding:7px 14px;color:var(--cyan);font-size:0.8em;text-decoration:none"
+         onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='transparent'">
+        Manage organizations →
+      </a>
+      {% endif %}
+    </div>
+  </details>
+  {% endif %}
 
   {# Notification bell #}
   {% if remote_user %}
@@ -1037,8 +1206,8 @@
   <details class="nav-user-menu">
     <summary>
       <div class="nav-user">
-        <span class="dot"></span>
-        <span>{{ display_name or remote_user }}</span>
+        <span class="dot" id="navStatusDot"></span>
+        <span>{{ (display_name or remote_user) | human }}</span>
         {% if is_admin %}
           {% if view_mode == 'employee' %}
             <span class="badge-empview">emp view</span>
@@ -1050,7 +1219,7 @@
     </summary>
     <div class="nav-user-dropdown">
       <div class="nav-dd-header">
-        <div class="nav-dd-username">{{ display_name or remote_user }}</div>
+        <div class="nav-dd-username">{{ (display_name or remote_user) | human }}</div>
         <div class="nav-dd-role">
           {% if is_admin %}
             {% if view_mode == 'employee' %}Employee View{% else %}Admin{% endif %}
@@ -1060,7 +1229,7 @@
               'sca':'SCA','system_owner':'System Owner','auditor':'Auditor','bcdr':'BCDR',
               'employee':'Employee','pen_tester':'Pen Tester','data_owner':'Data Owner',
               'pmo':'PMO','incident_responder':'Incident Responder'} %}
-            {{ _hdr_labels.get(_r, _r|title) }}
+            {{ _hdr_labels.get(_r, _r | human) }}
           {% endif %} · {{ brand }}
         </div>
       </div>
@@ -1068,6 +1237,9 @@
       <div class="nav-dd-section">Identity</div>
       <a href="/profile">My Profile</a>
       <a href="/profile/feeds">My Feeds</a>
+      {% if (is_admin or is_staff_chat) and chat_enabled %}
+      <a href="javascript:void(0)" onclick="navCtxOpen()" style="color:var(--muted);font-size:0.78em">Away / Chat Name…</a>
+      {% endif %}
       {% if is_admin and view_mode == 'admin' %}
         <a href="/admin">Admin Dashboard</a>
       {% else %}
@@ -1103,12 +1275,17 @@
                 style="width:100%;background:var(--surface);border:1px solid var(--border);
                        border-radius:4px;color:var(--text);padding:5px 8px;font-size:0.78em;
                        cursor:pointer;outline:none">
-          <option value="">Switch Role ▾</option>
+          <option value="">{% if demo_mode|default(false) %}Explore a Role ▾{% else %}Switch Role ▾{% endif %}</option>
           {% set _dd_labels = {
-            'admin':'Admin','ao':'AO','ciso':'CISO','issm':'ISSM','isso':'ISSO',
-            'sca':'SCA','system_owner':'System Owner','auditor':'Auditor',
-            'bcdr':'BCDR','employee':'Employee','pen_tester':'Pen Tester',
-            'data_owner':'Data Owner','pmo':'PMO','incident_responder':'Incident Responder'
+            'admin':'Admin','ao':'Authorizing Official (AO)','ciso':'CISO',
+            'issm':'ISSM','isso':'ISSO','sca':'Security Control Assessor (SCA)',
+            'system_owner':'System Owner','auditor':'Auditor',
+            'bcdr':'BCDR Coordinator','employee':'Employee','pen_tester':'Pen Tester',
+            'data_owner':'Data Owner','pmo':'PMO / Program Officer',
+            'incident_responder':'Incident Responder','privacy_officer':'Privacy Officer',
+            'risk_manager':'Risk Manager','developer':'Developer / Engineer',
+            'executive':'Executive','vendor':'Vendor / Third-Party',
+            'contracting_officer':'Contracting Officer'
           } %}
           {% for r in _switch_roles %}
           <option value="{{ r }}"
@@ -1135,13 +1312,18 @@
     <button class="sb-toggle" id="sb-toggle-btn" title="Toggle sidebar" aria-label="Toggle sidebar">☰</button>
   </div>
 
-  {# ── Daily Challenge mini-widget ─────────────────────── #}
+  {# ── Skill Builder mini-widget ─────────────────────── #}
   <div class="sb-quiz-widget" id="sbQuizWidget">
-    <div class="sb-quiz-icon" id="sbQuizIcon" title="Daily Challenge">⚡</div>
+    <div class="sb-quiz-icon" id="sbQuizIcon" title="Skill Builder">⚡</div>
     <div class="sb-quiz-details">
-      <div class="sb-quiz-label">Daily Challenge</div>
+      <div class="sb-quiz-label">Skill Builder</div>
       <div class="sb-quiz-row" id="sbQuizRow">
         <span style="color:#333;font-size:0.8em">—</span>
+      </div>
+      <div class="sb-training-links">
+        <a href="#" onclick="return trackTraining('niccs')" title="CISA NICCS — Free federal cybersecurity training catalog">🎓 NICCS</a>
+        <a href="#" onclick="return trackTraining('dod_cyber')" title="DoD Cyber Exchange — Cyber awareness &amp; IA training">🛡 DoD Cyber</a>
+        <a href="#" onclick="return trackTraining('sans_aces')" title="SANS Cyber Aces — Free foundational security courses">⚡ SANS Aces</a>
       </div>
     </div>
   </div>
@@ -1170,8 +1352,17 @@
       <a href="/posture" class="sb-link{% if p == '/posture' %} active{% endif %}">
         <span class="sb-icon">◈</span><span class="sb-text">Compliance Posture</span>
       </a>
-      <a href="/rmf" class="sb-link{% if p.startswith('/rmf') %} active{% endif %}">
-        <span class="sb-icon">⟳</span><span class="sb-text">RMF Workflow</span>
+      {% if system is defined and system %}
+      <a href="/systems/{{ system.id }}/auth-status" class="sb-link{% if '/auth-status' in p %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Status</span>
+      </a>
+      {% else %}
+      <a href="/submissions" class="sb-link{% if p.startswith('/submissions') %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Tracker</span>
+      </a>
+      {% endif %}
+      <a href="/sca/workspace" class="sb-link{% if p.startswith('/sca') %} active{% endif %}">
+        <span class="sb-icon">⊡</span><span class="sb-text">SCA Workspace</span>
       </a>
       <a href="/controls" class="sb-link{% if p.startswith('/controls') %} active{% endif %}">
         <span class="sb-icon">⊞</span><span class="sb-text">Control Catalog</span>
@@ -1192,11 +1383,14 @@
       <a href="/observations" class="sb-link{% if p.startswith('/observations') %} active{% endif %}" id="sb-obs-admin">
         <span class="sb-icon">⚐</span><span class="sb-text">Observations <span id="obs-badge-admin" class="obs-badge" style="display:none;background:rgba(244,67,54,.2);color:var(--red);border-radius:3px;padding:0 5px;font-size:.8em;margin-left:2px"></span></span>
       </a>
-      <a href="/ato" class="sb-link{% if p.startswith('/ato') %} active{% endif %}">
-        <span class="sb-icon">⊕</span><span class="sb-text">ATO Package</span>
+      <a href="/packages" class="sb-link{% if p.startswith('/packages') or p.startswith('/ato') %} active{% endif %}">
+        <span class="sb-icon">⊕</span><span class="sb-text">Auth Package</span>
       </a>
-      <a href="/submissions" class="sb-link{% if p.startswith('/submissions') %} active{% endif %}">
-        <span class="sb-icon">✓</span><span class="sb-text">ATO Submissions</span>
+      <a href="/submissions" class="sb-link{% if p == '/submissions' %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Submissions</span>
+      </a>
+      <a href="/submissions/approved" class="sb-link{% if p == '/submissions/approved' %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Approved Packages</span>
       </a>
       <a href="/reports" class="sb-link{% if p.startswith('/reports') %} active{% endif %}">
         <span class="sb-icon">↓</span><span class="sb-text">Reports</span>
@@ -1204,18 +1398,12 @@
     </div>
 
     <div class="sb-group">
-      <div class="sb-group-label">Administration</div>
-      <a href="/admin/users" class="sb-link{% if p.startswith('/admin/users') %} active{% endif %}">
-        <span class="sb-icon">◉</span><span class="sb-text">User Management</span>
+      <div class="sb-group-label">Tools</div>
+      <a href="/tools/r4-to-r5" class="sb-link{% if p == '/tools/r4-to-r5' %} active{% endif %}">
+        <span class="sb-icon">⇄</span><span class="sb-text">Rev 4 → Rev 5</span>
       </a>
-      <a href="/admin/audit" class="sb-link{% if p.startswith('/admin/audit') %} active{% endif %}">
-        <span class="sb-icon">≡</span><span class="sb-text">Audit Log</span>
-      </a>
-      <a href="/admin/siem" class="sb-link{% if p.startswith('/admin/siem') %} active{% endif %}">
-        <span class="sb-icon">⚡</span><span class="sb-text">SIEM</span>
-      </a>
-      <a href="/admin/systems/archived" class="sb-link{% if p.startswith('/admin/systems/archived') %} active{% endif %}">
-        <span class="sb-icon">⊗</span><span class="sb-text">Archived Systems</span>
+      <a href="/tools/sp171-migration" class="sb-link{% if p == '/tools/sp171-migration' %} active{% endif %}">
+        <span class="sb-icon">⇄</span><span class="sb-text">800-171 Rev 2 → 3</span>
       </a>
     </div>
 
@@ -1229,15 +1417,15 @@
     </div>
 
     <div class="sb-group">
-      <div class="sb-group-label">ATO Decisions</div>
-      <a href="/submissions" class="sb-link{% if p.startswith('/submissions') %} active{% endif %}">
-        <span class="sb-icon">✓</span><span class="sb-text">ATO Submissions</span>
+      <div class="sb-group-label">Authorization Decisions</div>
+      <a href="/submissions" class="sb-link{% if p == '/submissions' %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Active Submissions</span>
       </a>
-      <a href="/ato" class="sb-link{% if p.startswith('/ato') %} active{% endif %}">
-        <span class="sb-icon">⊙</span><span class="sb-text">ATO Package</span>
+      <a href="/submissions/approved" class="sb-link{% if p == '/submissions/approved' %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Approved Packages</span>
       </a>
-      <a href="/rmf" class="sb-link{% if p.startswith('/rmf') %} active{% endif %}">
-        <span class="sb-icon">⟳</span><span class="sb-text">RMF Workflow</span>
+      <a href="/packages" class="sb-link{% if p.startswith('/packages') or p.startswith('/ato') %} active{% endif %}">
+        <span class="sb-icon">⊙</span><span class="sb-text">Auth Package</span>
       </a>
     </div>
 
@@ -1285,12 +1473,18 @@
 
     <div class="sb-group">
       <div class="sb-group-label">Authorization</div>
-      <a href="/ato" class="sb-link{% if p.startswith('/ato') %} active{% endif %}">
-        <span class="sb-icon">⊙</span><span class="sb-text">ATO Package</span>
+      <a href="/packages" class="sb-link{% if p.startswith('/packages') or p.startswith('/ato') %} active{% endif %}">
+        <span class="sb-icon">⊙</span><span class="sb-text">Auth Package</span>
       </a>
-      <a href="/rmf" class="sb-link{% if p.startswith('/rmf') %} active{% endif %}">
-        <span class="sb-icon">⟳</span><span class="sb-text">RMF Workflow</span>
+      {% if system is defined and system %}
+      <a href="/systems/{{ system.id }}/auth-status" class="sb-link{% if '/auth-status' in p %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Status</span>
       </a>
+      {% else %}
+      <a href="/submissions" class="sb-link{% if p.startswith('/submissions') %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Tracker</span>
+      </a>
+      {% endif %}
     </div>
 
     <div class="sb-group">
@@ -1314,8 +1508,11 @@
     {# ── ISSM NAV (org-level security program manager) ── #}
     <div class="sb-group">
       <div class="sb-group-label">Overview</div>
-      <a href="/issm/dashboard" class="sb-link{% if p.startswith('/issm') %} active{% endif %}">
+      <a href="/issm/dashboard" class="sb-link{% if p == '/issm/dashboard' %} active{% endif %}">
         <span class="sb-icon">⊡</span><span class="sb-text">ISSM Dashboard</span>
+      </a>
+      <a href="/issm/daily" class="sb-link{% if p == '/issm/daily' %} active{% endif %}">
+        <span class="sb-icon">⊞</span><span class="sb-text">Daily Portfolio</span>
       </a>
     </div>
 
@@ -1324,9 +1521,15 @@
       <a href="/posture" class="sb-link{% if p == '/posture' %} active{% endif %}">
         <span class="sb-icon">◈</span><span class="sb-text">Compliance Posture</span>
       </a>
-      <a href="/rmf" class="sb-link{% if p.startswith('/rmf') %} active{% endif %}">
-        <span class="sb-icon">⟳</span><span class="sb-text">RMF Workflow</span>
+      {% if system is defined and system %}
+      <a href="/systems/{{ system.id }}/auth-status" class="sb-link{% if '/auth-status' in p %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Status</span>
       </a>
+      {% else %}
+      <a href="/submissions" class="sb-link{% if p.startswith('/submissions') %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Tracker</span>
+      </a>
+      {% endif %}
       <a href="/controls" class="sb-link{% if p.startswith('/controls') %} active{% endif %}">
         <span class="sb-icon">⊞</span><span class="sb-text">Control Catalog</span>
       </a>
@@ -1346,11 +1549,11 @@
       <a href="/observations" class="sb-link{% if p.startswith('/observations') %} active{% endif %}" id="sb-obs-issm">
         <span class="sb-icon">⚐</span><span class="sb-text">Observations <span id="obs-badge-issm" class="obs-badge" style="display:none;background:rgba(244,67,54,.2);color:var(--red);border-radius:3px;padding:0 5px;font-size:.8em;margin-left:2px"></span></span>
       </a>
-      <a href="/ato" class="sb-link{% if p.startswith('/ato') %} active{% endif %}">
-        <span class="sb-icon">⊕</span><span class="sb-text">ATO Package</span>
+      <a href="/packages" class="sb-link{% if p.startswith('/packages') or p.startswith('/ato') %} active{% endif %}">
+        <span class="sb-icon">⊕</span><span class="sb-text">Auth Package</span>
       </a>
       <a href="/submissions" class="sb-link{% if p.startswith('/submissions') %} active{% endif %}">
-        <span class="sb-icon">✓</span><span class="sb-text">ATO Submissions</span>
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Submissions</span>
       </a>
     </div>
 
@@ -1365,13 +1568,26 @@
       <a href="/admin/siem" class="sb-link{% if p.startswith('/admin/siem') %} active{% endif %}">
         <span class="sb-icon">⚡</span><span class="sb-text">SIEM</span>
       </a>
+      <a href="/admin/demo-access" class="sb-link{% if p.startswith('/admin/demo-access') %} active{% endif %}">
+        <span class="sb-icon">◎</span><span class="sb-text">Demo Visitors</span>
+      </a>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-label">Tools</div>
+      <a href="/tools/r4-to-r5" class="sb-link{% if p == '/tools/r4-to-r5' %} active{% endif %}">
+        <span class="sb-icon">⇄</span><span class="sb-text">Rev 4 → Rev 5</span>
+      </a>
+      <a href="/tools/sp171-migration" class="sb-link{% if p == '/tools/sp171-migration' %} active{% endif %}">
+        <span class="sb-icon">⇄</span><span class="sb-text">800-171 Rev 2 → 3</span>
+      </a>
     </div>
 
     {% elif role == 'isso' %}
     {# ── ISSO NAV (system-level security officer) ── #}
     <div class="sb-group">
       <div class="sb-group-label">Overview</div>
-      <a href="/dashboard" class="sb-link{% if p == '/dashboard' %} active{% endif %}">
+      <a href="/isso/dashboard" class="sb-link{% if p == '/isso/dashboard' %} active{% endif %}">
         <span class="sb-icon">⊡</span><span class="sb-text">Dashboard</span>
       </a>
     </div>
@@ -1397,12 +1613,18 @@
       <a href="/observations" class="sb-link{% if p.startswith('/observations') %} active{% endif %}" id="sb-obs-isso">
         <span class="sb-icon">⚐</span><span class="sb-text">Observations <span id="obs-badge-isso" class="obs-badge" style="display:none;background:rgba(244,67,54,.2);color:var(--red);border-radius:3px;padding:0 5px;font-size:.8em;margin-left:2px"></span></span>
       </a>
-      <a href="/ato" class="sb-link{% if p.startswith('/ato') %} active{% endif %}">
-        <span class="sb-icon">⊕</span><span class="sb-text">ATO Package</span>
+      <a href="/packages" class="sb-link{% if p.startswith('/packages') or p.startswith('/ato') %} active{% endif %}">
+        <span class="sb-icon">⊕</span><span class="sb-text">Auth Package</span>
       </a>
-      <a href="/rmf" class="sb-link{% if p.startswith('/rmf') %} active{% endif %}">
-        <span class="sb-icon">⟳</span><span class="sb-text">RMF Workflow</span>
+      {% if system is defined and system %}
+      <a href="/systems/{{ system.id }}/auth-status" class="sb-link{% if '/auth-status' in p %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Status</span>
       </a>
+      {% else %}
+      <a href="/submissions" class="sb-link{% if p.startswith('/submissions') %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Tracker</span>
+      </a>
+      {% endif %}
     </div>
 
     <div class="sb-group">
@@ -1419,8 +1641,11 @@
     {# ── SCA NAV (security control assessor — independent assessment) ── #}
     <div class="sb-group">
       <div class="sb-group-label">Workspace</div>
-      <a href="/sca/workspace" class="sb-link{% if p.startswith('/sca') %} active{% endif %}">
+      <a href="/sca/workspace" class="sb-link{% if p == '/sca/workspace' %} active{% endif %}">
         <span class="sb-icon">⊡</span><span class="sb-text">My Workspace</span>
+      </a>
+      <a href="/sca/dashboard" class="sb-link{% if p == '/sca/dashboard' %} active{% endif %}">
+        <span class="sb-icon">◈</span><span class="sb-text">SCA Dashboard</span>
       </a>
       <a href="/systems" class="sb-link{% if p.startswith('/systems') %} active{% endif %}">
         <span class="sb-icon">⊟</span><span class="sb-text">Assigned Systems</span>
@@ -1466,6 +1691,18 @@
       <div class="sb-group-label">Audit &amp; Compliance</div>
       <a href="/posture" class="sb-link{% if p == '/posture' %} active{% endif %}">
         <span class="sb-icon">◈</span><span class="sb-text">Compliance Posture</span>
+      </a>
+      {% if system is defined and system %}
+      <a href="/systems/{{ system.id }}/auth-status" class="sb-link{% if '/auth-status' in p %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Status</span>
+      </a>
+      {% else %}
+      <a href="/submissions" class="sb-link{% if p.startswith('/submissions') %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Tracker</span>
+      </a>
+      {% endif %}
+      <a href="/packages" class="sb-link{% if p.startswith('/packages') or p.startswith('/ato') %} active{% endif %}">
+        <span class="sb-icon">⊙</span><span class="sb-text">Auth Package</span>
       </a>
       <a href="/risks" class="sb-link{% if p.startswith('/risks') %} active{% endif %}">
         <span class="sb-icon">⚠</span><span class="sb-text">Risk Register</span>
@@ -1523,13 +1760,19 @@
     </div>
 
     <div class="sb-group">
-      <div class="sb-group-label">RMF Monitoring</div>
-      <a href="/ato" class="sb-link{% if p.startswith('/ato') %} active{% endif %}">
-        <span class="sb-icon">⊕</span><span class="sb-text">ATO Package</span>
+      <div class="sb-group-label">Authorization</div>
+      <a href="/packages" class="sb-link{% if p.startswith('/packages') or p.startswith('/ato') %} active{% endif %}">
+        <span class="sb-icon">⊕</span><span class="sb-text">Auth Package</span>
       </a>
-      <a href="/rmf" class="sb-link{% if p.startswith('/rmf') %} active{% endif %}">
-        <span class="sb-icon">⟳</span><span class="sb-text">RMF Workflow</span>
+      {% if system is defined and system %}
+      <a href="/systems/{{ system.id }}/auth-status" class="sb-link{% if '/auth-status' in p %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Status</span>
       </a>
+      {% else %}
+      <a href="/submissions" class="sb-link{% if p.startswith('/submissions') %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Tracker</span>
+      </a>
+      {% endif %}
       <a href="/reports" class="sb-link{% if p.startswith('/reports') %} active{% endif %}">
         <span class="sb-icon">↓</span><span class="sb-text">Reports</span>
       </a>
@@ -1549,17 +1792,23 @@
 
     <div class="sb-group">
       <div class="sb-group-label">GRC</div>
-      <a href="/rmf" class="sb-link{% if p.startswith('/rmf') %} active{% endif %}">
-        <span class="sb-icon">⟳</span><span class="sb-text">RMF Workflow</span>
+      {% if system is defined and system %}
+      <a href="/systems/{{ system.id }}/auth-status" class="sb-link{% if '/auth-status' in p %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Status</span>
       </a>
+      {% else %}
+      <a href="/submissions" class="sb-link{% if p.startswith('/submissions') %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Tracker</span>
+      </a>
+      {% endif %}
       <a href="/poam" class="sb-link{% if p.startswith('/poam') %} active{% endif %}">
         <span class="sb-icon">⚑</span><span class="sb-text">POA&amp;M Tracker</span>
       </a>
       <a href="/risks" class="sb-link{% if p.startswith('/risks') %} active{% endif %}">
         <span class="sb-icon">⚠</span><span class="sb-text">Risk Register</span>
       </a>
-      <a href="/ato" class="sb-link{% if p.startswith('/ato') %} active{% endif %}">
-        <span class="sb-icon">⊕</span><span class="sb-text">ATO Package</span>
+      <a href="/packages" class="sb-link{% if p.startswith('/packages') or p.startswith('/ato') %} active{% endif %}">
+        <span class="sb-icon">⊕</span><span class="sb-text">Auth Package</span>
       </a>
     </div>
 
@@ -1571,6 +1820,119 @@
       <a href="/reports" class="sb-link{% if p.startswith('/reports') %} active{% endif %}">
         <span class="sb-icon">↓</span><span class="sb-text">Reports</span>
       </a>
+    </div>
+
+    {% elif role == 'privacy_officer' %}
+    {# ── PRIVACY OFFICER NAV — approver/attestor, PII-scoped only ── #}
+    <div class="sb-group">
+      <div class="sb-group-label">My Review Queue</div>
+      <a href="/role/privacy/queue" class="sb-link{% if p.startswith('/role/privacy') %} active{% endif %}">
+        <span class="sb-icon">⊡</span><span class="sb-text">Privacy Reviews</span>
+      </a>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-label">Systems</div>
+      <a href="/systems?filter=pii" class="sb-link{% if p.startswith('/systems') %} active{% endif %}">
+        <span class="sb-icon">⊟</span><span class="sb-text">PII Systems</span>
+      </a>
+      {% if system is defined and system %}
+      <a href="/systems/{{ system.id }}/auth-status" class="sb-link{% if '/auth-status' in p %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Status</span>
+      </a>
+      {% endif %}
+    </div>
+
+    {% elif role == 'risk_manager' %}
+    {# ── RISK MANAGER NAV — risk acceptance sign-offs, POA&M oversight ── #}
+    <div class="sb-group">
+      <div class="sb-group-label">Risk Management</div>
+      <a href="/risks" class="sb-link{% if p.startswith('/risks') %} active{% endif %}">
+        <span class="sb-icon">⚠</span><span class="sb-text">Risk Register</span>
+      </a>
+      <a href="/poam" class="sb-link{% if p.startswith('/poam') %} active{% endif %}">
+        <span class="sb-icon">⚑</span><span class="sb-text">POA&amp;M Tracker</span>
+      </a>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-label">Systems</div>
+      <a href="/systems" class="sb-link{% if p.startswith('/systems') %} active{% endif %}">
+        <span class="sb-icon">⊟</span><span class="sb-text">System Catalog</span>
+      </a>
+      {% if system is defined and system %}
+      <a href="/systems/{{ system.id }}/auth-status" class="sb-link{% if '/auth-status' in p %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Status</span>
+      </a>
+      {% endif %}
+    </div>
+
+    {% elif role == 'developer' %}
+    {# ── DEVELOPER NAV — assigned systems only, dev-relevant controls ── #}
+    <div class="sb-group">
+      <div class="sb-group-label">My Systems</div>
+      <a href="/systems?filter=assigned" class="sb-link{% if p.startswith('/systems') %} active{% endif %}">
+        <span class="sb-icon">⊟</span><span class="sb-text">Assigned Systems</span>
+      </a>
+      {% if system is defined and system %}
+      <a href="/systems/{{ system.id }}/auth-status" class="sb-link{% if '/auth-status' in p %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Status</span>
+      </a>
+      {% endif %}
+    </div>
+
+    {% elif role == 'executive' %}
+    {# ── EXECUTIVE NAV — strategic read-only, sign-off queue ── #}
+    <div class="sb-group">
+      <div class="sb-group-label">Overview</div>
+      <a href="/dashboard" class="sb-link{% if p.startswith('/dashboard') %} active{% endif %}">
+        <span class="sb-icon">⊡</span><span class="sb-text">Dashboard</span>
+      </a>
+      <a href="/posture" class="sb-link{% if p == '/posture' %} active{% endif %}">
+        <span class="sb-icon">◈</span><span class="sb-text">Compliance Posture</span>
+      </a>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-label">Advisory</div>
+      <a href="/role/executive/observations" class="sb-link{% if p.startswith('/role/executive') %} active{% endif %}">
+        <span class="sb-icon">⊕</span><span class="sb-text">Observations</span>
+      </a>
+    </div>
+
+    {% elif role == 'vendor' %}
+    {# ── VENDOR NAV — strictly scoped to assigned engagement ── #}
+    <div class="sb-group">
+      <div class="sb-group-label">My Assignment</div>
+      <a href="/role/vendor/assignment" class="sb-link{% if p.startswith('/role/vendor') %} active{% endif %}">
+        <span class="sb-icon">⊟</span><span class="sb-text">My Engagement</span>
+      </a>
+      {% if system is defined and system %}
+      <a href="/systems/{{ system.id }}/auth-status" class="sb-link{% if '/auth-status' in p %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Status</span>
+      </a>
+      {% endif %}
+    </div>
+
+    {% elif role == 'contracting_officer' %}
+    {# ── CONTRACTING OFFICER NAV — auth package review and sign-off ── #}
+    <div class="sb-group">
+      <div class="sb-group-label">Pending Reviews</div>
+      <a href="/role/co/queue" class="sb-link{% if p.startswith('/role/co') %} active{% endif %}">
+        <span class="sb-icon">⊕</span><span class="sb-text">Review Queue</span>
+      </a>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-label">Packages</div>
+      <a href="/packages" class="sb-link{% if p.startswith('/packages') or p.startswith('/ato') %} active{% endif %}">
+        <span class="sb-icon">⊞</span><span class="sb-text">Auth Packages</span>
+      </a>
+      {% if system is defined and system %}
+      <a href="/systems/{{ system.id }}/auth-status" class="sb-link{% if '/auth-status' in p %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Status</span>
+      </a>
+      {% endif %}
     </div>
 
     {% else %}
@@ -1590,9 +1952,15 @@
       <a href="/controls" class="sb-link{% if p.startswith('/controls') %} active{% endif %}">
         <span class="sb-icon">⊞</span><span class="sb-text">Control Catalog</span>
       </a>
-      <a href="/rmf" class="sb-link{% if p.startswith('/rmf') %} active{% endif %}">
-        <span class="sb-icon">⟳</span><span class="sb-text">RMF Workflow</span>
+      {% if system is defined and system %}
+      <a href="/systems/{{ system.id }}/auth-status" class="sb-link{% if '/auth-status' in p %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Status</span>
       </a>
+      {% else %}
+      <a href="/submissions" class="sb-link{% if p.startswith('/submissions') %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Tracker</span>
+      </a>
+      {% endif %}
     </div>
 
     <div class="sb-group">
@@ -1606,11 +1974,11 @@
       <a href="/risks" class="sb-link{% if p.startswith('/risks') %} active{% endif %}">
         <span class="sb-icon">⚠</span><span class="sb-text">Risk Register</span>
       </a>
-      <a href="/ato" class="sb-link{% if p.startswith('/ato') %} active{% endif %}">
-        <span class="sb-icon">⊕</span><span class="sb-text">ATO Package</span>
+      <a href="/packages" class="sb-link{% if p.startswith('/packages') or p.startswith('/ato') %} active{% endif %}">
+        <span class="sb-icon">⊕</span><span class="sb-text">Auth Package</span>
       </a>
       <a href="/submissions" class="sb-link{% if p.startswith('/submissions') %} active{% endif %}">
-        <span class="sb-icon">✓</span><span class="sb-text">ATO Submissions</span>
+        <span class="sb-icon">✓</span><span class="sb-text">Auth Submissions</span>
       </a>
     </div>
 
@@ -1622,37 +1990,15 @@
     </div>
     {% endif %}
 
-    {# ── Admin Chat (admin users only) ── #}
-    {% if is_admin and not is_role_view|default(false) %}
-    <div class="sb-group" id="sbAdminChatArea">
-      <div class="sb-group-label">
-        Admin Chat
-        <span id="sbChatConnDot" class="status-dot" style="background:#555"></span>
-      </div>
-      <div class="sb-link" id="sbGroupChatBtn" style="cursor:pointer">
-        <span class="sb-icon" style="font-size:0.9em">#</span>
-        <span class="sb-text">group</span>
-        <span class="unread-dot" id="unread-@group" style="display:none"></span>
-      </div>
-      <div id="sbChatUsers"></div>
-      {# Status dot only — toggle via footer name click/right-click #}
-    </div>
-    {% endif %}
-
-    {# ── AI Assistant (all roles) ── #}
-    <div class="sb-group">
-      <div class="sb-group-label">AI Assistant</div>
-      <a href="/ai/chat" class="sb-link{% if p.startswith('/ai') %} active{% endif %}"
-         style="{% if p.startswith('/ai') %}color:var(--cyan){% endif %}">
-        <span class="sb-icon">🔒</span><span class="sb-text">GRC Assistant</span>
-      </a>
-    </div>
-
     {# ── Help section (all roles) ── #}
     <div class="sb-group">
       <div class="sb-group-label">Help</div>
       <a href="/help" class="sb-link{% if p.startswith('/help') %} active{% endif %}">
         <span class="sb-icon">?</span><span class="sb-text">Help Center</span>
+      </a>
+      <a href="/ai/chat" class="sb-link{% if p.startswith('/ai') %} active{% endif %}"
+         style="{% if p.startswith('/ai') %}color:var(--cyan){% endif %}">
+        <span class="sb-icon">🔒</span><span class="sb-text">GRC Assistant</span>
       </a>
     </div>
 
@@ -1670,13 +2016,18 @@
 
   </nav>
 
-  {# ── Sidebar advisory feed ─────────────────────────────────────────── #}
+  {# ── Sidebar advisory feed — collapsible ─────────────────────────── #}
   <div class="sb-advisory" id="sbAdvisoryBox">
     <div id="sb-adv-drag" class="sb-adv-drag" title="Drag to resize"></div>
     <div class="sb-advisory-icon" title="Security Advisories">⚠</div>
     <div class="sb-advisory-details">
-      <div class="sb-advisory-label">Security Advisories</div>
-      <div class="sb-advisory-scroll">
+      <div class="sb-advisory-label" id="sbAdvLabel"
+           style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between"
+           onclick="sbToggleSection('adv')" title="Click to collapse">
+        Security Advisories
+        <span id="sbAdvChevron" style="font-size:0.8em;opacity:0.5;transition:transform 0.2s">▾</span>
+      </div>
+      <div id="sbAdvBody" class="sb-advisory-scroll">
         <div class="sb-advisory-inner" id="sbAdvisoryInner">
           <div class="sb-advisory-item">Loading…</div>
         </div>
@@ -1684,81 +2035,199 @@
     </div>
   </div>
 
-  <div class="sb-footer">
-    {# Profile + status: click=toggle online/away, right-click=away message #}
-    {% if is_admin and chat_enabled %}
-    <div id="sb-name-status" class="sb-link{% if p == '/profile' %} active{% endif %}"
-         style="cursor:pointer;user-select:none"
-         title="Online — Click to toggle Away · Right-click for away message">
-      <span class="sb-icon" style="position:relative;display:inline-flex;align-items:center;justify-content:center">
-        ◉
-        <span id="myStatusDot" class="status-dot status-online"
-              style="position:absolute;top:-2px;right:-5px;width:8px;height:8px;
-                     border:1.5px solid var(--sidebar-bg);border-radius:50%;flex-shrink:0"></span>
-      </span>
-      <span class="sb-text">{{ display_name or remote_user }}</span>
+  {# ── Admin Chat (admin users only) — below security advisories ── #}
+  {% if is_admin and not is_role_view|default(false) and not demo_mode|default(false) %}
+  <div id="sbAdminChatArea" style="border-top:1px solid var(--sidebar-border);flex-shrink:0;overflow:hidden">
+    {# Clickable header — collapses chat body #}
+    <div id="sbChatHeader"
+         style="font-size:0.55em;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+                color:#404060;padding:7px 14px 3px;display:flex;align-items:center;justify-content:space-between;
+                cursor:pointer;user-select:none"
+         onclick="sbToggleSection('chat')" title="Click to collapse">
+      <span>Admin Chat</span>
+      <span id="sbChatChevron" style="font-size:1.4em;opacity:0.4;transition:transform 0.2s">▾</span>
     </div>
-    {% else %}
-    <a href="/profile" class="sb-link{% if p == '/profile' %} active{% endif %}">
+    <div id="sbChatBody">
+      <div class="sb-link" id="sbGroupChatBtn" style="cursor:pointer">
+        <span class="sb-icon" style="font-size:0.9em">#</span>
+        <span class="sb-text">group</span>
+        <span class="unread-dot" id="unread-@group" style="display:none"></span>
+      </div>
+      {# User roster — min-height reserves ~5 slots for offline users (~32px each) #}
+      <div id="sbChatUsers" style="min-height:160px;overflow-y:auto"></div>
+      {# Username — enclosed inside chat, admin+chat only; right-click to edit chat name #}
+      {% if chat_enabled %}
+      <div style="border-top:1px solid var(--sidebar-border);padding:4px 0 2px">
+        <div id="sb-name-status" class="sb-link{% if p == '/profile' %} active{% endif %}"
+             style="cursor:pointer;user-select:none"
+             title="Online — Click to toggle Away · Right-click for options">
+          <span class="sb-icon" style="position:relative;display:inline-flex;align-items:center;justify-content:center">
+            ◉
+            <span id="myStatusDot" class="status-dot status-online"
+                  style="position:absolute;top:-2px;right:-5px;width:8px;height:8px;
+                         border:1.5px solid var(--sidebar-bg);border-radius:50%;flex-shrink:0"></span>
+          </span>
+          <span class="sb-text" id="sbMyDisplayName">{{ chat_name or (display_name or remote_user) }}</span>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="sb-footer">
+    {# Non-admin chat users get a read-only name display #}
+    {% if chat_enabled and not is_admin %}
+    <div class="sb-link" style="cursor:default">
       <span class="sb-icon">◉</span>
-      <span class="sb-text">{{ display_name or remote_user }}</span>
-    </a>
+      <span class="sb-text">{{ (display_name or remote_user) | human }}</span>
+    </div>
     {% endif %}
     <div class="sb-text" style="font-size:0.6em;color:var(--muted);margin-top:4px;padding:0 12px 4px;letter-spacing:0.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ app_name }} · {{ build_sha }} · {{ build_time }}">
       {{ app_name }} · {{ build_sha }} · {{ build_time[:10] if build_time else '' }}
     </div>
+    <div style="padding:3px 12px 8px;font-size:0.7em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+      <a href="/accessibility" hx-boost="false" style="color:var(--cyan);opacity:0.7;text-decoration:underline;text-underline-offset:2px;text-decoration-color:transparent" onmouseover="this.style.opacity='1';this.style.textDecorationColor='var(--cyan)'" onmouseout="this.style.opacity='0.7';this.style.textDecorationColor='transparent'">Accessibility</a>
+      {% if remote_user %}<span style="color:var(--muted)">&nbsp;·&nbsp;</span><a href="/privacy/my-data" hx-boost="false" style="color:var(--cyan);opacity:0.7;text-decoration:underline;text-underline-offset:2px;text-decoration-color:transparent" onmouseover="this.style.opacity='1';this.style.textDecorationColor='var(--cyan)'" onmouseout="this.style.opacity='0.7';this.style.textDecorationColor='transparent'">My Data</a>{% endif %}
+      <span style="color:var(--muted)">&nbsp;·&nbsp;</span><a href="/terms" hx-boost="false" style="color:var(--cyan);opacity:0.7;text-decoration:underline;text-underline-offset:2px;text-decoration-color:transparent" onmouseover="this.style.opacity='1';this.style.textDecorationColor='var(--cyan)'" onmouseout="this.style.opacity='0.7';this.style.textDecorationColor='transparent'">Terms</a>
+      <span style="color:var(--muted)">&nbsp;·&nbsp;</span><a href="/compliance-info" hx-boost="false" style="color:var(--cyan);opacity:0.7;text-decoration:underline;text-underline-offset:2px;text-decoration-color:transparent" onmouseover="this.style.opacity='1';this.style.textDecorationColor='var(--cyan)'" onmouseout="this.style.opacity='0.7';this.style.textDecorationColor='transparent'">Compliance</a>
+    </div>
   </div>
 
-  {# Away-message context menu (admin chat only) #}
-  {% if is_admin and chat_enabled %}
-  <div id="sb-away-ctx"
-       style="display:none;position:fixed;z-index:600;
+  {# ── Combined right-click context menu: away message + chat name ── #}
+  {% if (is_admin or is_staff_chat) and chat_enabled %}
+  {# Shared by both triggers: lower-left sb-name-status and upper-right nav bubble #}
+  <div id="nav-user-ctx"
+       style="display:none;position:fixed;z-index:610;
               background:var(--card);border:1px solid var(--border);border-radius:6px;
-              padding:12px 14px;min-width:220px;
+              padding:12px 14px;min-width:240px;
               box-shadow:0 8px 24px rgba(0,0,0,0.5)">
     <div style="font-size:0.62em;font-weight:700;letter-spacing:2px;text-transform:uppercase;
-                color:var(--muted);margin-bottom:8px">Set Away Message</div>
-    <input id="sb-away-ctx-input" type="text" placeholder="e.g. In a meeting until 3pm…"
+                color:var(--muted);margin-bottom:8px">Away Message</div>
+    <input id="nav-away-input" type="text" placeholder="e.g. In a meeting until 3pm…"
            maxlength="120"
            style="width:100%;background:var(--surface);border:1px solid var(--border);
                   border-radius:4px;padding:6px 9px;font-size:0.82em;color:var(--text);
                   outline:none;box-sizing:border-box;font-family:var(--sans)"
            onfocus="this.style.borderColor='rgba(0,255,204,0.4)'"
            onblur="this.style.borderColor='var(--border)'"
-           onkeydown="if(event.key==='Enter')sbAwayCtxSave();if(event.key==='Escape')sbAwayCtxCancel()">
-    <div style="display:flex;gap:6px;margin-top:10px;justify-content:flex-end">
-      <button onclick="sbAwayCtxCancel()"
+           onkeydown="if(event.key==='Enter')navCtxAwaySave();if(event.key==='Escape')navCtxClose()">
+    <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end">
+      <button onclick="navCtxClose()"
               style="font-size:0.72em;background:transparent;border:1px solid var(--border);
-                     border-radius:3px;padding:4px 12px;color:var(--muted);cursor:pointer">
-        Cancel
-      </button>
-      <button onclick="sbAwayCtxSave()"
+                     border-radius:3px;padding:4px 12px;color:var(--muted);cursor:pointer">Cancel</button>
+      <button onclick="navCtxAwaySave()"
               style="font-size:0.72em;background:rgba(0,255,204,0.1);
                      border:1px solid rgba(0,255,204,0.3);border-radius:3px;
-                     padding:4px 12px;color:var(--cyan);cursor:pointer">
-        Go Away
-      </button>
+                     padding:4px 12px;color:var(--cyan);cursor:pointer">Go Away</button>
+    </div>
+    <div style="border-top:1px solid var(--border);margin:12px -14px 10px"></div>
+    <div style="font-size:0.62em;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+                color:var(--muted);margin-bottom:6px">Chat Display Name</div>
+    <input id="nav-name-input" type="text" maxlength="20"
+           style="width:100%;background:var(--surface);border:1px solid var(--border);
+                  border-radius:4px;padding:5px 8px;font-size:0.82em;color:var(--text);
+                  outline:none;box-sizing:border-box;font-family:var(--sans)"
+           onfocus="this.style.borderColor='rgba(0,255,204,0.4)'"
+           onblur="this.style.borderColor='var(--border)'"
+           onkeydown="if(event.key==='Enter')navCtxNameSave();if(event.key==='Escape')navCtxClose()">
+    <div id="nav-name-fb" style="font-size:0.72em;color:var(--red);min-height:1em;margin-top:4px"></div>
+    <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end">
+      <button onclick="navCtxClose()"
+              style="font-size:0.72em;background:transparent;border:1px solid var(--border);
+                     border-radius:3px;padding:4px 12px;color:var(--muted);cursor:pointer">Cancel</button>
+      <button onclick="navCtxNameSave()"
+              style="font-size:0.72em;background:rgba(0,255,204,0.1);
+                     border:1px solid rgba(0,255,204,0.3);border-radius:3px;
+                     padding:4px 12px;color:var(--cyan);cursor:pointer">Save Name</button>
     </div>
   </div>
   <script>
-  // Away-message context menu helpers (called from button onclick)
-  function sbAwayCtxCancel() {
-    var ctx = document.getElementById('sb-away-ctx');
+  // fromSidebar=true  → opens up and right (anchored to sb-name-status)
+  // fromSidebar=false → opens down and left (anchored to nav bubble)
+  function navCtxOpen(fromSidebar) {
+    var ctx = document.getElementById('nav-user-ctx');
+    if (!ctx) return;
+    if (fromSidebar) {
+      var ns = document.getElementById('sb-name-status');
+      if (ns) {
+        var ref = ns.getBoundingClientRect();
+        var top = Math.max(8, ref.top - 280);  // ~280px panel height; clamp 8px from top
+        ctx.style.left  = (ref.right + 8) + 'px';
+        ctx.style.right = '';
+        ctx.style.top   = top + 'px';
+      }
+    } else {
+      var summ = document.querySelector('.nav-user-menu > summary');
+      if (summ) {
+        var rect = summ.getBoundingClientRect();
+        ctx.style.right = (window.innerWidth - rect.right) + 'px';
+        ctx.style.left  = '';
+        ctx.style.top   = (rect.bottom + 6) + 'px';
+      }
+      // Close the nav <details> dropdown
+      var det = document.querySelector('.nav-user-menu');
+      if (det) det.removeAttribute('open');
+    }
+    // Pre-fill inputs
+    var ni = document.getElementById('nav-name-input');
+    var nd = document.getElementById('sbMyDisplayName');
+    if (ni && nd) ni.value = nd.textContent.trim();
+    var fb = document.getElementById('nav-name-fb');
+    if (fb) fb.textContent = '';
+    var ai = document.getElementById('nav-away-input');
+    if (ai) ai.value = '';
+    ctx.style.display = 'block';
+    setTimeout(function(){ if (ai) ai.focus(); }, 50);
+  }
+  function navCtxClose() {
+    var ctx = document.getElementById('nav-user-ctx');
     if (ctx) ctx.style.display = 'none';
   }
-  function sbAwayCtxSave() {
-    var ctx   = document.getElementById('sb-away-ctx');
-    var input = document.getElementById('sb-away-ctx-input');
-    var msg   = input ? input.value.trim() : '';
-    if (ctx) ctx.style.display = 'none';
+  function navCtxAwaySave() {
+    var ai = document.getElementById('nav-away-input');
+    var msg = ai ? ai.value.trim() : '';
+    navCtxClose();
     if (typeof AdminChat !== 'undefined') AdminChat.setMyStatus('away', msg);
   }
-  // Close on outside click
-  document.addEventListener('click', function(e) {
-    var ctx = document.getElementById('sb-away-ctx');
-    if (ctx && ctx.style.display !== 'none' && !ctx.contains(e.target)) {
-      ctx.style.display = 'none';
-    }
+  function navCtxNameSave() {
+    var ni = document.getElementById('nav-name-input');
+    var fb = document.getElementById('nav-name-fb');
+    var name = ni ? ni.value.trim() : '';
+    if (!name) { if (fb) fb.textContent = 'Name cannot be empty.'; return; }
+    fetch('/profile/chat-name', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({chat_name: name})
+    }).then(function(r){ return r.json(); }).then(function(d) {
+      if (d.ok) {
+        var el = document.getElementById('sbMyDisplayName');
+        if (el) el.textContent = d.chat_name;
+        navCtxClose();
+        if (typeof AdminChat !== 'undefined') AdminChat.updateMyName(d.chat_name);
+      } else {
+        if (fb) fb.textContent = d.detail || 'Error saving name.';
+      }
+    }).catch(function() { if (fb) fb.textContent = 'Network error.'; });
+  }
+  document.addEventListener('DOMContentLoaded', function() {
+    // Right-click on lower-left name → open panel anchored up-right
+    var ns = document.getElementById('sb-name-status');
+    if (ns) ns.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      navCtxOpen(true);
+    });
+    // Right-click on upper-right nav bubble → open panel anchored down-left
+    var summ = document.querySelector('.nav-user-menu > summary');
+    if (summ) summ.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      navCtxOpen(false);
+    });
+    // Close on outside click
+    document.addEventListener('click', function(e) {
+      var ctx = document.getElementById('nav-user-ctx');
+      if (ctx && ctx.style.display !== 'none' && !ctx.contains(e.target)) navCtxClose();
+    });
   });
   </script>
   {% endif %}
@@ -1891,6 +2360,33 @@ async function initTicker() {
 }
 document.addEventListener('DOMContentLoaded', initTicker);
 
+// ── Sidebar section collapse (advisory + chat) ─────────────────────────────
+function sbToggleSection(key) {
+  var bodyId    = key === 'adv' ? 'sbAdvBody'    : 'sbChatBody';
+  var chevronId = key === 'adv' ? 'sbAdvChevron' : 'sbChatChevron';
+  var lsKey     = key === 'adv' ? 'bsv-sb-adv-collapsed' : 'bsv-sb-chat-collapsed';
+  var body    = document.getElementById(bodyId);
+  var chevron = document.getElementById(chevronId);
+  if (!body) return;
+  var collapsed = body.style.display === 'none';
+  body.style.display = collapsed ? '' : 'none';
+  if (chevron) chevron.style.transform = collapsed ? '' : 'rotate(-90deg)';
+  localStorage.setItem(lsKey, collapsed ? '0' : '1');
+}
+document.addEventListener('DOMContentLoaded', function() {
+  ['adv', 'chat'].forEach(function(key) {
+    var bodyId    = key === 'adv' ? 'sbAdvBody'    : 'sbChatBody';
+    var chevronId = key === 'adv' ? 'sbAdvChevron' : 'sbChatChevron';
+    var lsKey     = key === 'adv' ? 'bsv-sb-adv-collapsed' : 'bsv-sb-chat-collapsed';
+    if (localStorage.getItem(lsKey) === '1') {
+      var body    = document.getElementById(bodyId);
+      var chevron = document.getElementById(chevronId);
+      if (body)    body.style.display = 'none';
+      if (chevron) chevron.style.transform = 'rotate(-90deg)';
+    }
+  });
+});
+
 // ── Nav search autocomplete ───────────────────────────────────────────────────
 (function(){
   const inp  = document.getElementById('nav-search-q');
@@ -1941,21 +2437,21 @@ document.addEventListener('DOMContentLoaded', initTicker);
   (function() {
     const THEMES = [
       // name, label, swatch-bg, swatch-dot
-      ['midnight',  'Midnight',  '#060608', '#00ffcc'],
-      ['obsidian',  'Obsidian',  '#08050f', '#b08cff'],
-      ['void',      'Void',      '#030508', '#00c8ff'],
-      ['ember',     'Ember',     '#0c0600', '#ff8c1a'],
-      ['pine',      'Pine',      '#020c06', '#00e870'],
-      ['steel',     'Steel',     '#04080f', '#4da6ff'],
-      ['arctic',    'Arctic',    '#eef3f8', '#0064cc'],
-      ['parchment', 'Parchment', '#f4ede0', '#c05000'],
-      // Phase 22
-      ['terminal',  'Terminal',  '#000000', '#00ff41'],
-      ['synthwave', 'Synthwave', '#0a0014', '#ff00ff'],
-      ['crimson',   'Crimson',   '#0a0000', '#ff2244'],
-      ['ocean',     'Ocean',     '#010810', '#00e5ff'],
-      ['amber',     'Amber',     '#0a0600', '#ffb300'],
-      ['noir',      'Noir',      '#000000', '#ffffff'],
+      // Default pair first, then ROYGBIV alternating dark / light
+      ['midnight',  'Midnight',  '#060608', '#00ffcc'],  // D — original palette (default)
+      ['cloud',     'Cloud',     '#f8fafb', '#0066cc'],  // L — alternate light default
+      ['ember',     'Ember',     '#0c0600', '#ff8c1a'],  // D — orange-red
+      ['rose',      'Rose',      '#fdf0f3', '#b02040'],  // L — red/pink
+      ['terminal',  'Terminal',  '#000000', '#00ff41'],  // D — green
+      ['linen',     'Linen',     '#fde8d0', '#9a3800'],  // L — orange
+      ['amber',     'Amber',     '#0d0800', '#e8a800'],  // D — dark gold
+      ['sage',      'Sage',      '#eef5ee', '#1a8040'],  // L — mint/sage
+      ['synthwave', 'Synthwave', '#0a0014', '#ff00ff'],  // D — violet
+      ['parchment', 'Parchment', '#f4ede0', '#c05000'],  // L — yellow/tan
+      ['obsidian',  'Obsidian',  '#08050f', '#b08cff'],  // D — indigo/purple
+      ['arctic',    'Arctic',    '#d4ecfa', '#004e96'],  // L — cyan/light blue
+      ['noir',      'Noir',      '#000000', '#ffffff'],  // D — neutral black
+      ['slate',     'Slate',     '#c8d8ec', '#0c3ca0'],  // L — steel blue
     ];
 
     const STORAGE_KEY = 'bsv-theme';
@@ -2039,12 +2535,15 @@ async function initSbQuiz() {
     if (d.done) {
       const cls  = d.passed ? 'sb-quiz-done-pass' : 'sb-quiz-done-fail';
       const icon = d.passed ? '✓' : '✗';
-      const streak = d.streak > 0
-        ? ` <span class="sb-quiz-streak">🔥 ${d.streak}</span>`
-        : '';
+      let streak = '';
+      if (d.streak > 0 && d.streak_tier) {
+        const t = d.streak_tier;
+        const legendCls = t.tier === 'legend' ? ' sb-quiz-streak-legend' : '';
+        streak = ` <span class="sb-quiz-streak${legendCls}" style="border-color:${t.color}40;color:${t.color}" title="${t.label} streak">${t.icon} ${d.streak}</span>`;
+      }
       row.innerHTML = `<span class="${cls}">${icon} ${d.score}%</span>${streak}`;
     } else {
-      row.innerHTML = `<a href="/dashboard/quiz" class="sb-quiz-pending">⬡ ${d.question_count}Q — Take Quiz →</a>`;
+      row.innerHTML = `<a href="/dashboard/quiz" class="sb-quiz-pending">⬡ Today's Challenge →</a>`;
     }
     _bsvQuizReady = true;                         // mark done — skip on next nav
   } catch(e) {
@@ -2053,6 +2552,19 @@ async function initSbQuiz() {
   }
 }
 document.addEventListener('DOMContentLoaded', initSbQuiz);
+
+  // ── Skill Builder — external training resource tracker ──────────────────
+  window.trackTraining = function(resourceId) {
+    fetch('/api/training/click', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({resource: resourceId}),
+    })
+    .then(r => r.json())
+    .then(d => { if (d.url) window.open(d.url, '_blank', 'noopener,noreferrer'); })
+    .catch(() => {});
+    return false;
+  };
 
 // ── Sidebar advisory feed — TTL-cached, no re-fetch within 15 min ────────────
 var _bsvAdvFetchedAt = 0;
@@ -2212,7 +2724,236 @@ document.body.addEventListener('htmx:afterSettle', function() {
   }
 })();
 </script>
-{% if is_admin and chat_enabled %}
+{% if ai_enabled %}
+{# ── GRC AI Assistant — floating popup (all roles) ─────────────────────── #}
+<style>
+  #aiPopupBtn {
+    position:fixed; bottom:24px; right:24px; z-index:8500;
+    width:46px; height:46px; border-radius:50%;
+    background:linear-gradient(135deg,rgba(0,255,204,0.14),rgba(0,255,204,0.04));
+    border:1px solid rgba(0,255,204,0.35); color:var(--cyan);
+    font-size:1.25em; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 14px rgba(0,255,204,0.18);
+    transition:box-shadow 0.2s,transform 0.15s;
+  }
+  #aiPopupBtn:hover { box-shadow:0 0 22px rgba(0,255,204,0.35); transform:scale(1.07); }
+  #aiPopupBtn.has-unread::after {
+    content:''; position:absolute; top:3px; right:3px;
+    width:10px; height:10px; border-radius:50%;
+    background:var(--red); border:2px solid var(--bg);
+  }
+  #aiPopupPanel {
+    position:fixed; bottom:82px; right:24px; z-index:8500;
+    width:370px; display:flex; flex-direction:column;
+    background:var(--card); border:1px solid rgba(0,255,204,0.18);
+    border-radius:12px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.55),0 0 20px rgba(0,255,204,0.05);
+    transform-origin:bottom right; transition:transform 0.18s,opacity 0.18s;
+    overflow:hidden;
+  }
+  #aiPopupPanel.hidden { transform:scale(0.88) translateY(18px); opacity:0; pointer-events:none; }
+  .aip-header {
+    display:flex; align-items:center; gap:10px;
+    padding:11px 13px; border-bottom:1px solid var(--border); flex-shrink:0;
+  }
+  .aip-avatar {
+    width:26px; height:26px; border-radius:6px; flex-shrink:0;
+    background:linear-gradient(135deg,rgba(0,255,204,0.15),rgba(0,255,204,0.04));
+    border:1px solid rgba(0,255,204,0.3);
+    display:flex; align-items:center; justify-content:center; font-size:0.85em;
+  }
+  .aip-title { font-size:0.86em; font-weight:700; color:var(--text); }
+  .aip-ctx { font-size:0.63em; color:var(--cyan); opacity:0.75; }
+  .aip-close {
+    background:none; border:none; color:var(--muted); cursor:pointer;
+    padding:4px; font-size:1em; line-height:1; margin-left:auto;
+    transition:color 0.15s;
+  }
+  .aip-close:hover { color:var(--text); }
+  #aipMessages {
+    flex:1; overflow-y:auto; padding:11px 12px;
+    display:flex; flex-direction:column; gap:9px;
+    min-height:180px; max-height:340px;
+  }
+  .aip-msg { display:flex; gap:7px; }
+  .aip-msg.user { flex-direction:row-reverse; }
+  .aip-bubble {
+    max-width:84%; padding:8px 11px; border-radius:8px;
+    font-size:0.81em; line-height:1.52; word-break:break-word;
+  }
+  .aip-msg.user .aip-bubble {
+    background:rgba(0,255,204,0.09); border:1px solid rgba(0,255,204,0.2);
+    border-radius:8px 2px 8px 8px; color:var(--text);
+  }
+  .aip-msg.assistant .aip-bubble {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:2px 8px 8px 8px; color:var(--text);
+  }
+  .aip-msg.assistant .aip-bubble.err { border-color:rgba(244,67,54,0.4); color:var(--red); }
+  .aip-thinking { display:flex; gap:4px; align-items:center; padding:8px 11px; }
+  .aip-thinking span {
+    width:6px; height:6px; border-radius:50%; background:var(--cyan); opacity:0.4;
+    animation:aipBlink 1.2s infinite;
+  }
+  .aip-thinking span:nth-child(2) { animation-delay:.2s; }
+  .aip-thinking span:nth-child(3) { animation-delay:.4s; }
+  @keyframes aipBlink { 0%,80%,100%{opacity:.25} 40%{opacity:1} }
+  .aip-input-row {
+    display:flex; gap:7px; padding:9px 11px;
+    border-top:1px solid var(--border); flex-shrink:0; align-items:flex-end;
+  }
+  #aipInput {
+    flex:1; background:var(--surface); border:1px solid var(--border);
+    border-radius:6px; color:var(--text); font-size:0.81em;
+    padding:7px 9px; resize:none; outline:none;
+    font-family:var(--sans); max-height:80px; min-height:34px;
+    transition:border-color 0.15s;
+  }
+  #aipInput:focus { border-color:rgba(0,255,204,0.3); }
+  #aipSend {
+    background:rgba(0,255,204,0.09); border:1px solid rgba(0,255,204,0.28);
+    border-radius:6px; color:var(--cyan); cursor:pointer;
+    padding:0 11px; font-size:0.88em;
+    height:34px; flex-shrink:0; transition:background 0.15s;
+  }
+  #aipSend:hover { background:rgba(0,255,204,0.18); }
+  #aipSend:disabled { opacity:.4; cursor:default; }
+</style>
+<button id="aiPopupBtn" title="GRC Assistant" aria-label="Open GRC Assistant">✦</button>
+<div id="aiPopupPanel" class="hidden" role="dialog" aria-label="GRC Assistant">
+  <div class="aip-header">
+    <div class="aip-avatar">✦</div>
+    <div style="flex:1;min-width:0">
+      <div class="aip-title">GRC Assistant</div>
+      <div class="aip-ctx" id="aipCtx">—</div>
+    </div>
+    <button class="aip-close" id="aipClose" title="Close" aria-label="Close GRC Assistant">✕</button>
+  </div>
+  <div id="aipMessages">
+    <div class="aip-msg assistant"><div class="aip-bubble">
+      Hi! Ask me about controls, POA&amp;Ms, RMF steps, or anything on this page. I'll use the screen context to give you better answers.
+    </div></div>
+  </div>
+  <div class="aip-input-row">
+    <textarea id="aipInput" placeholder="Ask about this page…" rows="1"></textarea>
+    <button id="aipSend" title="Send (Enter)">&#9658;</button>
+  </div>
+</div>
+<script>
+(function(){
+  var btn   = document.getElementById('aiPopupBtn');
+  var panel = document.getElementById('aiPopupPanel');
+  var close = document.getElementById('aipClose');
+  var msgs  = document.getElementById('aipMessages');
+  var inp   = document.getElementById('aipInput');
+  var snd   = document.getElementById('aipSend');
+  var ctxEl = document.getElementById('aipCtx');
+  var hist  = [];
+  var busy  = false;
+
+  function pageCtx() {
+    var path  = window.location.pathname;
+    var h1    = document.querySelector('h1,.page-title,.panel-title');
+    var label = h1 ? h1.textContent.trim() : document.title.replace(/^.+\s—\s/,'');
+    return { path: path, label: label };
+  }
+
+  function updateCtx() {
+    var c = pageCtx();
+    var seg = c.path.replace(/^\/+/,'').replace(/\//g,' › ') || 'Dashboard';
+    ctxEl.textContent = seg + (c.label && c.label !== seg ? ' — ' + c.label.slice(0,40) : '');
+  }
+
+  btn.addEventListener('click', function(){
+    var hidden = panel.classList.contains('hidden');
+    if (hidden) {
+      panel.classList.remove('hidden');
+      updateCtx();
+      inp.focus();
+      btn.classList.remove('has-unread');
+    } else {
+      panel.classList.add('hidden');
+    }
+  });
+  close.addEventListener('click', function(){ panel.classList.add('hidden'); });
+  document.addEventListener('keydown', function(e){
+    if (e.key==='Escape' && !panel.classList.contains('hidden')) panel.classList.add('hidden');
+  });
+
+  function md(t) {
+    return t
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/`([^`\n]+)`/g,'<code style="background:var(--surface);padding:1px 4px;border-radius:3px;font-family:var(--mono);font-size:.9em">$1</code>')
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g,'<em>$1</em>')
+      .replace(/\n/g,'<br>');
+  }
+
+  function addMsg(role, text, isErr) {
+    var thinker = msgs.querySelector('.aip-thinker');
+    if (thinker) thinker.remove();
+    var d = document.createElement('div');
+    d.className = 'aip-msg ' + role;
+    var b = document.createElement('div');
+    b.className = 'aip-bubble' + (isErr ? ' err' : '');
+    b.innerHTML = role==='assistant' ? md(text) : text.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    d.appendChild(b);
+    msgs.appendChild(d);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function showThinking() {
+    var d = document.createElement('div');
+    d.className = 'aip-msg assistant aip-thinker';
+    d.innerHTML = '<div class="aip-bubble" style="padding:10px 13px"><div class="aip-thinking"><span></span><span></span><span></span></div></div>';
+    msgs.appendChild(d);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  async function doSend() {
+    var q = inp.value.trim();
+    if (!q || busy) return;
+    busy = true; snd.disabled = true;
+    addMsg('user', q);
+    hist.push({role:'user', content:q});
+    inp.value = ''; inp.style.height = '';
+    showThinking();
+    var ctx = pageCtx();
+    try {
+      var r = await fetch('/api/ai/ask', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          query:        q,
+          history:      hist.slice(-8),
+          page_context: ctx.path + ' — ' + ctx.label,
+        }),
+      });
+      var d = await r.json();
+      var ans = d.response || d.answer || d.error || 'No response received.';
+      addMsg('assistant', ans, !!d.error);
+      if (!d.error) hist.push({role:'assistant', content:ans});
+    } catch(e) {
+      addMsg('assistant', 'Connection error — please try again.', true);
+    }
+    busy = false; snd.disabled = false; inp.focus();
+    if (panel.classList.contains('hidden')) btn.classList.add('has-unread');
+  }
+
+  snd.addEventListener('click', doSend);
+  inp.addEventListener('keydown', function(e){
+    if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); doSend(); }
+  });
+  inp.addEventListener('input', function(){
+    inp.style.height = '';
+    inp.style.height = Math.min(inp.scrollHeight, 80) + 'px';
+  });
+})();
+</script>
+{% endif %}
+
+{% if (is_admin or is_staff_chat) and chat_enabled %}
 <div id="chatWindowContainer"
      style="position:fixed;bottom:0;right:16px;display:flex;gap:8px;
             align-items:flex-end;z-index:9000;pointer-events:none"></div>
@@ -2223,7 +2964,8 @@ document.body.addEventListener('htmx:afterSettle', function() {
       {{ remote_user | tojson }},
       {
         visibleCount: {{ chat_visible_count }},
-        showAwayMsg:  {{ 'true' if chat_show_away_msg else 'false' }}
+        showAwayMsg:  {{ 'true' if chat_show_away_msg else 'false' }},
+        chatName:     {{ (chat_name or display_name or remote_user) | tojson }}
       }
     )
   );
@@ -2231,6 +2973,9 @@ document.body.addEventListener('htmx:afterSettle', function() {
 {% endif %}
 
 <script>
+// ── Disable native right-click everywhere except explicitly wired elements ─────
+document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+
 // ── Grid orphan fix — center lone items in the last row of any auto-fit grid ──
 (function() {
   function fixOrphans(el) {
@@ -2270,5 +3015,56 @@ document.body.addEventListener('htmx:afterSettle', function() {
   });
 })();
 </script>
+
+{# ── Session idle timeout warning (Feature 2) ─────────────────────────────── #}
+{% if remote_user %}
+<div id="bsv-idle-toast"
+     role="alert" aria-live="assertive"
+     style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+            background:var(--card);border:1px solid rgba(255,179,0,0.5);border-radius:8px;
+            padding:14px 22px;color:var(--yellow);font-size:0.9em;font-weight:600;
+            box-shadow:0 4px 20px rgba(0,0,0,0.5);z-index:99999;
+            white-space:nowrap;pointer-events:none">
+  Your session will expire in 5 minutes due to inactivity.
+</div>
+<script>
+(function() {
+  var body      = document.body;
+  var warnMins  = parseInt(body.getAttribute('data-idle-warn')    || '25', 10);
+  var limitMins = parseInt(body.getAttribute('data-idle-timeout') || '30', 10);
+  var warnMs    = warnMins  * 60 * 1000;
+  var limitMs   = limitMins * 60 * 1000;
+  var toast     = document.getElementById('bsv-idle-toast');
+  var warnTimer, limitTimer;
+
+  function resetTimers() {
+    clearTimeout(warnTimer);
+    clearTimeout(limitTimer);
+    if (toast) toast.style.display = 'none';
+
+    warnTimer = setTimeout(function() {
+      if (toast) toast.style.display = 'block';
+    }, warnMs);
+
+    limitTimer = setTimeout(function() {
+      // Prefer Authelia sign-out, fall back to /logout
+      var logoutUrl = '{% if authelia_logout_url %}{{ authelia_logout_url }}{% else %}/logout{% endif %}';
+      window.location.href = logoutUrl;
+    }, limitMs);
+  }
+
+  // Activity events that reset the idle clock
+  ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(function(evt) {
+    document.addEventListener(evt, resetTimers, { passive: true, capture: true });
+  });
+
+  // HTMX navigation counts as activity too
+  document.addEventListener('htmx:afterSettle', resetTimers);
+
+  // Start the clock
+  resetTimers();
+})();
+</script>
+{% endif %}
 </body>
 </html>

@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — {{ fw.name }} · {{ ctrl.id }}{% endblock %}
+
+{% block head %}
+<style>
+  .ctrl-hero {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px 24px; margin-bottom: 20px;
+  }
+  .ctrl-hero-id {
+    font-family: var(--mono); font-size: 1.1em; font-weight: 700;
+    color: var(--cyan); margin-bottom: 4px;
+  }
+  .ctrl-hero-title {
+    font-size: 1.05em; font-weight: 700; color: var(--text);
+    margin-bottom: 8px; line-height: 1.35;
+  }
+  .ctrl-hero-meta {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    font-size: 0.75em; color: var(--muted);
+  }
+  .ctrl-hero-desc {
+    font-size: 0.84em; color: var(--muted); line-height: 1.55;
+    margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);
+  }
+
+  .xw-section { margin-bottom: 20px; }
+  .xw-header {
+    font-size: 0.65em; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--cyan);
+    margin-bottom: 10px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* NIST crosswalk pills */
+  .nist-xw-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  a.nist-xw-pill {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 12px; text-decoration: none;
+    transition: border-color .12s;
+  }
+  a.nist-xw-pill:hover { border-color: rgba(0,255,204,.4); }
+  .nist-xw-id {
+    font-family: var(--mono); font-size: 0.82em; font-weight: 700; color: var(--cyan);
+  }
+  .nist-xw-title { font-size: 0.78em; color: var(--muted); max-width: 280px; }
+  .conf-dot-high { color: var(--cyan);  font-size: 0.7em; }
+  .conf-dot-med  { color: var(--muted); font-size: 0.7em; }
+
+  /* Framework buttons + badge */
+  .fw-btn-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  .fw-btn {
+    position: relative;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 16px;
+    cursor: pointer; font-size: 0.82em; font-weight: 700;
+    color: var(--text); transition: border-color .12s, color .12s;
+    min-width: 72px; text-align: center; user-select: none;
+  }
+  .fw-btn:hover  { border-color: rgba(0,255,204,.35); color: var(--cyan); }
+  .fw-btn.active { border-color: rgba(0,255,204,.55); color: var(--cyan);
+                   background: rgba(0,255,204,.04); }
+  .fw-btn-badge {
+    position: absolute; top: -7px; right: -7px;
+    background: var(--cyan); color: #000;
+    font-size: 0.62em; font-weight: 800;
+    border-radius: 10px; min-width: 18px; height: 18px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 4px; line-height: 1;
+  }
+  /* Control list panel */
+  .fw-ctrl-panel { display: none; margin-bottom: 12px; }
+  .fw-ctrl-panel.open { display: block; }
+  .rel-fw-ctrl {
+    display: grid; grid-template-columns: auto 1fr auto;
+    gap: 10px; align-items: start;
+    padding: 7px 10px; border-radius: 4px; margin-bottom: 2px;
+    background: rgba(255,255,255,.02);
+  }
+  a.rel-ctrl-id {
+    font-family: var(--mono); font-size: 0.78em; font-weight: 700;
+    color: var(--cyan); text-decoration: none; white-space: nowrap; padding-top: 1px;
+  }
+  a.rel-ctrl-id:hover { opacity: .75; }
+  .rel-ctrl-title { font-size: 0.8em; color: var(--text); line-height: 1.4; }
+  .rel-ctrl-domain { font-size: 0.88em; color: var(--muted); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/controls">Control Catalog</a>
+  <span class="sep">/</span>
+  <a href="{{ fw.link }}">{{ fw.name }}</a>
+  <span class="sep">/</span>
+  <span>{{ ctrl.id }}</span>
+</div>
+
+{# ── Control hero ── #}
+<div class="ctrl-hero">
+  <div class="ctrl-hero-id">{{ ctrl.id }}</div>
+  <div class="ctrl-hero-title">{{ ctrl.title }}</div>
+  <div class="ctrl-hero-meta">
+    <span>{{ fw.name }}</span>
+    {% if ctrl.domain %}<span>{{ ctrl.domain }}</span>{% endif %}
+    {% if ctrl.level %}<span>Level {{ ctrl.level }}</span>{% endif %}
+  </div>
+  {% if ctrl.description %}
+  <div class="ctrl-hero-desc">{{ ctrl.description }}</div>
+  {% endif %}
+</div>
+
+{# ── Assessment Guidance ── #}
+{% if assess_ctx %}
+<div class="card" style="padding:20px;margin-bottom:20px">
+  <div style="font-size:0.65em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+              color:var(--cyan);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+    Assessment Guidance
+    <span style="font-weight:400;color:var(--muted);margin-left:8px">Artifacts, stakeholders, and evidence assessors look for</span>
+  </div>
+
+  {% if assess_ctx.examine %}
+  <div style="margin-bottom:16px">
+    <div style="font-size:0.7em;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+                color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:8px">
+      <span style="background:rgba(0,255,204,0.1);color:var(--cyan);border:1px solid rgba(0,255,204,0.2);
+                   border-radius:3px;padding:1px 7px">EXAMINE</span>
+      Documents &amp; Artifacts
+    </div>
+    <ul style="margin:0;padding-left:20px;list-style:none">
+      {% for item in assess_ctx.examine %}
+      <li style="font-size:0.83em;color:var(--text);padding:3px 0;display:flex;gap:8px;align-items:baseline">
+        <span style="color:var(--cyan);flex-shrink:0">›</span>{{ item }}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if assess_ctx.interview %}
+  <div style="margin-bottom:16px">
+    <div style="font-size:0.7em;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+                color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:8px">
+      <span style="background:rgba(255,193,7,0.1);color:var(--yellow);border:1px solid rgba(255,193,7,0.2);
+                   border-radius:3px;padding:1px 7px">INTERVIEW</span>
+      Stakeholders &amp; Contacts
+    </div>
+    <ul style="margin:0;padding-left:20px;list-style:none">
+      {% for item in assess_ctx.interview %}
+      <li style="font-size:0.83em;color:var(--text);padding:3px 0;display:flex;gap:8px;align-items:baseline">
+        <span style="color:var(--yellow);flex-shrink:0">›</span>{{ item }}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if assess_ctx.test %}
+  <div>
+    <div style="font-size:0.7em;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+                color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:8px">
+      <span style="background:rgba(76,175,80,0.1);color:var(--green);border:1px solid rgba(76,175,80,0.2);
+                   border-radius:3px;padding:1px 7px">TEST</span>
+      Technical Evidence
+    </div>
+    <ul style="margin:0;padding-left:20px;list-style:none">
+      {% for item in assess_ctx.test %}
+      <li style="font-size:0.83em;color:var(--text);padding:3px 0;display:flex;gap:8px;align-items:baseline">
+        <span style="color:var(--green);flex-shrink:0">›</span>{{ item }}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ── NIST SP 800-53 Crosswalk (shown when related NIST controls exist) ── #}
+{% if nist_crosswalks %}
+<div class="xw-section">
+  <div class="xw-header">NIST SP 800-53 Crosswalk</div>
+  <div class="nist-xw-list">
+    {% for xw in nist_crosswalks %}
+    <a href="{{ xw.link }}" class="nist-xw-pill">
+      <span class="nist-xw-id">{{ xw.id | upper }}</span>
+      {% if xw.title %}<span class="nist-xw-title">{{ xw.title[:60] }}{% if xw.title|length > 60 %}…{% endif %}</span>{% endif %}
+      <span class="{{ 'conf-dot-high' if xw.confidence == 'high' else 'conf-dot-med' }}"
+            title="{{ 'Direct mapping' if xw.confidence == 'high' else 'Functional equivalence' }}">●</span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ── Filter NIST out of 'related' so it isn't double-shown ── #}
+{% set related = related | selectattr('short_name', '!=', 'nist80053r5') | list %}
+
+{# ── Related controls across frameworks ── #}
+{% set abbrevs = {
+  'nist80053r5':    'NIST 800-53',
+  'fedramp':        'FedRAMP',
+  'nist_privacy':   'NIST Priv.',
+  'nist_ics':       'ICS/SCADA',
+  'dod_srg':        'DoD SRG',
+  'sp800171':       '800-171',
+  'cmmc2':          'CMMC 2.0',
+  'iso27001':       'ISO 27001',
+  'iso27001_annex_a':'ISO Annex A',
+  'iso27001_core':  'ISO Core',
+  'iso27701':       'ISO 27701',
+  'iso27017':       'ISO 27017',
+  'iso27018':       'ISO 27018',
+  'hitrust':        'HITRUST',
+  'hipaa':          'HIPAA',
+  'hitech':         'HITECH',
+  'cfr11':          '21 CFR 11',
+  'fdamdcyber':     'FDA Cyber',
+  'pci_dss':        'PCI DSS',
+  'pcidss':         'PCI DSS',
+  'soc2':           'SOC 2',
+  'soc1':           'SOC 1',
+  'sox':            'SOX',
+  'glba':           'GLBA',
+  'nydfs':          'NYDFS 500',
+  'swiftcsp':       'SWIFT CSP',
+  'fisma':          'FISMA',
+  'nist_low':       'NIST Low',
+  'nist_mod':       'NIST Mod.',
+  'nist_high':      'NIST High',
+  'nist_all':       'NIST All',
+  'csf2':           'CSF 2.0',
+  'npf':            'NPF',
+  'ssdf':           'SSDF',
+  'cis':            'CIS v8',
+  'csa_ccm':        'CSA CCM',
+  'isa62443':       'ISA 62443',
+  'nerc_cip':       'NERC CIP',
+  'tisax':          'TISAX',
+  'gdpr':           'GDPR',
+  'ccpa':           'CCPA',
+  'lgpd':           'LGPD',
+  'pipeda':         'PIPEDA',
+  'appi':           'APPI',
+} %}
+{% if related %}
+<div class="xw-section">
+  <div class="xw-header">
+    Related Controls — {{ related | length }} framework{{ 's' if related | length != 1 else '' }}
+  </div>
+
+  {# Button grid #}
+  <div class="fw-btn-grid">
+    {% for fw_r in related %}
+    <div class="fw-btn" data-sn="{{ fw_r.short_name }}"
+         onclick="toggleFwPanel('{{ fw_r.short_name }}')">
+      {{ abbrevs.get(fw_r.short_name, fw_r.name[:12]) }}
+      <span class="fw-btn-badge">{{ fw_r.controls | length }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# Per-framework control panels — hidden until button clicked #}
+  {% for fw_r in related %}
+  <div id="panel-{{ fw_r.short_name }}" class="fw-ctrl-panel">
+    <div style="font-size:0.7em;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+                color:var(--cyan);margin-bottom:10px;padding-bottom:6px;
+                border-bottom:1px solid var(--border)">
+      {{ fw_r.name }}
+    </div>
+    {% for fc in fw_r.controls %}
+    <div class="rel-fw-ctrl">
+      <a href="{{ fc.link }}" class="rel-ctrl-id">{{ fc.id }}</a>
+      <span class="rel-ctrl-title">
+        {% if fc.domain %}<span class="rel-ctrl-domain">{{ fc.domain }} — </span>{% endif %}
+        {{ fc.title }}
+      </span>
+      <span class="{{ 'conf-dot-high' if fc.confidence == 'high' else 'conf-dot-med' }}"
+            title="{{ 'Direct' if fc.confidence == 'high' else 'Equiv.' }}">●</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+</div>
+{% else %}
+<div class="card" style="padding:32px;text-align:center;color:var(--muted);font-size:0.85em">
+  No cross-framework mappings found for this control.
+</div>
+{% endif %}
+
+<script>
+function toggleFwPanel(sn) {
+  var panel = document.getElementById('panel-' + sn);
+  var btn   = document.querySelector('.fw-btn[data-sn="' + sn + '"]');
+  var isOpen = panel.classList.contains('open');
+  document.querySelectorAll('.fw-ctrl-panel').forEach(function(p){ p.classList.remove('open'); });
+  document.querySelectorAll('.fw-btn').forEach(function(b){ b.classList.remove('active'); });
+  if (!isOpen) { panel.classList.add('open'); btn.classList.add('active'); }
+}
+</script>
+{% endblock %}

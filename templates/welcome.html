@@ -1,0 +1,433 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Welcome{% endblock %}
+
+{% block content %}
+<style>
+  .welcome-hero {
+    background: linear-gradient(135deg, #0d1117 0%, #0a1628 40%, #0d1f3c 70%, #091521 100%);
+    border: 1px solid rgba(0,229,255,0.2);
+    border-radius: 12px;
+    padding: 52px 48px;
+    margin-bottom: 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .welcome-hero::before {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 260px; height: 260px;
+    background: radial-gradient(circle, rgba(0,229,255,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .welcome-hero::after {
+    content: '';
+    position: absolute;
+    bottom: -40px; left: 30%;
+    width: 180px; height: 180px;
+    background: radial-gradient(circle, rgba(176,48,255,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .welcome-eyebrow {
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .welcome-eyebrow::before {
+    content: '';
+    display: inline-block;
+    width: 24px; height: 2px;
+    background: var(--cyan);
+  }
+  .welcome-title {
+    font-size: 2.6em;
+    font-weight: 900;
+    line-height: 1.1;
+    margin: 0 0 16px;
+    background: linear-gradient(135deg, #ffffff 0%, #00e5ff 60%, #b030ff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .welcome-subtitle {
+    font-size: 1.05em;
+    color: #8fa3c0;
+    max-width: 560px;
+    line-height: 1.65;
+    margin-bottom: 32px;
+  }
+  .welcome-cta-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .stat-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    text-align: center;
+    transition: border-color 0.2s;
+  }
+  .stat-card:hover { border-color: rgba(0,229,255,0.4); }
+  .stat-number {
+    font-size: 2em;
+    font-weight: 900;
+    color: var(--cyan);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-label {
+    font-size: 0.75em;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 32px;
+  }
+  .feature-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+  .feature-card:hover {
+    border-color: rgba(0,229,255,0.35);
+    transform: translateY(-2px);
+  }
+  .feature-icon {
+    font-size: 1.8em;
+    margin-bottom: 12px;
+    display: block;
+  }
+  .feature-title {
+    font-weight: 700;
+    font-size: 0.95em;
+    margin-bottom: 8px;
+    color: var(--fg);
+  }
+  .feature-desc {
+    font-size: 0.82em;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .notice-box {
+    background: rgba(255,179,0,0.06);
+    border: 1px solid rgba(255,179,0,0.25);
+    border-left: 4px solid var(--yellow);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+  .notice-title {
+    font-weight: 700;
+    color: var(--yellow);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .notice-body {
+    font-size: 0.85em;
+    color: #8fa3c0;
+    line-height: 1.7;
+  }
+  .notice-body p { margin: 6px 0; }
+  .role-chip {
+    display: inline-block;
+    background: rgba(0,229,255,0.12);
+    border: 1px solid rgba(0,229,255,0.25);
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 0.78em;
+    color: var(--cyan);
+    font-family: var(--mono);
+    margin-left: 8px;
+  }
+  @keyframes subtlePulse {
+    0%,100% { opacity: 1; }
+    50%      { opacity: 0.7; }
+  }
+  .live-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: subtlePulse 2.5s ease-in-out infinite;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+</style>
+
+<div style="max-width:900px;margin:0 auto">
+
+  <!-- Hero -->
+  <div class="welcome-hero">
+    <div class="welcome-eyebrow">
+      <span class="live-dot"></span>
+      System Operational
+    </div>
+    <h1 class="welcome-title">BLACKSITE<br>Command &amp; Control</h1>
+    <p class="welcome-subtitle">
+      Your integrated compliance, risk, and authorization platform — engineered for
+      practitioners who take security seriously. Every control, every finding, every
+      decision: documented, tracked, and defended.
+    </p>
+    <div class="welcome-cta-row">
+      <a href="/dashboard" class="btn btn-primary" style="font-size:0.9em">
+        Enter Dashboard →
+      </a>
+      <a href="/systems" class="btn btn-secondary" style="font-size:0.9em">
+        View Systems
+      </a>
+      {% if user_role_ctx in ['isso','issm','sca','system_owner','pmo'] %}
+      <a href="/issm/dashboard" class="btn btn-ghost" style="font-size:0.9em">
+        ISSM Hub
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Role + live status bar -->
+  <div class="stat-bar">
+    <div class="stat-card">
+      <div class="stat-number" id="wc-sys-ct">—</div>
+      <div class="stat-label">Systems</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="wc-open-poam">—</div>
+      <div class="stat-label">Open POA&amp;Ms</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="wc-ctrl-pct">—</div>
+      <div class="stat-label">Controls Implemented</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="wc-streak">—</div>
+      <div class="stat-label">Quiz Streak</div>
+    </div>
+  </div>
+
+  <!-- Feature cards -->
+  <div class="feature-grid">
+    <div class="feature-card">
+      <span class="feature-icon">🛡️</span>
+      <div class="feature-title">Risk Management Framework</div>
+      <div class="feature-desc">Full NIST RMF lifecycle: categorize, select, implement, assess, authorize, monitor. Every step documented and defensible.</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">📋</span>
+      <div class="feature-title">POA&amp;M Tracking</div>
+      <div class="feature-desc">Track every weakness from discovery to closure. Milestone management, evidence attachment, and automated aging alerts.</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">🔬</span>
+      <div class="feature-title">Control Assessment</div>
+      <div class="feature-desc">Map, assess, and score controls across NIST 800-53, ISO 27001, CMMC, HIPAA, and more. Multi-framework support built in.</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">📊</span>
+      <div class="feature-title">Continuous Monitoring</div>
+      <div class="feature-desc">Daily workflow engine keeps your team on cadence — deterministic task assignments, logbook entries, and progress tracking.</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">🤖</span>
+      <div class="feature-title">AI-Assisted Guidance</div>
+      <div class="feature-desc">On-demand compliance assistant trained on your system context. Ask about controls, get recommendations, draft artifacts.</div>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">📦</span>
+      <div class="feature-title">ATO Package Builder</div>
+      <div class="feature-desc">Generate SSP, SAR, SAP, and POA&amp;M exports in NIST-compliant format. One-click ATO package for submission.</div>
+    </div>
+  </div>
+
+  <!-- Platform Updates -->
+  <div style="margin-bottom:28px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:0.72em;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:var(--muted)">
+        Platform Updates
+      </div>
+      <div style="font-size:0.72em;color:var(--muted)">March 2026</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+
+      <!-- Update: Accessibility & 508 -->
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:0;border-bottom:1px solid var(--border)">
+        <div style="width:4px;background:var(--cyan)"></div>
+        <div style="padding:16px 20px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <span style="font-size:0.8em;font-weight:700;color:var(--cyan)">Section 508 / WCAG 2.1 AA</span>
+            <span style="font-size:0.68em;background:rgba(0,229,255,0.12);border:1px solid rgba(0,229,255,0.25);border-radius:20px;padding:1px 8px;color:var(--cyan)">New</span>
+          </div>
+          <div style="font-size:0.8em;color:var(--muted);line-height:1.6">
+            Full accessibility audit completed across 30+ templates — skip-nav links, ARIA roles and labels, keyboard focus management, screen reader live regions, and semantic table headers. Idle session timeout (25 min warn / 30 min logout) now enforced platform-wide.
+          </div>
+        </div>
+      </div>
+
+      <!-- Update: Legal & Compliance Pages -->
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:0;border-bottom:1px solid var(--border)">
+        <div style="width:4px;background:#b030ff"></div>
+        <div style="padding:16px 20px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <span style="font-size:0.8em;font-weight:700;color:#b030ff">Legal & Compliance Pages</span>
+            <span style="font-size:0.68em;background:rgba(176,48,255,0.12);border:1px solid rgba(176,48,255,0.3);border-radius:20px;padding:1px 8px;color:#b030ff">New</span>
+          </div>
+          <div style="font-size:0.8em;color:var(--muted);line-height:1.6">
+            <a href="/privacy" style="color:var(--text);text-decoration:none;border-bottom:1px solid var(--border)">Privacy Notice</a>,
+            <a href="/terms" style="color:var(--text);text-decoration:none;border-bottom:1px solid var(--border)">Terms of Use</a>,
+            <a href="/compliance-info" style="color:var(--text);text-decoration:none;border-bottom:1px solid var(--border)">Platform Compliance</a>,
+            <a href="/accessibility" style="color:var(--text);text-decoration:none;border-bottom:1px solid var(--border)">Accessibility Statement</a>, and a full
+            <a href="/accessibility/vpat" style="color:var(--text);text-decoration:none;border-bottom:1px solid var(--border)">VPAT 2.5 ACR</a> are now published.
+            CCPA / CPRA data subject rights (export &amp; deletion requests) available at
+            <a href="/privacy/my-data" style="color:var(--text);text-decoration:none;border-bottom:1px solid var(--border)">My Data &amp; Privacy</a>.
+          </div>
+        </div>
+      </div>
+
+      <!-- Update: Policy Documentation -->
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:0;border-bottom:1px solid var(--border)">
+        <div style="width:4px;background:var(--yellow)"></div>
+        <div style="padding:16px 20px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <span style="font-size:0.8em;font-weight:700;color:var(--yellow)">Policy & Compliance Documentation</span>
+            <span style="font-size:0.68em;background:rgba(255,179,0,0.12);border:1px solid rgba(255,179,0,0.3);border-radius:20px;padding:1px 8px;color:var(--yellow)">New</span>
+          </div>
+          <div style="font-size:0.8em;color:var(--muted);line-height:1.6">
+            10 formal policy documents published: Incident Response Runbook, Contingency Plan (RTO 4h / RPO 24h), Data Retention Policy, HIPAA BAA Template, Encryption Key Rotation Policy, Change Management Process, Vendor Risk Inventory, Personnel Security Procedures, and a GDPR Article 28 DPA Template.
+            Automated data purge script and systemd timer enforce the retention schedule daily.
+          </div>
+        </div>
+      </div>
+
+      <!-- Update: GRC Assistant -->
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:0">
+        <div style="width:4px;background:var(--green)"></div>
+        <div style="padding:16px 20px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <span style="font-size:0.8em;font-weight:700;color:var(--green)">GRC Assistant</span>
+            <span style="font-size:0.68em;background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.25);border-radius:20px;padding:1px 8px;color:var(--green)">Updated</span>
+          </div>
+          <div style="font-size:0.8em;color:var(--muted);line-height:1.6">
+            Improved personality and tone — the assistant now responds in kind to your register before pivoting to guidance. Content boundary enforcement updated: all compliance artifacts remain user-authored; the assistant offers directional guidance only. Available on both production and demo.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Security notice (role-gated) -->
+  {% if show_security_notice %}
+  <div class="notice-box">
+    <div class="notice-title">⚠️ Authorized Use Notice</div>
+    <div class="notice-body">
+      <p>
+        This system is for <strong>authorized use only</strong> by individuals with a legitimate
+        need to access or manage security compliance information for the systems catalogued herein.
+        Unauthorized access, attempted access, or use of this system beyond your authorized scope
+        is prohibited and may result in disciplinary action, civil liability, or criminal prosecution.
+      </p>
+      <p>
+        By continuing, you acknowledge that:
+      </p>
+      <p>
+        • All activity on this system is monitored and logged.<br>
+        • There is no expectation of privacy for sessions conducted on this system.<br>
+        • You are responsible for the accuracy and completeness of data you submit.<br>
+        • Deliberate falsification of compliance records may constitute a federal offense.
+      </p>
+      <p>
+        <strong>Data Handling:</strong> This system may process Controlled Unclassified Information (CUI),
+        Protected Health Information (PHI), Personally Identifiable Information (PII), and other sensitive
+        data categories. Handle all data in accordance with your organization's data handling policies
+        and applicable law.
+      </p>
+      <p>
+        <strong>Privacy Notice:</strong> Information you submit, including system descriptions, control
+        implementations, and personnel records, is retained for audit and compliance purposes.
+        Contact your ISSO or Privacy Officer if you have questions about data retention or privacy rights.
+        By accessing this platform you acknowledge the <a href="/terms" style="color:var(--yellow)">Terms of Acceptable Use</a>
+        and our <a href="/privacy" style="color:var(--yellow)">Privacy Notice</a>.
+      </p>
+      <p>
+        <strong>Authorized Users Only:</strong> This platform is for authorized professional use only
+        by persons <strong>18 years of age or older</strong>. Use by minors is strictly prohibited.
+        By accessing this system you represent that you are at least 18 years old and have been
+        granted access by your organization's designated administrator.
+      </p>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Role hint -->
+  <div style="text-align:center;padding:16px 0 8px;color:var(--muted);font-size:0.82em">
+    Logged in as <strong>{{ remote_user }}</strong>
+    <span class="role-chip">{{ user_role_ctx }}</span>
+    &nbsp;·&nbsp;
+    <a href="/profile" style="color:var(--cyan);text-decoration:none">Profile</a>
+    &nbsp;·&nbsp;
+    <a href="/dashboard" style="color:var(--cyan);text-decoration:none">Go to Dashboard</a>
+  </div>
+
+</div>
+
+<script>
+(async function() {
+  try {
+    const [sysR, quizR] = await Promise.all([
+      fetch('/api/systems?limit=1000').then(r => r.ok ? r.json() : null),
+      fetch('/api/quiz/status').then(r => r.ok ? r.json() : null),
+    ]);
+    if (sysR && Array.isArray(sysR.systems)) {
+      document.getElementById('wc-sys-ct').textContent = sysR.systems.length;
+    }
+    if (quizR) {
+      const t = quizR.streak_tier;
+      const icon = (t && t.icon) ? t.icon + ' ' : '';
+      document.getElementById('wc-streak').textContent = icon + (quizR.streak || 0);
+    }
+  } catch(e) {}
+  // Load control + POA&M stats
+  try {
+    const r = await fetch('/api/dashboard/stats').then(r => r.ok ? r.json() : null);
+    if (r) {
+      if (r.open_poam !== undefined) document.getElementById('wc-open-poam').textContent = r.open_poam;
+      if (r.ctrl_pct !== undefined) document.getElementById('wc-ctrl-pct').textContent = r.ctrl_pct + '%';
+    }
+  } catch(e) {}
+})();
+</script>
+
+<div style="text-align:center;padding:12px 0 4px;color:var(--muted);font-size:0.75em">
+  <a href="/privacy" style="color:var(--muted);text-decoration:none"
+     onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Privacy Notice</a>
+  &nbsp;·&nbsp;
+  <a href="/terms" style="color:var(--muted);text-decoration:none"
+     onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Terms of Use</a>
+  &nbsp;·&nbsp;
+  <a href="/accessibility" style="color:var(--muted);text-decoration:none"
+     onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Accessibility</a>
+  &nbsp;·&nbsp;
+  <a href="/compliance-info" style="color:var(--muted);text-decoration:none"
+     onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Platform Compliance</a>
+</div>
+{% endblock %}

@@ -20,6 +20,12 @@
 {% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <a href="/admin">Admin</a>
+  <span class="sep">/</span>
+  <span>Auto-Fail Events</span>
+</div>
+
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
   <div>
     <div class="section-header" style="margin-bottom:4px">Auto-Fail Events</div>
@@ -27,7 +33,8 @@
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <form method="GET" action="/admin/autofail" style="display:flex;gap:6px">
-      <select name="system_id" onchange="this.form.submit()"
+      <select name="system_id" id="autofail-system" onchange="this.form.submit()"
+              aria-label="System filter (auto-applies on change)"
               style="background:var(--surface);border:1px solid var(--border);color:var(--text);
                      padding:5px 8px;border-radius:4px;font-size:0.8em">
         <option value="">All Systems</option>
@@ -63,14 +70,14 @@
   <table>
     <thead>
       <tr>
-        <th>ID</th>
-        <th>Trigger</th>
-        <th>System</th>
-        <th>Title</th>
-        <th>Severity</th>
-        <th>POA&amp;M</th>
-        <th>Status</th>
-        <th>Detected</th>
+        <th scope="col">ID</th>
+        <th scope="col">Trigger</th>
+        <th scope="col">System</th>
+        <th scope="col">Title</th>
+        <th scope="col">Severity</th>
+        <th scope="col">POA&amp;M</th>
+        <th scope="col">Status</th>
+        <th scope="col">Detected</th>
       </tr>
     </thead>
     <tbody>
@@ -88,7 +95,7 @@
         </td>
         <td>
           {% if e.poam_id %}
-          <a href="/poam/{{ e.poam_id }}" class="mono" style="font-size:0.78em;color:var(--cyan)">↗</a>
+          <a href="/poam/{{ e.poam_id }}" class="mono" style="font-size:0.78em;color:var(--cyan)" aria-label="View POAM item">↗</a>
           {% else %}—{% endif %}
         </td>
         <td>
@@ -117,7 +124,7 @@
     <button class="btn btn-ghost btn-sm" onclick="ingestFeed('nist')" id="nistBtn">↻ Ingest NIST Publications</button>
     <button class="btn btn-ghost btn-sm" onclick="ingestFeed('nvd')"  id="nvdBtn">↻ Ingest NVD CVEs (30d)</button>
   </div>
-  <div id="feedFeedback" style="font-size:0.78em;color:var(--muted);margin-top:10px;min-height:1.2em"></div>
+  <div id="feedFeedback" aria-live="polite" aria-atomic="false" style="font-size:0.78em;color:var(--muted);margin-top:10px;min-height:1.2em"></div>
 </div>
 {% endblock %}
 

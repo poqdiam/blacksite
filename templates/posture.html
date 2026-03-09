@@ -2,6 +2,10 @@
 {% block title %}{{ app_name }} — Compliance Posture{% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <span>Compliance Posture</span>
+</div>
+
 {# ── Page header ──────────────────────────────────────────────────────────── #}
 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:28px">
   <div>
@@ -211,9 +215,9 @@
     {% endif %}
   </div>
 
-  {# ATO Pipeline #}
+  {# Auth Pipeline #}
   <div class="card" style="padding:20px;margin-bottom:0">
-    <div class="card-title" style="margin-bottom:16px">ATO Submission Pipeline</div>
+    <div class="card-title" style="margin-bottom:16px">Authorization Submission Pipeline</div>
     {% if sub_pipeline %}
     {% for status, label, color in [
         ('authorized',    'Authorized',    'var(--green)'),

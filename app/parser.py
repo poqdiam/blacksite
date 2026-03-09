@@ -37,6 +37,51 @@ CONTROL_RE = re.compile(
     re.IGNORECASE
 )
 
+# ── Multi-framework control ID patterns ────────────────────────────────────────
+# Each entry: (framework_short_name, compiled_regex, normaliser_fn)
+# framework_short_name MUST match compliance_frameworks.short_name in the DB.
+# Patterns ordered most-specific first to reduce false positives.
+
+def _norm_upper(m: re.Match) -> str:
+    return m.group(0).strip().upper()
+
+def _norm_pci(m: re.Match) -> str:
+    # DB stores PCI controls as bare numbers: "6.4.1" not "Req 6.4.1"
+    return m.group(1).strip()
+
+def _norm_hipaa(m: re.Match) -> str:
+    return m.group(0).strip().lower()
+
+_MULTI_FW_PATTERNS: list[tuple[str, re.Pattern, object]] = [
+    # ISO 27001:2022 — A.5.1 or A.5.1.1
+    ("iso27001",  re.compile(r'\bA\.\d{1,2}(?:\.\d{1,2}){0,2}\b'), _norm_upper),
+    # CMMC 2.0 — AC.L1-3.1.1, AC.L2-3.1.2, etc.
+    ("cmmc2",     re.compile(r'\b[A-Z]{2}\.L[123]-\d+\.\d+\.\d+\b'), _norm_upper),
+    # NIST CSF 2.0 — GV.OC-01, ID.AM-01, PR.AC-01, DE.AE-02 (two-digit suffix)
+    # Also matches CSF 1.1 single-digit: PR.AC-1, ID.AM-1 — all map to csf2 in DB
+    ("csf2",      re.compile(r'\b(?:GV|ID|PR|DE|RS|RC)\.[A-Z]{2}-\d{1,2}\b'), _norm_upper),
+    # PCI DSS 4.0 — Requirement 6, Req 6.1, Req. 10.2 — DB stores bare number
+    ("pcidss",    re.compile(r'\bReq(?:uirement)?\.?\s*(\d{1,2}(?:\.\d{1,2})*)\b', re.I), _norm_pci),
+    # SOC 2 — CC6.1, CC7.2, A1.1, C1.1, PI1.1
+    ("soc2",      re.compile(r'\b(?:CC|A1|PI1|C1)\d\.\d\b'), _norm_upper),
+    # HIPAA Security Rule — 164.308(a)(1)(i), 164.312(a)(2)
+    ("hipaa",     re.compile(r'(?<!\d)164\.\d{3}\([a-z]\)\(\d+\)(?:\([iv]+\))?(?!\w)', re.I), _norm_hipaa),
+]
+
+
+def extract_multi_fw_controls(text: str) -> dict[str, list[str]]:
+    """
+    Scan document text for non-NIST control IDs from supported frameworks.
+    Returns { framework_short_name: [normalized_control_id, ...] }
+    where framework_short_name matches compliance_frameworks.short_name.
+    """
+    found: dict[str, set[str]] = {}
+    for fw_name, pattern, normaliser in _MULTI_FW_PATTERNS:
+        for m in pattern.finditer(text):
+            cid = normaliser(m)
+            found.setdefault(fw_name, set()).add(cid)
+    return {k: sorted(v) for k, v in found.items()}
+
 # ── Implementation status keywords (order matters — most specific first) ────────
 STATUS_PATTERNS = [
     (re.compile(r'\bnot\s+applicable\b', re.I),                "Not Applicable"),
@@ -371,12 +416,18 @@ def parse_ssp(path: Path) -> dict:
                 "narrative":             narrative,
             }
 
-    log.info("Parsed %d unique control references from '%s'.", len(controls), path.name)
+    # ── Multi-framework detection ────────────────────────────────────────────
+    multi_fw = extract_multi_fw_controls(text)
+
+    log.info("Parsed %d unique NIST control references from '%s'. Multi-fw: %s",
+             len(controls), path.name,
+             {k: len(v) for k, v in multi_fw.items()} if multi_fw else "none")
     return {
-        "system_name":     system_name,
-        "impact_level":    impact_level,
-        "raw_text_length": len(text),
-        "controls":        controls,
+        "system_name":      system_name,
+        "impact_level":     impact_level,
+        "raw_text_length":  len(text),
+        "controls":         controls,
+        "multi_fw_controls": multi_fw,   # {framework: [ctrl_id, ...]}
     }
 
 
@@ -856,7 +907,10 @@ def analyze_ssp(path: Path) -> dict:
 
     # Sort: critical first, then high, medium, adequate
     _order = {"CRITICAL_GAP": 0, "HIGH_GAP": 1, "MEDIUM_GAP": 2, "NOT_FOUND": 3, "ADEQUATE": 4, "NA": 5}
-    findings.sort(key=lambda f: (_order.get(f["grade"], 9), f["control_id"]))
+    def _ctrl_sort_key(cid: str) -> tuple:
+        m = re.match(r'^([a-z]+)-(\d+)(?:\.(\d+))?$', cid.lower())
+        return (m.group(1), int(m.group(2)), int(m.group(3) or 0)) if m else (cid, 0, 0)
+    findings.sort(key=lambda f: (_order.get(f["grade"], 9), _ctrl_sort_key(f["control_id"])))
 
     overall = round(total_score / scored, 1) if scored else 0.0
 

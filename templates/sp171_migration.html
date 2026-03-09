@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}SP 800-171 Rev 2 → Rev 3 Migration — BLACKSITE{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">NIST SP&nbsp;800-171 Rev&nbsp;2 → Rev&nbsp;3 Migration</h1>
+    <p class="page-sub">
+      Crosswalk your existing CUI protection program from SP 800-171 Revision 2 to Revision 3.
+      Identify new requirements you must document, requirements that carried forward, and requirements restructured in Rev 3.
+    </p>
+  </div>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% elif analysis %}
+
+<!-- Summary Stats -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="stat-card text-center p-3">
+      <div class="stat-card-n text-secondary">{{ analysis.stats.r2_total }}</div>
+      <div class="stat-card-l">Rev 2 Requirements</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card text-center p-3">
+      <div class="stat-card-n text-primary">{{ analysis.stats.r3_total }}</div>
+      <div class="stat-card-l">Rev 3 Requirements</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card text-center p-3">
+      <div class="stat-card-n" style="color:var(--bs-success)">{{ analysis.stats.direct }}</div>
+      <div class="stat-card-l">Carry Forward</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stat-card text-center p-3">
+      <div class="stat-card-n" style="color:var(--bs-warning)">{{ analysis.stats.new_in_r3 }}</div>
+      <div class="stat-card-l">New in Rev 3 <small>(gaps)</small></div>
+    </div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+  <div class="card-body">
+    <form method="get" action="/tools/sp171-migration" class="row g-2 align-items-end">
+
+      <div class="col-12 col-md-4">
+        <label class="form-label fw-semibold">System (optional)</label>
+        <select name="system_id" id="sp171-system" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="System filter (auto-applies on change)">
+          <option value="">— No system selected —</option>
+          {% for sys in user_systems %}
+          <option value="{{ sys.id }}" {% if selected_system and selected_system.id == sys.id %}selected{% endif %}>
+            {{ sys.name }}
+          </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Select to overlay your documented requirement statuses.</div>
+      </div>
+
+      <div class="col-6 col-md-3">
+        <label class="form-label fw-semibold">Requirement Family</label>
+        <select name="family" class="form-select form-select-sm">
+          <option value="">All Families</option>
+          {% for fam in analysis.families %}
+          <option value="{{ fam }}" {% if family_filter == fam %}selected{% endif %}>{{ fam }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-6 col-md-3">
+        <label class="form-label fw-semibold">Show</label>
+        <select name="view" class="form-select form-select-sm">
+          <option value="all"       {% if view_filter == 'all'       %}selected{% endif %}>All requirements</option>
+          <option value="new_r3"    {% if view_filter == 'new_r3'    %}selected{% endif %}>New in Rev 3 only (gaps)</option>
+          <option value="withdrawn" {% if view_filter == 'withdrawn' %}selected{% endif %}>Restructured / Not in Rev 3</option>
+          <option value="direct"    {% if view_filter == 'direct'    %}selected{% endif %}>Carry-forward only</option>
+        </select>
+      </div>
+
+      {% if selected_system %}
+      <input type="hidden" name="system_id" value="{{ selected_system.id }}"/>
+      {% endif %}
+
+      <div class="col-12 col-md-2">
+        <button type="submit" class="btn btn-sm btn-primary w-100">Apply</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="d-flex flex-wrap gap-3 mb-3 small">
+  <span><span class="badge bg-success">Carry Forward</span> Same requirement ID in both revisions</span>
+  <span><span class="badge bg-warning text-dark">New in Rev 3</span> No Rev 2 equivalent — must document</span>
+  <span><span class="badge bg-secondary">Restructured</span> Not carried into Rev 3 — review disposition</span>
+</div>
+
+<!-- NEW IN REV 3 -->
+{% if analysis.new_in_r3 %}
+<div class="card mb-4 border-warning">
+  <div class="card-header bg-warning bg-opacity-10 d-flex justify-content-between align-items-center">
+    <span class="fw-bold">&#9888; New in Rev 3 — Must Document ({{ analysis.new_in_r3 | length }})</span>
+    <small class="text-muted">These requirements did not exist in Rev 2. You must document them.</small>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Requirement ID</th>
+          <th>Family</th>
+          <th>Rev 3 Title</th>
+          {% if selected_system %}<th>System Status</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in analysis.new_in_r3 %}
+        <tr>
+          <td><code>{{ row.id }}</code></td>
+          <td><span class="badge bg-light text-dark border">{{ row.family }}</span></td>
+          <td>{{ row.r3_title }}</td>
+          {% if selected_system %}
+          <td>
+            {% if row.sys_status %}
+            <span class="badge bg-{{ 'success' if row.sys_status == 'implemented' else ('warning text-dark' if row.sys_status in ('in_progress','partial') else 'secondary') }}">
+              {{ row.sys_status | replace('_', ' ') | title }}
+            </span>
+            {% else %}
+            <span class="text-muted">Not documented</span>
+            {% endif %}
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- RESTRUCTURED / NOT IN REV 3 -->
+{% if analysis.withdrawn %}
+<div class="card mb-4 border-secondary">
+  <div class="card-header bg-secondary bg-opacity-10 d-flex justify-content-between align-items-center">
+    <span class="fw-bold">Restructured / Not in Rev 3 ({{ analysis.withdrawn | length }})</span>
+    <small class="text-muted">These Rev 2 requirements were removed, consolidated, or restructured in Rev 3.</small>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Requirement ID</th>
+          <th>Family</th>
+          <th>Rev 2 Title</th>
+          {% if selected_system %}<th>System Status</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in analysis.withdrawn %}
+        <tr class="text-muted">
+          <td><code>{{ row.id }}</code></td>
+          <td><span class="badge bg-light text-dark border">{{ row.family }}</span></td>
+          <td>{{ row.r2_title }}</td>
+          {% if selected_system %}
+          <td>
+            {% if row.sys_status %}
+            <span class="badge bg-secondary">{{ row.sys_status | replace('_', ' ') | title }}</span>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- CARRY FORWARD -->
+{% if analysis.direct %}
+<div class="card mb-4 border-success">
+  <div class="card-header bg-success bg-opacity-10 d-flex justify-content-between align-items-center">
+    <span class="fw-bold">&#10003; Carry Forward — Same ID in Both Revisions ({{ analysis.direct | length }})</span>
+    <small class="text-muted">Existing implementations apply. Review scope changes in Rev 3.</small>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Requirement ID</th>
+          <th>Family</th>
+          <th>Rev 2 Title</th>
+          <th>Rev 3 Title</th>
+          {% if selected_system %}<th>System Status</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in analysis.direct %}
+        <tr>
+          <td><code>{{ row.id }}</code></td>
+          <td><span class="badge bg-light text-dark border">{{ row.family }}</span></td>
+          <td class="text-muted small">{{ row.r2_title }}</td>
+          <td class="small">{{ row.r3_title }}</td>
+          {% if selected_system %}
+          <td>
+            {% if row.sys_status %}
+            <span class="badge bg-{{ 'success' if row.sys_status == 'implemented' else ('warning text-dark' if row.sys_status in ('in_progress','partial') else 'secondary') }}">
+              {{ row.sys_status | replace('_', ' ') | title }}
+            </span>
+            {% else %}
+            <span class="text-muted">Not documented</span>
+            {% endif %}
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% else %}
+<div class="alert alert-info">
+  SP 800-171 Rev 2 or Rev 3 catalog not yet loaded. They will be downloaded automatically on the next restart.
+</div>
+{% endif %}
+
+{% endblock %}

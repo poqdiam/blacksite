@@ -2,11 +2,17 @@
 {% block title %}{{ app_name }} — Change Review: {{ system.name }}{% endblock %}
 
 {% block content %}
+<div class="breadcrumb">
+  <a href="/systems">Systems</a>
+  <span class="sep">/</span>
+  <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+  <span class="sep">/</span>
+  <a href="/systems/{{ system.id }}/daily">Daily Ops</a>
+  <span class="sep">/</span>
+  <span>Change Review</span>
+</div>
+
 <div style="margin-bottom:20px">
-  <div style="font-size:0.65em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">
-    <a href="/systems/{{ system.id }}" style="color:var(--muted)">{{ system.name }}</a> /
-    <a href="/systems/{{ system.id }}/daily" style="color:var(--muted)">Daily Ops</a> / Change Review
-  </div>
   <h1 style="font-size:1.3em;margin:0">Change Control Review — {{ today }}</h1>
 </div>
 

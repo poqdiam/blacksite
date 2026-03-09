@@ -98,7 +98,7 @@ from typing import Optional, Dict, List
 import aiofiles
 import yaml
 from fastapi import (
-    BackgroundTasks, FastAPI, File, Form, HTTPException,
+    BackgroundTasks, FastAPI, File, Form, HTTPException, Query,
     Request, UploadFile, WebSocket, WebSocketDisconnect
 )
 from fastapi.responses import (
@@ -106,10 +106,10 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, or_, select, update, text, case as sa_case
+from sqlalchemy import func, or_, select, update, text, case as sa_case, bindparam
 
 from app.models import (
-    Assessment, Candidate, ControlResult, ControlsMeta, DailyQuizActivity, QuizResponse,
+    Assessment, Candidate, ControlResult, ControlsMeta, DailyQuizActivity, QuizResponse, TrainingClick,
     System, PoamItem, PoamEvidence, Risk, UserProfile, AuditLog, SystemAssignment, ControlEdit,
     SystemControl, Submission, RmfRecord,
     AtoDocument, AtoDocumentVersion, AtoWorkflowEvent,
@@ -129,9 +129,28 @@ from app.models import (
     EvidenceFile,
     # Phase 30 — Compliance Framework Crosswalk
     ComplianceFramework, FrameworkControl, ControlCrosswalk, SystemFramework,
-    init_db, make_engine, make_session_factory
+    # External roles
+    ExternalEngagement, ExecutiveObservation,
+    # Phase 31 / Auth packages
+    AuthPackageType, SystemAuthPackage,
+    # Phase 33 — framework agnosticism
+    OrgEnabledFramework, DataAttributeDefinition, SystemDataAttribute,
+    PackageSignature,
+    # Phase 34 — deployment profiles
+    DeploymentProfile,
+    # Phase 35 — SCAP scanning
+    SystemScan, ScanFinding,
+    # Background workload engine
+    DailyWorkAssignment,
+    # IL4 security
+    ImmutableAuditEntry,
+    Organization, UserOrganizationMembership, OrgSettings, DEFAULT_ORG_ID, DEFAULT_ORG_NAME,
+    init_db, make_engine, make_session_factory, _upsert_sql
 )
-from app.updater    import load_catalog, update_if_needed
+from app.updater    import (load_catalog, load_baselines, update_if_needed,
+                            ensure_rev4_catalog, load_rev4_catalog,
+                            ensure_supplemental_catalogs, load_oscal_catalog_file,
+                            SUPPLEMENTAL_CATALOGS)
 from app.parser     import parse_ssp, analyze_ssp
 from app.assessor   import run_assessment, compute_combined_score, is_allstar
 from app.quiz       import QUESTIONS, grade_quiz, grade_daily_quiz
@@ -139,6 +158,7 @@ from app.mailer     import send_report, forward_assessment, send_welcome_email, 
 from app.remediation import get_remediation
 from app.scorer     import analyze_assessment, compute_risk_level, compute_overall_impact
 from app.llm        import get_engine as _get_llm_engine
+from app import oscap as _oscap
 
 logging.basicConfig(
     level=logging.INFO,
@@ -159,6 +179,16 @@ CONFIG = load_config()
 
 # ── HTTP header constants ──────────────────────────────────────────────────────
 _REMOTE_USER_HDR = "Remote-User"
+
+# ── Email validation ───────────────────────────────────────────────────────────
+_EMAIL_RE = _re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
+
+def _validate_emails(**kwargs) -> list[str]:
+    """Return list of field names whose values are non-empty but invalid email addresses."""
+    return [
+        field for field, value in kwargs.items()
+        if value and not _EMAIL_RE.match(value)
+    ]
 
 # ── App secret + role-shell HMAC signing ───────────────────────────────────────
 
@@ -183,13 +213,21 @@ _ADMIN_PRESENCE:    dict[str, dict]      = {}   # username → {status, away_msg
 
 # ── Phase 21: Session enforcement ──────────────────────────────────────────────
 
-_LAST_ACTIVITY:  dict[str, datetime] = {}  # username → last-seen UTC timestamp
-_SESSION_EXEMPT: set                 = set()  # populated from admin_users at startup
-_SESSION_TIMEOUT: timedelta          = timedelta(minutes=15)  # override from config
+_LAST_ACTIVITY:   dict[str, datetime] = {}  # username → last-seen UTC timestamp
+_SESSION_EXEMPT:  set                 = set()  # populated from admin_users at startup
+_SESSION_TIMEOUT: timedelta           = timedelta(minutes=15)  # override from config
+_PROFILES_ENSURED: set[str]           = set()  # users whose profile rows have been verified this run
+_GEO_CACHE:        dict[str, dict]    = {}     # IP → {city, country, country_code, org}
 
 # ── Phase 23: System settings cache ────────────────────────────────────────────
 # In-process cache for system settings — refreshed on write.
 _SYSTEM_SETTINGS_CACHE: dict[str, str] = {}
+
+# ── IL4 Security Configuration ────────────────────────────────────────────────
+_SEC_CFG: dict = {}          # populated in lifespan
+_CAC_PIV_AUTH: bool = False  # cached at startup
+_REQUIRE_MFA: bool = False
+_AUDIT_ALL: bool = False
 
 # ── Phase 6: Build stamp ──────────────────────────────────────────────────────
 import subprocess as _sp_bld
@@ -242,9 +280,12 @@ async def _chat_enabled() -> bool:
 
 
 def _is_admin_user(username: str) -> bool:
-    return bool(username) and username in set(
-        CONFIG.get("app", {}).get("admin_users", ["dan"])
-    )
+    """True for full platform admins (admin_users) OR staff with chat access (staff_users)."""
+    if not username:
+        return False
+    admin_set = set(CONFIG.get("app", {}).get("admin_users", ["dan"]))
+    staff_set = set(CONFIG.get("app", {}).get("staff_users", []))
+    return username in admin_set or username in staff_set
 
 
 async def _chat_broadcast(data: dict, exclude: str | None = None) -> None:
@@ -285,15 +326,120 @@ def _verify_shell(signed: str) -> str | None:
     return role if _hmac.compare_digest(sig, expected) else None
 
 
+# ── Org context helpers (Phase 36) ────────────────────────────────────────────
+
+def _sign_org(org_id: str) -> str:
+    sig = _hmac.new(_APP_SECRET.encode(), org_id.encode(), "sha256").hexdigest()[:20]
+    return f"{org_id}.{sig}"
+
+
+def _verify_org(signed: str) -> Optional[str]:
+    """Return the org_id if the signed cookie is valid, else None."""
+    if not signed or "." not in signed:
+        return None
+    # org_id is a UUID — last segment after final dot is the sig
+    # Format: <uuid>.{sig20} → split on last dot only
+    idx = signed.rfind(".")
+    org_id, sig = signed[:idx], signed[idx+1:]
+    if not org_id:
+        return None
+    expected = _hmac.new(_APP_SECRET.encode(), org_id.encode(), "sha256").hexdigest()[:20]
+    return org_id if _hmac.compare_digest(sig, expected) else None
+
+
+def _get_active_org_id(request: Request) -> str:
+    """Return the active org_id from cookie (verified), or DEFAULT_ORG_ID."""
+    cookie_val = request.cookies.get("bsv_active_org", "")
+    verified = _verify_org(cookie_val)
+    return verified if verified else DEFAULT_ORG_ID
+
+
+async def _get_user_orgs(remote_user: str, session) -> list:
+    """Return list of (org_id, org_name, org_role) tuples the user belongs to."""
+    rows = await session.execute(
+        select(Organization.id, Organization.name, UserOrganizationMembership.org_role)
+        .join(UserOrganizationMembership, Organization.id == UserOrganizationMembership.org_id)
+        .where(
+            UserOrganizationMembership.remote_user == remote_user,
+            UserOrganizationMembership.is_active == True,
+            Organization.is_active == True,
+        )
+        .order_by(Organization.name)
+    )
+    return [(r[0], r[1], r[2]) for r in rows.all()]
+
+
+async def _is_org_member(org_id: str, remote_user: str, session) -> bool:
+    """Return True if the user is an active member of the given org."""
+    row = await session.execute(
+        select(UserOrganizationMembership.id)
+        .where(
+            UserOrganizationMembership.org_id == org_id,
+            UserOrganizationMembership.remote_user == remote_user,
+            UserOrganizationMembership.is_active == True,
+        )
+        .limit(1)
+    )
+    return row.scalar_one_or_none() is not None
+
+
+async def _get_org_setting(org_id: str, key: str, session, default: str = "") -> str:
+    """Return a per-org setting value, or default if not set."""
+    row = await session.execute(
+        select(OrgSettings.value).where(
+            OrgSettings.org_id == org_id,
+            OrgSettings.key == key,
+        )
+    )
+    val = row.scalar_one_or_none()
+    return val if val is not None else default
+
+
+async def _set_org_setting(org_id: str, key: str, value: str, actor: str, session) -> None:
+    """Upsert a per-org setting."""
+    existing = (await session.execute(
+        select(OrgSettings).where(OrgSettings.org_id == org_id, OrgSettings.key == key)
+    )).scalar_one_or_none()
+    if existing:
+        existing.value = value
+        existing.updated_by = actor
+    else:
+        session.add(OrgSettings(org_id=org_id, key=key, value=value, updated_by=actor))
+    await session.commit()
+
+
+async def _require_scan_enabled(system_id: str, request: Request, session) -> None:
+    """Raise HTTP 402 if SCAP scanning is not enabled for this system's org.
+
+    SCAP scanning is a premium feature gated per-org via org_settings key
+    'scan_enabled' = 'true'.  Platform admins bypass the gate.
+    """
+    if _is_admin(request):
+        return
+    sys_row = (await session.execute(
+        select(System.org_id).where(System.id == system_id)
+    )).scalar_one_or_none()
+    org_id = sys_row or DEFAULT_ORG_ID
+    enabled = await _get_org_setting(org_id, "scan_enabled", session, default="false")
+    if enabled != "true":
+        raise HTTPException(
+            status_code=402,
+            detail="SCAP scanning is a premium feature. Contact your administrator to enable it for this organization."
+        )
+
+
 # ── App factory ────────────────────────────────────────────────────────────────
 
 engine       = make_engine(CONFIG)
+_DB_DIALECT  = engine.dialect.name
 SessionLocal = make_session_factory(engine)
 templates    = Jinja2Templates(directory="templates")
 templates.env.filters["fromjson"] = lambda s: (json.loads(s) if s else {})
 templates.env.filters["b64decode"] = (
     lambda s: __import__("base64").b64decode(s).decode("utf-8", errors="replace") if s else ""
 )
+# Strip underscores from any user-facing string (role slugs, usernames, etc.)
+templates.env.filters["human"] = lambda s: str(s).replace("_", " ").replace(".", " ").title() if s else ""
 
 # ── Control statement / guidance formatter ─────────────────────────────────────
 _CTRL_PARAM_RE = _re.compile(r'\{\{\s*insert:\s*param,\s*([^}]+?)\s*\}\}')
@@ -427,14 +573,59 @@ def _first_sentence(text: str, max_len: int = 200) -> str:
 
 
 CATALOG:           dict = {}
+R4_CATALOG:        dict = {}   # NIST 800-53 Rev 4 — for crosswalk/migration analysis
+SP171_R2:          dict = {}   # NIST SP 800-171 Rev 2
+SP171_R3:          dict = {}   # NIST SP 800-171 Rev 3
+CSF2_CATALOG:      dict = {}   # NIST CSF 2.0
+FEDRAMP_HIGH:      dict = {}   # FedRAMP High resolved catalog
+FEDRAMP_MOD:       dict = {}   # FedRAMP Moderate resolved catalog
+FEDRAMP_LOW:       dict = {}   # FedRAMP Low resolved catalog
 _CTRL_META:        dict = {}  # lowercase ctrl_id → controls.json record
 _ODP_LABELS:       dict = {}  # odp param id → assessment objective label
 _ASSESSMENT_PROCS: dict = {}  # lowercase ctrl_id → {examine, interview, test}
 
 # Overlay → authoritative URL (.gov/.mil/.org)
 VALID_THEMES = {
-    "midnight", "obsidian", "void", "ember", "pine", "steel", "arctic", "parchment"
+    # Light
+    "rose", "linen", "parchment", "arctic", "slate", "cloud", "sage",
+    # Dark
+    "ember", "terminal", "synthwave", "midnight", "obsidian", "noir", "amber",
 }
+
+# Framework short_name prefixes whose control text is commercially licensed
+# (ISO standards are copyrighted by ISO; redistribution requires a separate license)
+# ISO: copyrighted by ISO; redistribution requires commercial license from ISO.
+# CIS: CC BY-NC-ND 4.0; commercial use requires CIS SecureSuite membership license.
+_PAYWALLED_FW_PREFIXES: tuple = ("iso", "cis")
+
+def _is_paywalled_fw(short_name: str) -> bool:
+    """Return True if this framework's control text requires a license gate.
+
+    In demo mode ALL frameworks are gated — the demo shows system functionality
+    without being a usable product.
+
+    In production, admins can unlock ISO/CIS families via System Settings once
+    the org holds a valid license.
+    """
+    if _cfg("demo_mode", False):
+        return True
+    name = short_name.lower()
+    if name.startswith("iso") and _SYSTEM_SETTINGS_CACHE.get("iso_licensed") == "true":
+        return False
+    if name.startswith("cis") and _SYSTEM_SETTINGS_CACHE.get("cis_licensed") == "true":
+        return False
+    return any(name.startswith(p) for p in _PAYWALLED_FW_PREFIXES)
+
+def _demo_nist_paywall_response(request: Request, title: str = "NIST SP 800-53 Rev 5"):
+    """Return a paywall template response for NIST control/family pages in demo mode."""
+    from types import SimpleNamespace
+    fw_mock = SimpleNamespace(name=title, version=None, short_name="nist80053r5")
+    return templates.TemplateResponse("controls_paywalled.html", {
+        "request":     request,
+        "fw":          fw_mock,
+        "fw_controls": [],
+        **_tpl_ctx(request),
+    })
 
 # Regex to extract {choice1; choice2} from ODP descriptions
 _ODP_CHOICE_RE = _re.compile(r'\{([^}]+)\}')
@@ -558,13 +749,66 @@ def _build_assessment_ctx(ctrl_id: str) -> dict | None:
         return None
     return {"examine": examine, "interview": interview, "test": test}
 
+def _il4_startup_checks(sec_cfg: dict) -> None:
+    """Verify IL4 compliance prerequisites at startup. Warn on gaps, block on critical ones."""
+    import os
+    is_prod = os.environ.get("BLACKSITE_ENV", "dev").lower() == "prod"
+    gaps = []
+
+    # Gap 1: Encryption at rest
+    if not sec_cfg.get("db_encryption", False):
+        gaps.append(("WARN",  "GAP-1 [AU-9/SC-28]", "db_encryption not enabled — data at rest is unencrypted. Set security.db_encryption=true and install libsqlcipher3."))
+
+    # Gap 2: Audit logging — non-repudiation (self-check)
+    # ImmutableAuditEntry table is always created by init_db, so this gap is closed by design.
+    log.info("IL4 CHECK: GAP-2 [AU-2/AU-10] Immutable audit log: OK")
+
+    # Gap 3: MFA enforcement
+    if not sec_cfg.get("require_mfa", False):
+        gaps.append(("WARN",  "GAP-3 [IA-2(1)]", "require_mfa not enabled — MFA is not being enforced at the application layer."))
+
+    # Gap 4: Session FIPS crypto — PROD GUARD ONLY
+    if is_prod and not sec_cfg.get("fips_session_crypto", False):
+        gaps.append(("BLOCK", "GAP-4 [SC-13]", "fips_session_crypto not enabled — FIPS-validated session crypto required in production. Set BLACKSITE_ENV=dev to bypass during development."))
+
+    for level, tag, msg in gaps:
+        if level == "BLOCK":
+            log.critical("IL4 COMPLIANCE BLOCK %s: %s", tag, msg)
+            raise RuntimeError(f"IL4 compliance block: {tag} — {msg}")
+        else:
+            log.warning("IL4 COMPLIANCE WARN %s: %s", tag, msg)
+
+    if not gaps or all(g[0] == "WARN" for g in gaps):
+        log.info("IL4 startup checks complete. %d warning(s).", len(gaps))
+
+
 # ── Lifespan ───────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global CATALOG, _APP_SECRET, _CTRL_META, _ODP_LABELS, _ASSESSMENT_PROCS, _SESSION_EXEMPT, _SESSION_TIMEOUT
     await init_db(engine)
+    # Pre-warm system settings cache so _tpl_ctx() doesn't fall back to defaults
+    try:
+        async with SessionLocal() as _s:
+            _rows = (await _s.execute(text("SELECT key, value FROM system_settings"))).fetchall()
+            for _k, _v in _rows:
+                _SYSTEM_SETTINGS_CACHE[_k] = _v
+    except Exception:
+        pass
     _APP_SECRET       = _get_app_secret()
+    # ── IL4 Security initialization ───────────────────────────────────────────
+    global _SEC_CFG, _CAC_PIV_AUTH, _REQUIRE_MFA, _AUDIT_ALL
+    _SEC_CFG       = CONFIG.get("security", {})
+    _CAC_PIV_AUTH  = bool(_SEC_CFG.get("cac_piv_auth", False))
+    _REQUIRE_MFA   = bool(_SEC_CFG.get("require_mfa", False))
+    _AUDIT_ALL     = bool(_SEC_CFG.get("audit_all_requests", False))
+
+    il4_mode = bool(_SEC_CFG.get("il4_mode", False))
+    if il4_mode:
+        log.info("IL4 mode enabled — enforcing compliance checks.")
+        _il4_startup_checks(_SEC_CFG)
+
     _SESSION_EXEMPT   = set(CONFIG.get("app", {}).get("admin_users", ["dan"]))
     _SESSION_TIMEOUT  = timedelta(minutes=int(CONFIG.get("session", {}).get("timeout_minutes", 15)))
     _CTRL_META        = _load_ctrl_meta()
@@ -583,6 +827,47 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.warning("Could not load NIST catalog at startup: %s", e)
         CATALOG = {}
+    # Load Rev 4 catalog (download once if missing)
+    try:
+        from pathlib import Path as _Path
+        _controls_dir = _Path(CONFIG.get("nist", {}).get("controls_dir", "controls"))
+        await loop.run_in_executor(None, ensure_rev4_catalog, _controls_dir)
+        R4_CATALOG.update(await loop.run_in_executor(None, load_rev4_catalog, _controls_dir))
+        log.info("NIST 800-53 Rev 4 catalog loaded: %d controls.", len(R4_CATALOG))
+    except Exception as e:
+        log.warning("Could not load Rev 4 catalog: %s", e)
+    # Load supplemental catalogs (SP 800-171 r2/r3, CSF 2.0, FedRAMP High/Mod/Low)
+    try:
+        global SP171_R2, SP171_R3, CSF2_CATALOG, FEDRAMP_HIGH, FEDRAMP_MOD, FEDRAMP_LOW
+        from pathlib import Path as _Path2
+        _cdir = _Path2(CONFIG.get("nist", {}).get("controls_dir", "controls"))
+        await loop.run_in_executor(None, ensure_supplemental_catalogs, _cdir)
+        _supp_map = {
+            "sp800_171r2":  "SP171_R2",
+            "sp800_171r3":  "SP171_R3",
+            "csf2":         "CSF2_CATALOG",
+            "fedramp_high": "FEDRAMP_HIGH",
+            "fedramp_mod":  "FEDRAMP_MOD",
+            "fedramp_low":  "FEDRAMP_LOW",
+        }
+        for _key, _varname in _supp_map.items():
+            _fname = SUPPLEMENTAL_CATALOGS[_key]["local"]
+            _data = await loop.run_in_executor(None, load_oscal_catalog_file, _cdir / _fname)
+            if _varname == "SP171_R2":
+                SP171_R2 = _data
+            elif _varname == "SP171_R3":
+                SP171_R3 = _data
+            elif _varname == "CSF2_CATALOG":
+                CSF2_CATALOG = _data
+            elif _varname == "FEDRAMP_HIGH":
+                FEDRAMP_HIGH = _data
+            elif _varname == "FEDRAMP_MOD":
+                FEDRAMP_MOD = _data
+            elif _varname == "FEDRAMP_LOW":
+                FEDRAMP_LOW = _data
+            log.info("Loaded %s: %d controls.", SUPPLEMENTAL_CATALOGS[_key]["label"], len(_data))
+    except Exception as e:
+        log.warning("Could not load supplemental catalogs: %s", e)
     # Auto-purge removed users older than 1 year
     try:
         async with SessionLocal() as s:
@@ -605,6 +890,45 @@ async def lifespan(app: FastAPI):
             await s.commit()
     except Exception:
         pass
+    # Warm-up ping to Ollama so first LLM request doesn't stall
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=5.0) as hclient:
+            r = await hclient.get("http://localhost:11434/api/tags")
+            log.info("Ollama warm-up ping: HTTP %d", r.status_code)
+    except Exception as e:
+        log.warning("Ollama not reachable at startup (OK if not installed): %s", e)
+    # Seed authorization package type catalog (INSERT OR IGNORE)
+    try:
+        async with SessionLocal() as s:
+            await _seed_auth_package_types(s)
+    except Exception as e:
+        log.warning("Could not seed auth package types: %s", e)
+    try:
+        async with SessionLocal() as s:
+            await _seed_nist_baselines(s)
+    except Exception as e:
+        log.warning("Could not seed NIST baselines: %s", e)
+    try:
+        async with SessionLocal() as s:
+            await _seed_nist_all(s)
+    except Exception as e:
+        log.warning("Could not seed NIST all controls: %s", e)
+    try:
+        async with SessionLocal() as s:
+            await _seed_iso_baselines(s)
+    except Exception as e:
+        log.warning("Could not seed ISO baselines: %s", e)
+    try:
+        async with SessionLocal() as s:
+            await _seed_deployment_profiles(s)
+    except Exception as e:
+        log.warning("Could not seed deployment profiles: %s", e)
+    try:
+        async with SessionLocal() as s:
+            await _seed_supplemental_frameworks(s)
+    except Exception as e:
+        log.warning("Could not seed supplemental frameworks: %s", e)
     # Backfill inventory numbers for existing systems that don't have one
     try:
         async with SessionLocal() as s:
@@ -636,6 +960,25 @@ async def lifespan(app: FastAPI):
                 log.info("Backfilled inventory numbers for %d systems.", len(no_inv))
     except Exception as e:
         log.warning("Could not backfill inventory numbers: %s", e)
+    # Phase 33 — populate _disabled_fw_dirs from DB and apply to LLM knowledge base
+    try:
+        async with SessionLocal() as s:
+            disabled_rows = (await s.execute(
+                select(ComplianceFramework.short_name)
+                .join(OrgEnabledFramework,
+                      OrgEnabledFramework.framework_id == ComplianceFramework.id)
+                .where(OrgEnabledFramework.is_enabled == False)
+            )).scalars().all()
+            for sn in disabled_rows:
+                _disabled_fw_dirs.add(sn)
+        if _disabled_fw_dirs:
+            llm_eng = _get_llm_engine()
+            if llm_eng and hasattr(llm_eng, "kb"):
+                llm_eng.kb.reload_with_exclusions(_disabled_fw_dirs)
+            log.info("Phase 33: LLM knowledge base reloaded; excluded frameworks: %s",
+                     _disabled_fw_dirs)
+    except Exception as e:
+        log.warning("Could not initialize disabled framework dirs: %s", e)
     yield
     await engine.dispose()
 
@@ -754,7 +1097,236 @@ async def session_timeout_middleware(request: Request, call_next):
                 r.delete_cookie("bsv_user_view")
                 return r
         _LAST_ACTIVITY[user] = datetime.now(timezone.utc)  # BLKS022826-1003AC03
+        if user not in _PROFILES_ENSURED:
+            asyncio.create_task(_ensure_profile(user))
     return await call_next(request)
+
+
+async def _ensure_profile(user: str) -> None:
+    """Auto-create a UserProfile on first request so the user is visible to admins
+    without requiring them to manually save their profile page first."""
+    _PROFILES_ENSURED.add(user)
+    try:
+        async with SessionLocal() as s:
+            exists = (await s.execute(
+                select(UserProfile.remote_user).where(UserProfile.remote_user == user)
+            )).scalar_one_or_none()
+            if not exists:
+                s.add(UserProfile(remote_user=user))
+                await s.commit()
+    except Exception:
+        pass
+
+
+async def _geo_lookup(ips: list[str]) -> dict[str, dict]:
+    """Batch geo-lookup via ip-api.com (free, no key). Returns IP → geo dict.
+    Results are cached in _GEO_CACHE for the lifetime of the process."""
+    missing = [ip for ip in ips if ip and ip not in _GEO_CACHE]
+    if missing:
+        try:
+            import httpx as _httpx
+            payload = [{"query": ip, "fields": "query,city,country,countryCode,org,status"} for ip in missing[:100]]
+            async with _httpx.AsyncClient(timeout=5) as client:
+                resp = await client.post("http://ip-api.com/batch", json=payload)
+                if resp.status_code == 200:
+                    for entry in resp.json():
+                        ip = entry.get("query", "")
+                        if ip and entry.get("status") == "success":
+                            _GEO_CACHE[ip] = {
+                                "city":         entry.get("city", ""),
+                                "country":      entry.get("country", ""),
+                                "country_code": entry.get("countryCode", ""),
+                                "org":          entry.get("org", ""),
+                            }
+                        elif ip:
+                            _GEO_CACHE[ip] = {}
+        except Exception:
+            pass
+    return {ip: _GEO_CACHE.get(ip, {}) for ip in ips}
+
+
+def _country_flag(code: str) -> str:
+    """Convert ISO 3166-1 alpha-2 country code to flag emoji."""
+    if not code or len(code) != 2:
+        return ""
+    return chr(ord(code[0]) + 127397) + chr(ord(code[1]) + 127397)
+
+
+_DEMO_NOISE_PATHS: set[str] = {
+    "/api/heartbeat", "/api/ticker", "/api/feeds", "/api/quiz/status",
+    "/api/workload/today", "/api/observations/summary", "/api/ai/status",
+    "/favicon.ico",
+}
+
+_DEMO_ROLE_LABELS: dict[str, str] = {
+    "/isso/dashboard":      "Viewed ISSO Dashboard",
+    "/ao/decisions":        "Viewed AO Decisions",
+    "/sca/dashboard":       "Viewed SCA Dashboard",
+    "/executive/dashboard": "Viewed Executive Dashboard",
+    "/auditor/dashboard":   "Viewed Auditor Dashboard",
+    "/employee/dashboard":  "Viewed Employee Dashboard",
+    "/manager/dashboard":   "Viewed Manager Dashboard",
+}
+
+_DEMO_PROBE_SIGS: tuple[str, ...] = (
+    ".env", ".git/", "config.php", "wp-", "xmlrpc", ".bak",
+    "aws-config", "aws.config", "cdn-cgi", "phpinfo", "/.well-known/",
+    "admin/.env",
+)
+
+
+def _describe_request(
+    method: str,
+    path: str,
+    status: int,
+    names: dict[str, str] | None = None,
+) -> str | None:
+    """Return a human-readable label for a demo audit log entry, or None to suppress."""
+    import re as _re
+    p = path or ""
+    s = status or 0
+    names = names or {}
+
+    # Background polling — suppress entirely
+    if p in _DEMO_NOISE_PATHS:
+        return None
+    if p.startswith("/static/") or p.startswith("/profile/avatar/"):
+        return None
+
+    # Security scanner / credential probes
+    if s == 404 and any(sig in p for sig in _DEMO_PROBE_SIGS):
+        return f"Scanner probe: {p}"
+
+    # Auth redirects
+    if s in (302, 303) and p in ("/", "/dashboard"):
+        return "Redirected to login (unauthenticated)"
+
+    # Role dashboards
+    if p in _DEMO_ROLE_LABELS:
+        label = _DEMO_ROLE_LABELS[p]
+        return f"Denied: {label}" if s == 403 else label
+
+    # Role shell switches
+    m = _re.match(r"/switch-shell/(.+)$", p)
+    if m:
+        return f"Switched to {m.group(1)} role view"
+    if p in ("/switch-role-view", "/exit-shell"):
+        return "Exited / switched role view"
+
+    # Profile
+    if p == "/profile":
+        return "Viewed their profile"
+
+    # Controls catalog
+    if p == "/controls":
+        return "Browsed controls catalog"
+    m = _re.match(r"/controls/catalog/([^/]+)/overlays$", p)
+    if m:
+        return f"Browsed {m.group(1)} overlays"
+    m = _re.match(r"/controls/catalog/([^/]+)$", p)
+    if m:
+        return f"Browsed {m.group(1)} catalog"
+
+    # Systems
+    if p == "/systems":
+        return "Browsed systems list"
+    m = _re.match(r"/systems/([a-f0-9-]{36})/controls$", p)
+    if m:
+        return f"Viewed controls — {names.get(m.group(1), 'system')}"
+    m = _re.match(r"/systems/([a-f0-9-]{36})$", p)
+    if m:
+        return f"Viewed system — {names.get(m.group(1), 'system')}"
+
+    # RMF packages
+    m = _re.match(r"/rmf/([a-f0-9-]{36})$", p)
+    if m:
+        return f"Viewed RMF package — {names.get(m.group(1), 'system')}"
+
+    # Assessments
+    if p == "/assessments":
+        return "Browsed assessments"
+    m = _re.match(r"/assessments/([a-f0-9-]{36})$", p)
+    if m:
+        return f"Viewed assessment — {names.get(m.group(1), 'assessment')}"
+
+    # AI assistant
+    if p == "/ai/chat":
+        return "Opened GRC AI assistant"
+    if p == "/api/ai/ask":
+        return "Queried GRC assistant" + (" (unavailable)" if s == 503 else "")
+
+    # POA&M / risks
+    if p.startswith("/poam"):
+        return "Browsed POA&M"
+    if p.startswith("/risks"):
+        return "Browsed risks"
+
+    # Generic catch-all
+    if s == 404:
+        return f"Not found: {p}"
+    if s == 403:
+        return f"Access denied: {p}"
+    return f"{method} {p}"
+
+
+# ── IL4 Audit Middleware ──────────────────────────────────────────────────────
+
+@app.middleware("http")
+async def _il4_audit_middleware(request: Request, call_next):
+    """IL4 audit middleware — logs all requests to immutable_audit_log when audit_all_requests=True,
+    and always logs auth/admin/export events regardless of setting."""
+    response = await call_next(request)
+
+    try:
+        path = request.url.path
+        method = request.method
+        user = request.headers.get(_REMOTE_USER_HDR, "")
+        ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "")
+        status = response.status_code
+
+        # Determine if this event should always be logged (regardless of audit_all flag)
+        always_log = (
+            status in (401, 403) or
+            path.startswith("/admin") or
+            path.startswith("/api/workload") or
+            method in ("POST", "PUT", "PATCH", "DELETE") or
+            "export" in path or "download" in path
+        )
+
+        if _AUDIT_ALL or always_log:
+            event_type = "request"
+            if status in (401, 403):
+                event_type = "auth"
+            elif path.startswith("/admin"):
+                event_type = "admin"
+            elif "export" in path or "download" in path:
+                event_type = "export"
+            elif method in ("POST", "PUT", "PATCH", "DELETE"):
+                event_type = "data_access"
+
+            auth_method = "cac_piv" if _CAC_PIV_AUTH else "password"
+            mfa = request.headers.get("X-Authelia-Auth-Level", "") == "two_factor"
+
+            try:
+                async with SessionLocal() as _audit_session:
+                    entry = ImmutableAuditEntry(
+                        remote_user=user or None,
+                        remote_ip=ip or None,
+                        method=method,
+                        path=path,
+                        status_code=status,
+                        event_type=event_type,
+                        auth_method=auth_method,
+                        mfa_verified=mfa if _REQUIRE_MFA else None,
+                    )
+                    _audit_session.add(entry)
+                    await _audit_session.commit()
+            except Exception:
+                pass  # Never let audit failure break a request
+    except Exception:
+        pass
+
+    return response
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -771,11 +1343,54 @@ def _cfg(key: str, default=None):
 
 
 def _require_user(request: Request) -> str:
-    """Return the Remote-User header value; raise HTTP 401 if absent."""
+    """Return the authenticated user identity.
+
+    In standard mode: reads Remote-User header (set by Authelia via Caddy).
+    In CAC/PIV mode: parses the Common Name from the client certificate Subject DN
+    injected by Caddy as the configured cac_header.
+
+    Raises HTTP 401 if no identity can be resolved.
+    """
+    if _CAC_PIV_AUTH:
+        cac_header = _SEC_CFG.get("cac_header", "X-Client-Cert-Subject")
+        dn = request.headers.get(cac_header, "")
+        if dn:
+            # Extract CN from DN: "CN=DOE.JOHN.1234567890,OU=PKI,O=U.S. Government,C=US" -> "DOE.JOHN.1234567890"
+            cn = ""
+            for part in dn.split(","):
+                part = part.strip()
+                if part.upper().startswith("CN="):
+                    cn = part[3:]
+                    prefix = _SEC_CFG.get("cac_cn_prefix", "")
+                    if prefix and cn.startswith(prefix):
+                        cn = cn[len(prefix):]
+                    break
+            if cn:
+                _check_mfa(request)
+                return cn
+        # Fall through to Remote-User if CAC header absent (allows mixed environments)
+
     _u = request.headers.get(_REMOTE_USER_HDR, "")
     if not _u:
         raise HTTPException(status_code=401)
+    _check_mfa(request)
     return _u
+
+
+def _check_mfa(request: Request) -> None:
+    """Enforce MFA verification if require_mfa is enabled.
+
+    Checks Authelia's X-Authelia-Auth-Level header for 'two_factor'.
+    No-op if require_mfa is False.
+    """
+    if not _REQUIRE_MFA:
+        return
+    auth_level = request.headers.get("X-Authelia-Auth-Level", "")
+    if auth_level != "two_factor":
+        raise HTTPException(
+            status_code=403,
+            detail="MFA required. Please complete two-factor authentication."
+        )
 
 
 def _is_admin(request: Request) -> bool:
@@ -812,9 +1427,10 @@ def _tpl_ctx(request: Request) -> dict:
     employees = CONFIG.get("employees", [])
     # Best-effort display name: check employees config first, then title-case username
     emp_map = {e.get("username"): e.get("name") for e in employees if e.get("username")}
-    display_name = emp_map.get(user) or (user.replace(".", " ").title() if user else "")
-    is_admin_user = _is_admin(request)
-    shell_cookie  = _verify_shell(request.cookies.get("bsv_role_shell", "")) or ""
+    display_name = emp_map.get(user) or (user.replace(".", " ").replace("_", " ").title() if user else "")
+    is_admin_user  = _is_admin(request)
+    is_staff_chat  = _is_admin_user(user) and not is_admin_user  # staff_users only (not full admin)
+    shell_cookie   = _verify_shell(request.cookies.get("bsv_role_shell", "")) or ""
     # For admin users we can determine role shell state without a DB call.
     # Non-admin users: _full_ctx will override these with accurate DB-derived values.
     if is_admin_user:
@@ -822,11 +1438,14 @@ def _tpl_ctx(request: Request) -> dict:
         is_role_view        = shell_cookie in _VALID_SHELL_ROLES
         user_role_ctx       = shell_cookie if is_role_view else "admin"
     else:
-        shell_allowed_roles = []          # _full_ctx overrides
-        is_role_view        = False       # _full_ctx overrides
-        user_role_ctx       = "employee"  # _full_ctx overrides
-    raw_theme = request.cookies.get("bsv_theme", "midnight")
-    user_theme = raw_theme if raw_theme in VALID_THEMES else "midnight"
+        # If shell cookie is set, show banner immediately — no DB call needed.
+        # Permission validity is already enforced in _get_user_role / _full_ctx.
+        is_role_view        = shell_cookie in _VALID_SHELL_ROLES
+        user_role_ctx       = shell_cookie if is_role_view else "employee"
+        shell_allowed_roles = []   # _full_ctx overrides with DB-derived list
+    _default_theme = "cloud" if _cfg("demo_mode", False) else "midnight"
+    raw_theme = request.cookies.get("bsv_theme", _default_theme)
+    user_theme = raw_theme if raw_theme in VALID_THEMES else _default_theme
     # H6: UI preferences — read from cookies (PATCH /api/preferences sets both DB + cookie)
     _valid_font  = {"12px","14px","16px","18px","20px"}
     _valid_dens  = {"compact","comfortable","spacious"}
@@ -851,6 +1470,7 @@ def _tpl_ctx(request: Request) -> dict:
         "remote_user":        user,
         "display_name":       display_name,
         "is_admin":           is_admin_user,
+        "is_staff_chat":      is_staff_chat,
         "view_mode":          _view_mode(request),
         "employees":          employees,
         "role_view_cookie":   request.cookies.get("bsv_role_view", ""),
@@ -863,14 +1483,21 @@ def _tpl_ctx(request: Request) -> dict:
         "viewed_user":        viewed_user_raw if is_view_as else "",
         # System settings (read from cache; default True/5 if not yet set)
         "chat_enabled":       _SYSTEM_SETTINGS_CACHE.get("chat_enabled", "true") != "false",
+        "ai_enabled":         bool(_cfg("ai.enabled", True)),
         "chat_visible_count": int(_SYSTEM_SETTINGS_CACHE.get("chat_visible_count", "5")),
         "chat_show_away_msg": _SYSTEM_SETTINGS_CACHE.get("chat_show_away_msg", "true") != "false",
+        "chat_name":          request.cookies.get("bsv_chat_name", ""),
+        # Licensed content settings
+        "demo_mode":          bool(_cfg("demo_mode", False)),
+        "iso_licensed":       _SYSTEM_SETTINGS_CACHE.get("iso_licensed", "false") == "true",
+        "cis_licensed":       _SYSTEM_SETTINGS_CACHE.get("cis_licensed", "false") == "true",
         "build_sha":          _BUILD_SHA,
         "build_time":         _BUILD_TIME_UTC,
         # H6: UI preferences
         "pref_font_size":     _pref_font,
         "pref_density":       _pref_dens,
         "pref_rows_per_page": _pref_rows,
+        "active_org_id":      _get_active_org_id(request),
     }
 
 
@@ -904,9 +1531,13 @@ _AUDIT_RESOURCE_LABELS = {
 _AUDIT_ROLE_LABELS = {
     "ao": "AO", "ciso": "CISO", "issm": "ISSM", "isso": "ISSO",
     "sca": "SCA", "system_owner": "System Owner", "auditor": "Auditor",
-    "bcdr_coordinator": "BCDR Coordinator", "pen_tester": "Pen Tester",
-    "data_owner": "Data Owner", "pmo": "PMO", "incident_responder": "IR",
-    "employee": "Employee", "reset": "Default",
+    "bcdr": "BCDR", "bcdr_coordinator": "BCDR Coordinator",
+    "pen_tester": "Pen Tester", "data_owner": "Data Owner",
+    "pmo": "PMO", "incident_responder": "IR", "employee": "Employee",
+    "privacy_officer": "Privacy Officer", "risk_manager": "Risk Manager",
+    "developer": "Developer", "executive": "Executive",
+    "vendor": "Vendor", "contracting_officer": "Contracting Officer",
+    "reset": "Default",
 }
 
 def _format_audit_entry(entry) -> dict:
@@ -988,6 +1619,19 @@ async def _notify_user(session, remote_user: str, notif_type: str, title: str,
     session.add(notif)
 
 
+async def _notify_role(session, role: str, notif_type: str,
+                       title: str, body: str = "", action_url: str = "",
+                       exclude_user: str = ""):
+    """Notify all active users holding a given platform role."""
+    result = await session.execute(
+        select(UserProfile.remote_user)
+        .where(UserProfile.role == role, UserProfile.status == "active")
+    )
+    for (ru,) in result.all():
+        if ru != exclude_user:
+            await _notify_user(session, ru, notif_type, title, body, action_url)
+
+
 async def _notify_system_team(session, system_id: str, notif_type: str,
                                title: str, body: str = "", action_url: str = "",
                                exclude_user: str = ""):
@@ -1001,17 +1645,267 @@ async def _notify_system_team(session, system_id: str, notif_type: str,
             await _notify_user(session, ru, notif_type, title, body, action_url)
 
 
+async def _notify_issms_for_system(session, system_id: str, notif_type: str,
+                                    title: str, body: str = "", action_url: str = "",
+                                    exclude_user: str = ""):
+    """Notify ISSMs assigned to a specific system.
+    Falls back to all platform ISSMs if none are explicitly assigned to the system.
+    """
+    result = await session.execute(
+        select(SystemAssignment.remote_user)
+        .join(UserProfile, UserProfile.remote_user == SystemAssignment.remote_user)
+        .where(
+            SystemAssignment.system_id == system_id,
+            UserProfile.role == "issm",
+            UserProfile.status == "active",
+        )
+    )
+    issm_users = [r[0] for r in result.all() if r[0] != exclude_user]
+    if issm_users:
+        for ru in issm_users:
+            await _notify_user(session, ru, notif_type, title, body, action_url)
+    else:
+        # No ISSM assigned to this system — broadcast to all active ISSMs
+        await _notify_role(session, "issm", notif_type, title, body, action_url,
+                           exclude_user=exclude_user)
+
+
 async def _can_access_system(system_id: str, request: Request, session) -> bool:
-    """Returns True if user is admin OR is assigned to this system."""
+    """Returns True if the user may access this system.
+
+    Grant order (first match wins):
+    1. Admin — unconditional access, even while in a role shell.
+       Design intent: the role shell is a UI perspective mode that lets an admin
+       experience the interface as a lower role (ISSO, SCA, etc.) for auditing and
+       troubleshooting purposes. The admin retains full system reach at all times and
+       can exit the shell at any point via /exit-shell. This is intentional — a shelled
+       admin who cannot reach the system they are troubleshooting would be unable to
+       perform remediation without first breaking out of the shell view.
+    2. Explicit SystemAssignment — any role with a manual grant.
+    3. Privacy officer — automatic access to any system carrying a
+       privacy-review-triggering data attribute (pii, phi, ephi, gdpr, ccpa …).
+    4. Contracting officer — automatic access to any system in CO review scope
+       (cui, financial, federal_connection, federal attributes, or CO frameworks).
+    """
+    # 0. Org boundary: user must be a member of the org that owns this system.
+    #    Platform admins (config.yaml admin_users) bypass this — they are operators.
+    if not _is_admin(request):
+        user_for_org = request.headers.get(_REMOTE_USER_HDR, "")
+        if user_for_org:
+            sys_org = (await session.execute(
+                select(System.org_id).where(System.id == system_id)
+            )).scalar_one_or_none()
+            if sys_org:
+                if not await _is_org_member(sys_org, user_for_org, session):
+                    return False
+
     if _is_admin(request):
         return True
     user = request.headers.get(_REMOTE_USER_HDR, "")
-    result = await session.execute(
+    if not user:
+        return False
+
+    # 2. Explicit assignment (cheapest DB hit — check first for all roles)
+    assigned = (await session.execute(
         select(SystemAssignment)
         .where(SystemAssignment.system_id == system_id)
         .where(SystemAssignment.remote_user == user)
+    )).scalar_one_or_none()
+    if assigned:
+        return True
+
+    # 3. Privacy officer: attribute-based org-wide visibility
+    role_row = (await session.execute(
+        select(UserProfile.role).where(UserProfile.remote_user == user)
+    )).scalar_one_or_none()
+    role = role_row or "employee"
+
+    if role == "privacy_officer":
+        hit = (await session.execute(
+            select(SystemDataAttribute.system_id)
+            .join(DataAttributeDefinition,
+                  SystemDataAttribute.attribute_key == DataAttributeDefinition.key)
+            .join(System, SystemDataAttribute.system_id == System.id)
+            .where(SystemDataAttribute.system_id == system_id,
+                   DataAttributeDefinition.triggers_privacy_review == True,
+                   DataAttributeDefinition.is_active.isnot(False),
+                   System.deleted_at.is_(None))
+            .limit(1)
+        )).scalar_one_or_none()
+        return hit is not None
+
+    # 4. Contracting officer: attribute-based CO scope
+    if role == "contracting_officer":
+        co_ids = await _co_review_system_ids(session)
+        if system_id in co_ids:
+            return True
+        # Also check explicit engagement grants
+        eng = (await session.execute(
+            select(ExternalEngagement.system_id)
+            .where(ExternalEngagement.system_id == system_id,
+                   ExternalEngagement.remote_user == user,
+                   ExternalEngagement.status == "active")
+        )).scalar_one_or_none()
+        return eng is not None
+
+    return False
+
+
+# ── Framework agnosticism helpers (Phase 33) ──────────────────────────────────
+
+def _org_enabled_fw_subq():
+    """SQLAlchemy scalar subquery — IDs of org-enabled frameworks. Use in .where() clauses."""
+    return (
+        select(OrgEnabledFramework.framework_id)
+        .where(OrgEnabledFramework.is_enabled == True)
+        .scalar_subquery()
     )
-    return result.scalar_one_or_none() is not None
+
+
+async def _system_has_attribute(session, system_id: str, attribute_key: str) -> bool:
+    """Returns True if a system has a given data attribute set."""
+    r = await session.execute(
+        select(SystemDataAttribute.id)
+        .where(SystemDataAttribute.system_id == system_id,
+               SystemDataAttribute.attribute_key == attribute_key)
+    )
+    return r.scalar_one_or_none() is not None
+
+
+async def _system_attributes(session, system_id: str) -> list[dict]:
+    """Returns list of attribute dicts (key, short_label, label, …) for a system."""
+    rows = await session.execute(
+        select(SystemDataAttribute, DataAttributeDefinition)
+        .join(DataAttributeDefinition,
+              SystemDataAttribute.attribute_key == DataAttributeDefinition.key)
+        .where(SystemDataAttribute.system_id == system_id,
+               DataAttributeDefinition.is_active.isnot(False))
+        .order_by(DataAttributeDefinition.sort_order)
+    )
+    return [
+        {"key": a.attribute_key, "label": d.label, "short_label": d.short_label,
+         "jurisdiction": d.jurisdiction, "regulation": d.regulation,
+         "triggers_privacy_review": d.triggers_privacy_review,
+         "triggers_co_review": d.triggers_co_review,
+         "notes": a.notes}
+        for a, d in rows.all()
+    ]
+
+
+async def _suppress_framework(session, framework_id: str, disabled_by: str, note: str = ""):
+    """
+    Suppress all SystemControl records sourced from a disabled framework and
+    reload the LLM knowledge base without that framework's knowledge files.
+    Called immediately when an admin disables a framework in OrgEnabledFramework.
+    """
+    fw = await session.get(ComplianceFramework, framework_id)
+    if not fw:
+        return
+    now = datetime.now(timezone.utc)
+    # Mark SystemControl records as suppressed (source_catalog matches framework short_name)
+    await session.execute(
+        update(SystemControl)
+        .where(SystemControl.source_catalog == fw.short_name,
+               SystemControl.suppressed_by_framework_id.is_(None))
+        .values(suppressed_by_framework_id=framework_id, suppressed_at=now)
+    )
+    # Also suppress controls via SystemFramework (for overlay/regulation frameworks)
+    affected_sys_ids_q = (
+        select(SystemFramework.system_id)
+        .where(SystemFramework.framework_id == framework_id)
+        .scalar_subquery()
+    )
+    await session.execute(
+        update(SystemControl)
+        .where(SystemControl.system_id.in_(affected_sys_ids_q),
+               SystemControl.suppressed_by_framework_id.is_(None))
+        .values(suppressed_by_framework_id=framework_id, suppressed_at=now)
+    )
+    # Reload LLM knowledge base excluding this framework's directory
+    llm_eng = _get_llm_engine()
+    if llm_eng and hasattr(llm_eng, "kb"):
+        _disabled_fw_dirs.add(fw.short_name)
+        llm_eng.kb.reload_with_exclusions(_disabled_fw_dirs)
+
+
+async def _restore_framework(session, framework_id: str, enabled_by: str):
+    """
+    Restore suppressed SystemControl records for a re-enabled framework
+    and reload LLM knowledge base with that framework's files included.
+    """
+    fw = await session.get(ComplianceFramework, framework_id)
+    if not fw:
+        return
+    await session.execute(
+        update(SystemControl)
+        .where(SystemControl.suppressed_by_framework_id == framework_id)
+        .values(suppressed_by_framework_id=None, suppressed_at=None)
+    )
+    llm_eng = _get_llm_engine()
+    if llm_eng and hasattr(llm_eng, "kb"):
+        _disabled_fw_dirs.discard(fw.short_name)
+        llm_eng.kb.reload_with_exclusions(_disabled_fw_dirs)
+
+
+# Runtime set of disabled framework short_names — populated at startup and kept in sync
+_disabled_fw_dirs: set[str] = set()
+
+
+# ── Role access mapping functions ─────────────────────────────────────────────
+#
+# These functions derive system-level access from system attributes and enabled
+# frameworks, implementing least-privilege by role function rather than per-system
+# admin grants.  Add new client requirement triggers here as regulations evolve.
+
+# Frameworks that bring a contracting officer into scope.
+# Any system with one of these enabled is automatically visible to all CO users.
+_CO_REVIEW_FRAMEWORKS: frozenset = frozenset({
+    "fedramp",      # FedRAMP — cloud procurement
+    "cmmc2",        # CMMC — DoD contracts (DFARS 252.204-7012/7019/7020/7021)
+    "dod_srg",      # DoD SRG — IL2/IL4/IL5/IL6 cloud
+    "sp800171",     # NIST SP 800-171 — CUI handling (feeds CMMC)
+    "stateramp",    # StateRAMP — state/local government procurement
+})
+
+# System attribute flags that independently trigger CO review.
+# Represents regulatory triggers regardless of which frameworks are selected.
+_CO_REVIEW_SYSTEM_FLAGS = [
+    "is_federal",          # federal agency or federal contractor system
+    "connects_to_federal", # contractor system with federal data connections
+    "has_cui",             # CUI handling → DFARS 252.204-7012
+]
+
+
+async def _co_review_system_ids(session) -> list[str]:
+    """
+    Return IDs of all active systems that require CO oversight.
+    Source of truth is now DataAttributeDefinition.triggers_co_review (Phase 33)
+    plus the framework-based triggers.  _CO_REVIEW_SYSTEM_FLAGS / _CO_REVIEW_FRAMEWORKS
+    are kept as static fallbacks for any system not yet migrated to SystemDataAttribute.
+    """
+    # Attribute-based (Phase 33): systems with any CO-triggering data attribute
+    attr_rows = await session.execute(
+        select(SystemDataAttribute.system_id).distinct()
+        .join(DataAttributeDefinition,
+              SystemDataAttribute.attribute_key == DataAttributeDefinition.key)
+        .join(System, SystemDataAttribute.system_id == System.id)
+        .where(DataAttributeDefinition.triggers_co_review == True,
+               DataAttributeDefinition.is_active.isnot(False),
+               System.deleted_at.is_(None))
+    )
+    attr_ids = {r[0] for r in attr_rows.all()}
+
+    # Framework-based: systems with a CO-relevant org-enabled framework
+    fw_rows = await session.execute(
+        select(SystemFramework.system_id).distinct()
+        .join(ComplianceFramework, SystemFramework.framework_id == ComplianceFramework.id)
+        .join(OrgEnabledFramework, OrgEnabledFramework.framework_id == ComplianceFramework.id)
+        .where(ComplianceFramework.short_name.in_(_CO_REVIEW_FRAMEWORKS),
+               OrgEnabledFramework.is_enabled == True)
+    )
+    fw_ids = {r[0] for r in fw_rows.all()}
+
+    return list(attr_ids | fw_ids)
 
 
 async def _user_system_ids(request: Request, session) -> list:
@@ -1019,7 +1913,36 @@ async def _user_system_ids(request: Request, session) -> list:
     if _is_admin(request):
         result = await session.execute(select(System.id).where(System.deleted_at.is_(None)))
         return [r[0] for r in result.all()]
+    role = await _get_user_role(request, session)
     user = request.headers.get(_REMOTE_USER_HDR, "")
+    # Privacy officers: org-wide visibility into all systems with privacy-review-triggering attributes
+    if role == "privacy_officer":
+        result = await session.execute(
+            select(SystemDataAttribute.system_id).distinct()
+            .join(DataAttributeDefinition,
+                  SystemDataAttribute.attribute_key == DataAttributeDefinition.key)
+            .join(System, SystemDataAttribute.system_id == System.id)
+            .where(DataAttributeDefinition.triggers_privacy_review == True,
+                   DataAttributeDefinition.is_active.isnot(False),
+                   System.deleted_at.is_(None))
+        )
+        return [r[0] for r in result.all()]
+    # Contracting officers: function-mapped (regulatory/contractual scope) + any manual grants
+    if role == "contracting_officer":
+        mapped = await _co_review_system_ids(session)
+        granted = [r[0] for r in (await session.execute(
+            select(ExternalEngagement.system_id)
+            .where(ExternalEngagement.remote_user == user, ExternalEngagement.status == "active")
+        )).all()]
+        return list(set(mapped) | set(granted))
+    # Vendors: manual engagement grants only (each engagement is explicitly scoped)
+    if role == "vendor":
+        result = await session.execute(
+            select(ExternalEngagement.system_id)
+            .where(ExternalEngagement.remote_user == user, ExternalEngagement.status == "active")
+        )
+        return [r[0] for r in result.all()]
+    # All other non-admin roles: internal assignment only
     result = await session.execute(
         select(SystemAssignment.system_id)
         .where(SystemAssignment.remote_user == user)
@@ -1027,9 +1950,35 @@ async def _user_system_ids(request: Request, session) -> list:
     return [r[0] for r in result.all()]
 
 
+# Curated role list shown in the demo role switcher.
+# Represents a typical federal ATO compliance program team.
+# Deliberately excludes "employee" (base worker / system-setup role — show via video call).
+_DEMO_SHELL_ROLES: list[str] = [
+    # Authority & governance
+    "ao", "ciso", "issm",
+    # Security operations
+    "isso", "sca", "auditor",
+    # Program & operations
+    "system_owner", "bcdr", "incident_responder", "pmo",
+    # Risk & privacy
+    "risk_manager", "privacy_officer",
+    # Assessment
+    "pen_tester",
+]
+
 _VALID_SHELL_ROLES = {
-    "ao", "issm", "isso", "sca", "system_owner", "auditor", "bcdr", "employee",
-    "ciso", "pen_tester", "data_owner", "pmo", "incident_responder",
+    # Authority / oversight
+    "ao", "issm", "isso", "sca", "ciso",
+    # Operations
+    "system_owner", "auditor", "bcdr", "employee",
+    "pen_tester", "data_owner", "pmo", "incident_responder",
+    # New roles
+    "privacy_officer",      # Privacy Officer — PII/GDPR/CCPA program owner
+    "risk_manager",         # Risk Manager — risk register ownership
+    "developer",            # Developer/Engineer — limited security read
+    "executive",            # Executive — C-suite read-only dashboard
+    "vendor",               # Vendor/Third-Party — scoped external access
+    "contracting_officer",  # Contracting Officer — federal acquisition, auth visibility
 }
 
 
@@ -1053,29 +2002,156 @@ async def _get_user_role(request: Request, session) -> str:
     if row and (row[1] or "active") in ("frozen", "removed"):
         return "blocked"
     actual = (row[0] if row else None) or "employee"
-    # Non-admin users (AO/ISSM) can shell into lower roles
+    # Non-admin users (AO/ISSM) can shell into lower roles.
+    # In demo mode any role in _DEMO_SHELL_ROLES is allowed regardless of hierarchy.
     shell = _verify_shell(request.cookies.get("bsv_role_shell", "")) or ""
-    if shell in ROLE_CAN_VIEW_DOWN.get(actual, []):
-        return shell
+    if shell:
+        if _cfg("demo_mode", False):
+            if shell in _DEMO_SHELL_ROLES:
+                return shell
+        elif shell in ROLE_CAN_VIEW_DOWN.get(actual, []):
+            return shell
     return actual
 
 
 # Role hierarchy: which roles can shell into lower-tier roles.
 # Shelled users lose ALL higher-level permissions for the duration of the shell.
-_LOWER_THAN_ISSO = ["system_owner", "auditor", "bcdr", "pen_tester",
-                    "data_owner", "pmo", "incident_responder", "employee"]
+_LOWER_THAN_ISSO = [
+    "system_owner", "auditor", "bcdr", "pen_tester", "data_owner",
+    "pmo", "incident_responder", "privacy_officer", "risk_manager",
+    "developer", "executive", "vendor", "contracting_officer", "employee",
+]
 ROLE_CAN_VIEW_DOWN: dict = {
     "admin":  sorted(_VALID_SHELL_ROLES),
     "ao":     ["ciso", "issm", "isso", "sca"] + _LOWER_THAN_ISSO,
     "ciso":   ["issm", "isso", "sca"] + _LOWER_THAN_ISSO,
     "issm":   ["isso", "sca"] + _LOWER_THAN_ISSO,
-    "isso":   _LOWER_THAN_ISSO,
-    "sca":    ["employee"],
+    # demo_mode: isso is the visitor's entry role; curated shell targets show
+    # four distinct perspectives without exposing the full role list.
+    "isso":   ["sca", "auditor", "executive", "employee"],
+    "sca":    ["auditor", "employee"],
+    "privacy_officer": ["data_owner", "employee"],
+    "risk_manager":    ["employee"],
 }
 
 _READ_ONLY_ROLES: frozenset = frozenset({
     "pen_tester", "employee", "data_owner", "pmo", "incident_responder",
+    "executive", "vendor", "contracting_officer",
+    # approver/attestor roles — read-only everywhere except their dedicated sign-off routes
+    "privacy_officer", "risk_manager", "developer",
 })
+
+
+def _applicable_roles_for_system(system) -> list[dict]:
+    """
+    Return ordered list of role dicts applicable to a given system's profile.
+    Used by per-system role assignment UI to show only relevant role options.
+
+    Each dict: {role, label, short, desc, tier}
+    tier: 'authority' | 'security' | 'operations' | 'support' | 'external'
+    """
+    is_fed      = bool(getattr(system, "is_federal", False))
+    has_privacy = bool(getattr(system, "has_gdpr_data", False))
+    catalog     = getattr(system, "primary_catalog", "") or ""
+    is_iso      = "iso" in catalog.lower()
+    sys_type    = getattr(system, "system_type", "") or ""
+    is_ot       = sys_type.lower() in ("ot", "ics", "scada")
+    has_pii     = has_privacy or bool(getattr(system, "connects_to_federal", False))
+
+    # --- Authority / governance tier ---
+    authority: list[dict] = []
+    if is_fed:
+        authority += [
+            {"role": "ao",     "label": "Authorizing Official",      "short": "AO",   "tier": "authority",
+             "desc": "Formally authorizes system operation; accepts residual risk"},
+            {"role": "issm",   "label": "ISSM",                       "short": "ISSM", "tier": "authority",
+             "desc": "Information System Security Manager — org-level security program"},
+        ]
+    else:
+        authority += [
+            {"role": "ciso",   "label": "CISO / Security Director",  "short": "CISO", "tier": "authority",
+             "desc": "Chief Information Security Officer — security program ownership"},
+        ]
+    if is_fed and bool(getattr(system, "connects_to_federal", False)):
+        authority.append(
+            {"role": "contracting_officer", "label": "Contracting Officer", "short": "KO", "tier": "authority",
+             "desc": "Federal acquisition officer; visibility into authorization status"}
+        )
+
+    # --- Security operations tier ---
+    security: list[dict] = [
+        {"role": "isso",  "label": "ISSO" if is_fed else "Security Manager", "short": "ISSO", "tier": "security",
+         "desc": "Day-to-day security operations, controls, POA&M management"},
+        {"role": "sca",   "label": "Security Control Assessor",  "short": "SCA",  "tier": "security",
+         "desc": "Independent assessment of security controls; produces SAR"},
+        {"role": "auditor","label": "Auditor",                   "short": "AUD",  "tier": "security",
+         "desc": "Read-only formal audit access across all system modules"},
+    ]
+    if has_pii or has_privacy or is_iso:
+        security.append(
+            {"role": "privacy_officer", "label": "Privacy Officer", "short": "PO", "tier": "security",
+             "desc": "Owns PII/GDPR/CCPA program; PTA and PIA workflow"}
+        )
+    security.append(
+        {"role": "risk_manager", "label": "Risk Manager", "short": "RM", "tier": "security",
+         "desc": "Risk register ownership; threat modeling; risk acceptance decisions"}
+    )
+    if is_fed:
+        security.append(
+            {"role": "pen_tester", "label": "Pen Tester / Red Team", "short": "PT", "tier": "security",
+             "desc": "3PAO or red team assessor; scoped to assigned system"}
+        )
+
+    # --- Operations tier ---
+    operations: list[dict] = [
+        {"role": "system_owner", "label": "System Owner", "short": "SO", "tier": "operations",
+         "desc": "Business owner; accountable for system operation and compliance"},
+        {"role": "developer",    "label": "Developer / Engineer", "short": "DEV", "tier": "operations",
+         "desc": "In-house developer; read access to controls and evidence for their system"},
+        {"role": "bcdr",         "label": "BCDR Coordinator", "short": "BCDR", "tier": "operations",
+         "desc": "Business continuity and disaster recovery planning"},
+        {"role": "incident_responder", "label": "Incident Responder", "short": "IR", "tier": "operations",
+         "desc": "Security incident response; IR plan execution"},
+    ]
+    if is_ot:
+        operations.append(
+            {"role": "data_owner", "label": "OT/ICS Data Owner", "short": "DO", "tier": "operations",
+             "desc": "OT/ICS data steward; information ownership for operational data"}
+        )
+    else:
+        operations.append(
+            {"role": "data_owner", "label": "Data Owner", "short": "DO", "tier": "operations",
+             "desc": "Data steward; accountable for data classification and handling"}
+        )
+    if is_fed:
+        operations.append(
+            {"role": "pmo", "label": "PMO / Program Officer", "short": "PMO", "tier": "operations",
+             "desc": "Portfolio management; program-level coordination and reporting"}
+        )
+
+    # --- Support / read-only tier ---
+    support: list[dict] = [
+        {"role": "executive", "label": "Executive", "short": "EXEC", "tier": "support",
+         "desc": "C-suite read-only; high-level dashboards and status summaries"},
+        {"role": "employee",  "label": "Employee",  "short": "EMP",  "tier": "support",
+         "desc": "Basic access; assigned system view, daily quiz, task completion"},
+    ]
+
+    # --- External tier ---
+    external: list[dict] = []
+    if not is_fed:
+        external.append(
+            {"role": "vendor", "label": "Vendor / Third-Party", "short": "VND", "tier": "external",
+             "desc": "Scoped external access; can view assigned systems and submit findings"}
+        )
+    if not is_fed:
+        external.append(
+            {"role": "pen_tester", "label": "Pen Tester / Assessor", "short": "PT", "tier": "external",
+             "desc": "External assessor; scoped to assigned system only"}
+        )
+
+    return authority + security + operations + support + external
+
 
 # Controls requiring formal evidence (artifact/assessment) before marking "implemented_complete".
 # Based on NIST SP 800-53 rev5 high-impact baseline controls that are testable and
@@ -1157,7 +2233,11 @@ async def _full_ctx(request: Request, session, **extra) -> dict:
             pass  # TeamMembership table may not exist yet on first run
 
     # Roles this user can shell into (overrides the admin-only fallback from _tpl_ctx)
-    shell_allowed_roles = ROLE_CAN_VIEW_DOWN.get(native_role, [])
+    if _cfg("demo_mode", False):
+        # Demo: any visitor can freely explore all curated ATO-program roles.
+        shell_allowed_roles = [r for r in _DEMO_SHELL_ROLES if r != native_role]
+    else:
+        shell_allowed_roles = ROLE_CAN_VIEW_DOWN.get(native_role, [])
 
     # Unread notification count for nav bell
     unread_notifications = 0
@@ -1172,6 +2252,21 @@ async def _full_ctx(request: Request, session, **extra) -> dict:
         except Exception:
             pass
 
+    # Org context — active org name + list of user's orgs for switcher
+    active_org_id   = _get_active_org_id(request)
+    active_org_name = DEFAULT_ORG_NAME
+    user_orgs_list  = []
+    if user:
+        try:
+            user_orgs_list = await _get_user_orgs(user, session)
+            org_name_row = (await session.execute(
+                select(Organization.name).where(Organization.id == active_org_id)
+            )).scalar_one_or_none()
+            if org_name_row:
+                active_org_name = org_name_row
+        except Exception:
+            pass
+
     return {
         "request":               request,
         **_tpl_ctx(request),
@@ -1182,6 +2277,9 @@ async def _full_ctx(request: Request, session, **extra) -> dict:
         "now":                   datetime.now(timezone.utc),
         "shell_allowed_roles":   shell_allowed_roles,
         "unread_notifications":  unread_notifications,
+        "active_org_id":         active_org_id,
+        "active_org_name":       active_org_name,
+        "user_orgs":             user_orgs_list,
         **extra,
     }
 
@@ -1218,8 +2316,8 @@ POAM_PUSH_POWER: dict[str, set] = {
     "blocked":          {"isso", "admin"},
     "ready_for_review": {"isso", "admin"},
     "closed_verified":  {"issm", "admin"},
-    "deferred_waiver":  {"isso", "admin"},   # requires SO→CISO→AO approval chain
-    "accepted_risk":    {"isso", "admin"},   # requires SO→CISO→AO approval chain
+    "deferred_waiver":  {"isso", "admin", "ao"},   # requires SO→CISO→AO approval chain; AO is final authority
+    "accepted_risk":    {"isso", "admin", "ao"},   # requires SO→CISO→AO approval chain; AO is final authority
     "false_positive":   {"issm", "admin"},   # requires SCA+SO concurrence
 }
 
@@ -1246,7 +2344,16 @@ POAM_APPROVAL_CHAIN: dict[str, list] = {
 
 
 def _poam_allowed_statuses(role: str, current_status: str) -> list:
-    """Return the status values this role can push to from current_status."""
+    """Return the status values this role can push to from current_status.
+
+    Terminal states (closed_verified, deferred_waiver, accepted_risk,
+    false_positive) are locked — only admin can move a POAM out of a
+    terminal state. All other roles are restricted to forward transitions
+    defined in POAM_PUSH_POWER.
+    """
+    # Terminal state lock: non-admins cannot re-open closed items
+    if current_status in POAM_CLOSED_STATUSES and role != "admin":
+        return []
     allowed = []
     for st, roles in POAM_PUSH_POWER.items():
         if role in roles:
@@ -1468,6 +2575,47 @@ ATO_DOC_TYPES: dict = {
     "VULN_CONTAINERS":{"name": "Vulnerability Scanning Requirements for Containers",          "short": "Vuln Cont.",   "owner_roles": ["auditor","admin"],      "reviewer_roles": ["admin"],              "rmf_step": "monitor",     "category": "conmon",        "fedramp_doc": True,  "guidance_only": True},
     "VULN_DEVIATION":{"name": "FedRAMP Vulnerability Deviation Request Form",                 "short": "Vuln Dev.",    "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "monitor",     "category": "conmon",        "fedramp_doc": True,  "guidance_only": False},
     "CONMON_PLAYBOOK":{"name": "Continuous Monitoring Playbook",                              "short": "ConMon PB",    "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],              "rmf_step": "monitor",     "category": "conmon",        "fedramp_doc": True,  "guidance_only": True},
+    # ── HIPAA ─────────────────────────────────────────────────────────────────
+    "HIPAA_RA":      {"name": "HIPAA Risk Analysis Report",              "short": "HIPAA RA",      "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "categorize", "category": "hipaa",    "fedramp_doc": False, "guidance_only": False},
+    "HIPAA_RMP":     {"name": "HIPAA Risk Management Plan",              "short": "HIPAA RMP",     "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "implement",  "category": "hipaa",    "fedramp_doc": False, "guidance_only": False},
+    "HIPAA_WTP":     {"name": "Workforce Training Plan",                 "short": "WTP",           "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "implement",  "category": "hipaa",    "fedramp_doc": False, "guidance_only": False},
+    "HIPAA_BAA":     {"name": "Business Associate Agreement Inventory",  "short": "BAA Inv.",      "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "implement",  "category": "hipaa",    "fedramp_doc": False, "guidance_only": False},
+    # ── HITRUST ───────────────────────────────────────────────────────────────
+    "HITRUST_GAP":   {"name": "HITRUST Gap Assessment",                  "short": "HITRUST Gap",   "owner_roles": ["auditor","admin"],      "reviewer_roles": ["admin"],           "rmf_step": "assess",     "category": "hitrust",  "fedramp_doc": False, "guidance_only": False},
+    "HITRUST_CAP":   {"name": "HITRUST Corrective Action Plans",         "short": "HITRUST CAP",   "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "monitor",    "category": "hitrust",  "fedramp_doc": False, "guidance_only": False},
+    "HITRUST_EVD":   {"name": "HITRUST Evidence Collection Summary",     "short": "HITRUST Evd.",  "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin","auditor"], "rmf_step": "assess",     "category": "hitrust",  "fedramp_doc": False, "guidance_only": False},
+    # ── PCI-DSS ───────────────────────────────────────────────────────────────
+    "PCI_SCOPE":     {"name": "Cardholder Data Environment Scope",       "short": "CDE Scope",     "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "categorize", "category": "pci",      "fedramp_doc": False, "guidance_only": False},
+    "PCI_SAQ":       {"name": "PCI DSS Self-Assessment Questionnaire",   "short": "PCI SAQ",       "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin","auditor"], "rmf_step": "assess",     "category": "pci",      "fedramp_doc": False, "guidance_only": False},
+    "PCI_RISK":      {"name": "PCI Risk Assessment",                     "short": "PCI Risk",      "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "categorize", "category": "pci",      "fedramp_doc": False, "guidance_only": False},
+    # ── SOC ───────────────────────────────────────────────────────────────────
+    "SOC1_SCOPE":    {"name": "SOC 1 Scope Definition",                  "short": "SOC1 Scope",    "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "categorize", "category": "soc",      "fedramp_doc": False, "guidance_only": False},
+    "SOC1_CTRLS":    {"name": "SOC 1 Control Inventory",                 "short": "SOC1 Ctrls.",   "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin","auditor"], "rmf_step": "select",     "category": "soc",      "fedramp_doc": False, "guidance_only": False},
+    "SOC2_SCOPE":    {"name": "SOC 2 Scope Definition",                  "short": "SOC2 Scope",    "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "categorize", "category": "soc",      "fedramp_doc": False, "guidance_only": False},
+    "SOC2_TSC":      {"name": "Trust Services Criteria Description",     "short": "SOC2 TSC",      "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin","auditor"], "rmf_step": "select",     "category": "soc",      "fedramp_doc": False, "guidance_only": False},
+    "SOC2_GAP":      {"name": "SOC 2 Gap Assessment",                    "short": "SOC2 Gap",      "owner_roles": ["auditor","admin"],      "reviewer_roles": ["admin"],           "rmf_step": "assess",     "category": "soc",      "fedramp_doc": False, "guidance_only": False},
+    # ── GDPR ──────────────────────────────────────────────────────────────────
+    "GDPR_ART30":    {"name": "GDPR Article 30 Records of Processing",   "short": "Art. 30",       "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "categorize", "category": "gdpr",     "fedramp_doc": False, "guidance_only": False},
+    "GDPR_DPIA":     {"name": "Data Protection Impact Assessment",       "short": "DPIA",          "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "categorize", "category": "gdpr",     "fedramp_doc": False, "guidance_only": False},
+    "GDPR_MAP":      {"name": "Data Mapping & Processing Inventory",     "short": "Data Map",      "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "implement",  "category": "gdpr",     "fedramp_doc": False, "guidance_only": False},
+    # ── ISO 27701 ─────────────────────────────────────────────────────────────
+    "ISO27701_PIMS": {"name": "ISO 27701 PIMS Assessment",               "short": "PIMS",          "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin","auditor"], "rmf_step": "assess",     "category": "iso27701", "fedramp_doc": False, "guidance_only": False},
+    # ── CCPA ──────────────────────────────────────────────────────────────────
+    "CCPA_ASSESS":   {"name": "CCPA Compliance Assessment",              "short": "CCPA Assess.",  "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "categorize", "category": "ccpa",     "fedramp_doc": False, "guidance_only": False},
+    "CCPA_INV":      {"name": "Personal Information Inventory",          "short": "PI Inv.",       "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "implement",  "category": "ccpa",     "fedramp_doc": False, "guidance_only": False},
+    # ── CMMC ──────────────────────────────────────────────────────────────────
+    "CMMC_SSP":      {"name": "CMMC System Security Plan",               "short": "CMMC SSP",      "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin","auditor"], "rmf_step": "select",     "category": "cmmc",     "fedramp_doc": False, "guidance_only": False},
+    "CMMC_SPRS":     {"name": "SPRS Score Sheet",                        "short": "SPRS",          "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "assess",     "category": "cmmc",     "fedramp_doc": False, "guidance_only": False},
+    "CMMC_PLAN":     {"name": "CMMC Plan of Action & Milestones",        "short": "CMMC POA\u0026M","owner_roles":["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "monitor",    "category": "cmmc",     "fedramp_doc": False, "guidance_only": False},
+    # ── ISO 27001 ─────────────────────────────────────────────────────────────
+    "ISO_SOA":       {"name": "Statement of Applicability",              "short": "SoA",           "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin","auditor"], "rmf_step": "select",     "category": "iso27001", "fedramp_doc": False, "guidance_only": False},
+    "ISO_SCOPE":     {"name": "ISMS Scope Document",                     "short": "ISMS Scope",    "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "categorize", "category": "iso27001", "fedramp_doc": False, "guidance_only": False},
+    "ISO_RISK":      {"name": "ISO Risk Assessment & Treatment Plan",    "short": "ISO Risk",      "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin","auditor"], "rmf_step": "assess",     "category": "iso27001", "fedramp_doc": False, "guidance_only": False},
+    # ── CSA STAR ──────────────────────────────────────────────────────────────
+    "CSA_CCM":       {"name": "Cloud Controls Matrix Assessment",        "short": "CCM",           "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin","auditor"], "rmf_step": "assess",     "category": "csa",      "fedramp_doc": False, "guidance_only": False},
+    "CSA_CAIQ":      {"name": "Consensus Assessment Initiative Questionnaire","short": "CAIQ",     "owner_roles": ["system_owner","admin"], "reviewer_roles": ["admin"],           "rmf_step": "select",     "category": "csa",      "fedramp_doc": False, "guidance_only": False},
+    # ── Generic authorization decision (non-RMF programs) ─────────────────────
+    "AUTH_DECISION": {"name": "Authorization / Certification Decision",  "short": "Auth Decision", "owner_roles": ["admin"],               "reviewer_roles": ["admin"],           "rmf_step": "authorize",  "category": "authorization","fedramp_doc": False, "guidance_only": False},
 }
 
 # Back-fill category/fedramp_doc/guidance_only on original 19 entries that predate Phase 12
@@ -1488,8 +2636,930 @@ for _k, (_cat, _go) in _ORIGINAL_CATEGORIES.items():
 
 _ATO_DOC_KEYS = list(ATO_DOC_TYPES.keys())
 
+# ── Auth-package → relevant doc-type mapping ───────────────────────────────────
+# Maps each AUTH_PACKAGE_CATALOG short_name to the set of ATO_DOC_TYPES keys that
+# apply to that program. Used by the ATO system view to show only relevant docs.
+# Systems with no registered packages see all doc types (backward compatible).
+_FEDRAMP_CORE = frozenset([
+    "FIPS199","SSP","SAP","SAR","POAM","HW_INV","SW_INV",
+    "SSP_APP_A_HIGH","SSP_APP_A_MOD","SSP_APP_A_LOW","SSP_APP_A_LI",
+    "SSP_APP_J","SSP_APP_M","SSP_APP_Q","SAR_APP_A",
+    "SAR_APP_B_HIGH","SAR_APP_B_MOD","SAR_APP_B_LOW",
+    "PKG_CHECKLIST","ATO_LETTER","FR_BASELINE",
+    "RAR_HIGH","RAR_MOD","CSP_PLAYBOOK","CRYPTO_POLICY","AUTH_BOUNDARY",
+    "TIMELINESS","PKG_ACCESS","REUSE_GUIDE","AGENCY_PB","3PAO_PERF",
+    "3PAO_RAR_GUIDE","BRANDING",
+    "CONMON_MONTHLY","CONMON_DELIV","ANNUAL_CTRL_SEL","PENTEST_GUIDE",
+    "VULN_CONTAINERS","VULN_DEVIATION","CONMON_PLAYBOOK",
+])
+_PKG_DOC_TYPES: dict[str, frozenset] = {
+    "ATO":      frozenset(["FIPS199","ABD","NET_DIAGRAM","SSP","SAP","SAR","POAM",
+                           "HW_INV","SW_INV","IRP","CP","CPT","CMP","CONMON",
+                           "PTA","PIA","ROB","ISA","ADD"]),
+    "IATO":     frozenset(["FIPS199","SSP","ADD"]),
+    "ATP":      frozenset(["FIPS199","ABD","SSP","ADD"]),
+    "EIS":      frozenset(["FIPS199","ABD","SSP","SAP","SAR","POAM","ADD"]),
+    "FedRAMP":  _FEDRAMP_CORE,
+    "StateRAMP":frozenset(["FIPS199","SSP","SAP","SAR","POAM","HW_INV","SW_INV",
+                           "SSP_APP_A_HIGH","SSP_APP_A_MOD","SSP_APP_A_LOW",
+                           "PKG_CHECKLIST","ATO_LETTER",
+                           "CONMON_MONTHLY","CONMON_DELIV","VULN_DEVIATION"]),
+    "HIPAA-SA": frozenset(["HIPAA_RA","HIPAA_RMP","HIPAA_WTP","HIPAA_BAA","AUTH_DECISION"]),
+    "HITRUST":  frozenset(["HITRUST_GAP","HITRUST_CAP","HITRUST_EVD","AUTH_DECISION"]),
+    "PCI-DSS":  frozenset(["PCI_SCOPE","PCI_SAQ","PCI_RISK","HW_INV","SW_INV","AUTH_DECISION"]),
+    "SOC1":     frozenset(["SOC1_SCOPE","SOC1_CTRLS","AUTH_DECISION"]),
+    "GDPR":     frozenset(["GDPR_ART30","GDPR_DPIA","GDPR_MAP","AUTH_DECISION"]),
+    "ISO27701": frozenset(["ISO27701_PIMS","GDPR_MAP","AUTH_DECISION"]),
+    "CCPA":     frozenset(["CCPA_ASSESS","CCPA_INV","AUTH_DECISION"]),
+    "CMMC":     frozenset(["CMMC_SSP","CMMC_SPRS","CMMC_PLAN","HW_INV","SW_INV","AUTH_DECISION"]),
+    "ISO27001": frozenset(["ISO_SOA","ISO_SCOPE","ISO_RISK","HW_INV","SW_INV","AUTH_DECISION"]),
+    "SOC2":     frozenset(["SOC2_SCOPE","SOC2_TSC","SOC2_GAP","AUTH_DECISION"]),
+    "SOC2-T1":  frozenset(["SOC2_SCOPE","SOC2_TSC","AUTH_DECISION"]),
+    "CSA-STAR": frozenset(["CSA_CCM","CSA_CAIQ","AUTH_DECISION"]),
+}
+
+# ── Role-expanded reviewer_roles (Phase 34) ───────────────────────────────────
+# Privacy Officer reviews/concurs on privacy-related documents
+_PRIVACY_OFFICER_DOCS = {"PTA", "PIA", "SSP", "SAR", "ISA", "ROB", "ADD"}
+# Contracting Officer reviews on contractual scope documents
+_CO_DOCS = {"FIPS199", "ABD", "CONMON", "SAR", "POAM"}
+# Risk Manager reviews on risk/categorization documents
+_RISK_MANAGER_DOCS = {"FIPS199", "SAR", "POAM", "ADD"}
+for _dt, _meta in ATO_DOC_TYPES.items():
+    _rv = _meta.setdefault("reviewer_roles", [])
+    if _dt in _PRIVACY_OFFICER_DOCS and "privacy_officer" not in _rv:
+        _rv.append("privacy_officer")
+    if _dt in _CO_DOCS and "contracting_officer" not in _rv:
+        _rv.append("contracting_officer")
+    if _dt in _RISK_MANAGER_DOCS and "risk_manager" not in _rv:
+        _rv.append("risk_manager")
+    # ISSO/ISSM can also edit docs as system team
+    _ow = _meta.setdefault("owner_roles", [])
+    if "isso" not in _ow:
+        _ow.append("isso")
+    if "issm" not in _ow and "issm" not in _meta.get("reviewer_roles", []):
+        _meta.setdefault("reviewer_roles", []).append("issm")
+
+# ── ATO prerequisite enforcement ──────────────────────────────────────────────
+_STATUS_ORDER: dict = {"draft": 0, "in_review": 1, "approved": 2, "finalized": 3}
+
+
+def _status_gte(actual: Optional[str], required: str) -> bool:
+    """True if actual doc status meets or exceeds the required minimum."""
+    return _STATUS_ORDER.get(actual or "", -1) >= _STATUS_ORDER.get(required, 99)
+
+
+# PREREQ_RULES[(doc_type, action)] = [(prereq_doc, min_status, auth_types_or_None)]
+# auth_types_or_None: None = all package types; set = only those types
+PREREQ_RULES: dict = {
+    ("SSP",    "submit"):   [("FIPS199", "finalized", None)],
+    ("SSP",    "finalize"): [("ABD",     "approved",  None)],
+    ("SAP",    "submit"):   [("SSP",     "finalized", {"ATO", "EIS"})],
+    ("SAR",    "submit"):   [("SAP",     "finalized", {"ATO", "EIS"})],
+    ("POAM",   "submit"):   [("SAR",     "approved",  {"ATO", "EIS"})],
+    ("IRP",    "submit"):   [("SAR",     "finalized", {"ATO"})],
+    ("CP",     "submit"):   [("SAR",     "finalized", {"ATO"})],
+    ("CMP",    "submit"):   [("SAR",     "finalized", {"ATO"})],
+    ("CONMON", "submit"):   [("SAR",     "finalized", {"ATO"})],
+    ("ADD",    "submit"): [
+        ("IRP",    "approved",  {"ATO"}),
+        ("CP",     "approved",  {"ATO"}),
+        ("CMP",    "approved",  {"ATO"}),
+        ("CONMON", "approved",  {"ATO"}),
+        ("SSP",    "approved",  {"ATP"}),
+        ("SSP",    "in_review", {"IATO"}),
+        ("SAR",    "finalized", {"EIS"}),
+    ],
+    ("ADD",    "finalize"): [
+        ("POAM",   "finalized", {"ATO", "EIS"}),
+    ],
+    # ── HIPAA ─────────────────────────────────────────────────────────────────
+    ("HIPAA_RMP",      "submit"):   [("HIPAA_RA",    "approved",  {"HIPAA-SA"})],
+    ("HIPAA_BAA",      "submit"):   [("HIPAA_RA",    "approved",  {"HIPAA-SA"})],
+    ("AUTH_DECISION",  "submit"):   [
+        ("HIPAA_RA",   "approved",  {"HIPAA-SA"}),
+        ("HIPAA_RMP",  "approved",  {"HIPAA-SA"}),
+        ("HITRUST_GAP","approved",  {"HITRUST"}),
+        ("PCI_SAQ",    "approved",  {"PCI-DSS"}),
+        ("SOC1_CTRLS", "approved",  {"SOC1"}),
+        ("SOC2_TSC",   "approved",  {"SOC2", "SOC2-T1"}),
+        ("GDPR_ART30", "approved",  {"GDPR"}),
+        ("ISO27701_PIMS","approved",{"ISO27701"}),
+        ("CCPA_ASSESS","approved",  {"CCPA"}),
+        ("CMMC_SSP",   "approved",  {"CMMC"}),
+        ("ISO_SOA",    "approved",  {"ISO27001"}),
+        ("CSA_CCM",    "approved",  {"CSA-STAR"}),
+    ],
+    ("AUTH_DECISION",  "finalize"): [
+        ("HIPAA_RMP",  "finalized", {"HIPAA-SA"}),
+        ("HITRUST_CAP","finalized", {"HITRUST"}),
+        ("CMMC_PLAN",  "finalized", {"CMMC"}),
+        ("ISO_RISK",   "finalized", {"ISO27001"}),
+    ],
+    # ── HITRUST ───────────────────────────────────────────────────────────────
+    ("HITRUST_CAP",    "submit"):   [("HITRUST_GAP", "approved",  {"HITRUST"})],
+    ("HITRUST_EVD",    "submit"):   [("HITRUST_GAP", "approved",  {"HITRUST"})],
+    # ── PCI-DSS ───────────────────────────────────────────────────────────────
+    ("PCI_SAQ",        "submit"):   [("PCI_SCOPE",   "approved",  {"PCI-DSS"})],
+    ("PCI_RISK",       "submit"):   [("PCI_SCOPE",   "approved",  {"PCI-DSS"})],
+    # ── SOC ───────────────────────────────────────────────────────────────────
+    ("SOC1_CTRLS",     "submit"):   [("SOC1_SCOPE",  "approved",  {"SOC1"})],
+    ("SOC2_TSC",       "submit"):   [("SOC2_SCOPE",  "approved",  {"SOC2", "SOC2-T1"})],
+    ("SOC2_GAP",       "submit"):   [("SOC2_TSC",    "approved",  {"SOC2"})],
+    # ── GDPR ──────────────────────────────────────────────────────────────────
+    ("GDPR_DPIA",      "submit"):   [("GDPR_ART30",  "approved",  {"GDPR"})],
+    ("GDPR_MAP",       "submit"):   [("GDPR_ART30",  "approved",  {"GDPR"})],
+    # ── CMMC ──────────────────────────────────────────────────────────────────
+    ("CMMC_SPRS",      "submit"):   [("CMMC_SSP",    "approved",  {"CMMC"})],
+    ("CMMC_PLAN",      "submit"):   [("CMMC_SSP",    "approved",  {"CMMC"})],
+    # ── ISO 27001 ─────────────────────────────────────────────────────────────
+    ("ISO_SOA",        "submit"):   [("ISO_SCOPE",   "approved",  {"ISO27001"}),
+                                     ("ISO_RISK",    "approved",  {"ISO27001"})],
+    # ── CSA STAR ──────────────────────────────────────────────────────────────
+    ("CSA_CCM",        "submit"):   [("CSA_CAIQ",    "approved",  {"CSA-STAR"})],
+}
+
+
+async def _check_ato_prereqs(
+    session, system_id: str, doc_type: str, action: str, auth_types: list
+) -> list[dict]:
+    """
+    Returns a list of unmet prerequisites for the given doc_type + action.
+    Each item: {"prereq_doc": str, "needed_status": str, "actual_status": str|None, "note": str}
+    """
+    rules = PREREQ_RULES.get((doc_type, action), [])
+
+    # Filter to rules applicable for this system's auth types
+    applicable = [
+        (prereq_doc, min_status)
+        for (prereq_doc, min_status, types) in rules
+        if types is None or bool(set(auth_types) & types)
+    ]
+
+    # PTA → PIA special rule: if PTA exists, PIA must be approved before ADD submit/finalize
+    pta_triggers_pia = False
+    if doc_type == "ADD" and action in ("submit", "finalize"):
+        pta_row = await session.execute(
+            select(AtoDocument.doc_type)
+            .where(AtoDocument.system_id == system_id)
+            .where(AtoDocument.doc_type == "PTA")
+        )
+        if pta_row.scalar_one_or_none():
+            pta_triggers_pia = True
+
+    if not applicable and not pta_triggers_pia:
+        return []
+
+    # Fetch all needed sibling doc statuses in one query
+    prereq_docs_needed = list({rd for rd, _ in applicable})
+    if pta_triggers_pia and "PIA" not in prereq_docs_needed:
+        prereq_docs_needed.append("PIA")
+
+    if prereq_docs_needed:
+        status_rows = await session.execute(
+            select(AtoDocument.doc_type, AtoDocument.status)
+            .where(AtoDocument.system_id == system_id)
+            .where(AtoDocument.doc_type.in_(prereq_docs_needed))
+        )
+        doc_statuses = {row.doc_type: row.status for row in status_rows.all()}
+    else:
+        doc_statuses = {}
+
+    failures = []
+    for prereq_doc, min_status in applicable:
+        actual = doc_statuses.get(prereq_doc)
+        if not _status_gte(actual, min_status):
+            failures.append({
+                "prereq_doc":    prereq_doc,
+                "needed_status": min_status,
+                "actual_status": actual,
+                "note":          "",
+            })
+
+    if pta_triggers_pia:
+        pia_actual = doc_statuses.get("PIA")
+        if not _status_gte(pia_actual, "approved"):
+            failures.append({
+                "prereq_doc":    "PIA",
+                "needed_status": "approved",
+                "actual_status": pia_actual,
+                "note":          "PTA is present — Privacy Impact Assessment required before authorization",
+            })
+
+    return failures
+
+
+# Phase definitions for each authorization package type
+AUTH_TYPE_PHASES: dict = {
+    "ATO": [
+        {"label": "Phase 1 — Categorize", "docs": ["FIPS199", "ABD"]},
+        {"label": "Phase 2 — Plan",        "docs": ["SSP", "SAP"]},
+        {"label": "Phase 3 — Assess",      "docs": ["SAR", "POAM"]},
+        {"label": "Phase 4 — Finalize",    "docs": ["IRP", "CP", "CMP", "CONMON", "ROB", "PTA", "ISA"]},
+    ],
+    "ATP": [
+        {"label": "Phase 1 — Categorize",   "docs": ["FIPS199", "ABD"]},
+        {"label": "Phase 2 — Plan",          "docs": ["SSP"]},
+        {"label": "Phase 3 — Authorize",     "docs": ["ADD"]},
+    ],
+    "IATO": [
+        {"label": "Phase 1 — Categorize",   "docs": ["FIPS199"]},
+        {"label": "Phase 2 — Plan",          "docs": ["SSP"]},
+        {"label": "Phase 3 — Interim Auth",  "docs": ["ADD"]},
+    ],
+    "EIS": [
+        {"label": "Phase 1 — Categorize",   "docs": ["FIPS199", "ABD"]},
+        {"label": "Phase 2 — Plan",          "docs": ["SSP", "SAP"]},
+        {"label": "Phase 3 — Assess",        "docs": ["SAR", "POAM"]},
+        {"label": "Phase 4 — Authorize",     "docs": ["ADD"]},
+    ],
+}
+AUTH_TYPE_LABELS: dict = {
+    "ATO":  "ATO — Authority to Operate",
+    "ATP":  "ATP — Authority to Proceed (12-Month)",
+    "IATO": "IATO — Interim Authority to Operate (6-Month)",
+    "EIS":  "EIS — Enterprise Information System",
+}
+
+# ── Cross-industry Authorization Package Catalog (Phase 31) ──────────────────
+# Seeded into auth_package_types at startup (INSERT OR IGNORE).
+# phases_json only populated for package types with tracked document workflows.
+# sub_categories_json: list of allowed sub_category strings, or null if N/A.
+AUTH_PACKAGE_CATALOG: list[dict] = [
+    # ── Federal ──────────────────────────────────────────────────────────────
+    {
+        "short_name": "ATO",
+        "name": "Authority to Operate",
+        "category": "federal",
+        "description": "Full NIST SP 800-37 RMF authorization. Required for federal systems under FISMA.",
+        "sub_categories": ["High", "Moderate", "Low"],
+        "phases": [
+            {"label": "Phase 1 — Categorize", "docs": ["FIPS199", "ABD"]},
+            {"label": "Phase 2 — Plan",        "docs": ["SSP", "SAP"]},
+            {"label": "Phase 3 — Assess",      "docs": ["SAR", "POAM"]},
+            {"label": "Phase 4 — Finalize",    "docs": ["IRP", "CP", "CMP", "CONMON", "ROB", "PTA", "ISA"]},
+        ],
+    },
+    {
+        "short_name": "IATO",
+        "name": "Interim Authority to Operate",
+        "category": "federal",
+        "description": "Temporary 6-month authorization for systems pending full ATO.",
+        "sub_categories": None,
+        "phases": [
+            {"label": "Phase 1 — Categorize",   "docs": ["FIPS199"]},
+            {"label": "Phase 2 — Plan",          "docs": ["SSP"]},
+            {"label": "Phase 3 — Interim Auth",  "docs": ["ADD"]},
+        ],
+    },
+    {
+        "short_name": "ATP",
+        "name": "Authority to Proceed",
+        "category": "federal",
+        "description": "12-month authorization for systems in active development/testing.",
+        "sub_categories": None,
+        "phases": [
+            {"label": "Phase 1 — Categorize",   "docs": ["FIPS199", "ABD"]},
+            {"label": "Phase 2 — Plan",          "docs": ["SSP"]},
+            {"label": "Phase 3 — Authorize",     "docs": ["ADD"]},
+        ],
+    },
+    {
+        "short_name": "EIS",
+        "name": "Enterprise Information System Authorization",
+        "category": "federal",
+        "description": "Authorization for large-scale enterprise systems with multiple interconnections.",
+        "sub_categories": None,
+        "phases": [
+            {"label": "Phase 1 — Categorize",   "docs": ["FIPS199", "ABD"]},
+            {"label": "Phase 2 — Plan",          "docs": ["SSP", "SAP"]},
+            {"label": "Phase 3 — Assess",        "docs": ["SAR", "POAM"]},
+            {"label": "Phase 4 — Authorize",     "docs": ["ADD"]},
+        ],
+    },
+    {
+        "short_name": "FedRAMP",
+        "name": "FedRAMP Authorization",
+        "category": "federal",
+        "description": "Federal Risk and Authorization Management Program — cloud service authorization for federal customers.",
+        "sub_categories": ["High", "Moderate", "Low", "LI-SaaS"],
+        "phases": [
+            {"label": "Phase 1 — Initiation",   "docs": ["Readiness Assessment", "FedRAMP Package Request"]},
+            {"label": "Phase 2 — Assessment",   "docs": ["SAP", "SAR", "CIS/CRM"]},
+            {"label": "Phase 3 — Authorization","docs": ["Security Package", "ATO Letter"]},
+            {"label": "Phase 4 — ConMon",       "docs": ["Monthly ConMon", "Annual Assessment"]},
+        ],
+    },
+    {
+        "short_name": "StateRAMP",
+        "name": "StateRAMP Authorization",
+        "category": "federal",
+        "description": "State-level cloud authorization program modeled after FedRAMP.",
+        "sub_categories": ["High", "Moderate", "Low"],
+        "phases": [
+            {"label": "Phase 1 — Initiation",    "docs": ["FIPS199", "SSP", "Readiness Assessment"]},
+            {"label": "Phase 2 — Assessment",    "docs": ["SAP", "SAR", "POAM"]},
+            {"label": "Phase 3 — Authorization", "docs": ["PKG_CHECKLIST", "ATO_LETTER"]},
+            {"label": "Phase 4 — ConMon",        "docs": ["CONMON_MONTHLY", "VULN_DEVIATION"]},
+        ],
+    },
+    # ── Healthcare ────────────────────────────────────────────────────────────
+    {
+        "short_name": "HIPAA-SA",
+        "name": "HIPAA Security Assessment",
+        "category": "healthcare",
+        "description": "HIPAA Security Rule compliance assessment for systems handling ePHI.",
+        "sub_categories": None,
+        "phases": [
+            {"label": "Phase 1 — Risk Analysis",      "docs": ["Risk Analysis Report"]},
+            {"label": "Phase 2 — Risk Management",    "docs": ["Risk Management Plan", "Policies & Procedures"]},
+            {"label": "Phase 3 — Training & BAAs",    "docs": ["Workforce Training", "BAA Inventory"]},
+            {"label": "Phase 4 — Audit Controls",     "docs": ["Audit Log Review", "Access Review"]},
+        ],
+    },
+    {
+        "short_name": "HITRUST",
+        "name": "HITRUST CSF Certification",
+        "category": "healthcare",
+        "description": "HITRUST Common Security Framework certification for healthcare and regulated industries.",
+        "sub_categories": ["e1", "i1", "r2"],
+        "phases": [
+            {"label": "Phase 1 — Readiness",          "docs": ["Gap Assessment", "Scope Definition"]},
+            {"label": "Phase 2 — Remediation",        "docs": ["Corrective Action Plans", "Evidence Collection"]},
+            {"label": "Phase 3 — Validated Assessment","docs": ["Assessor Engagement", "MyCSF Submission"]},
+            {"label": "Phase 4 — Certification",      "docs": ["HITRUST Review", "Certificate Issued"]},
+        ],
+    },
+    # ── Financial ─────────────────────────────────────────────────────────────
+    {
+        "short_name": "PCI-DSS",
+        "name": "PCI DSS Compliance",
+        "category": "financial",
+        "description": "Payment Card Industry Data Security Standard for systems that handle cardholder data.",
+        "sub_categories": ["Level 1", "Level 2", "Level 3", "Level 4"],
+        "phases": [
+            {"label": "Phase 1 — Scope & Gaps",       "docs": ["Network Diagram", "Cardholder Data Flow", "Gap Assessment"]},
+            {"label": "Phase 2 — Remediation",        "docs": ["Remediation Plan", "Penetration Test", "ASV Scan"]},
+            {"label": "Phase 3 — Formal Assessment",  "docs": ["ROC" , "SAQ", "AOC"]},
+            {"label": "Phase 4 — Ongoing Compliance", "docs": ["Quarterly Scans", "Annual Assessment"]},
+        ],
+    },
+    {
+        "short_name": "SOC1",
+        "name": "SOC 1 Type II Report",
+        "category": "financial",
+        "description": "SSAE 18 / ISAE 3402 report on controls relevant to financial reporting.",
+        "sub_categories": None,
+        "phases": [
+            {"label": "Phase 1 — Readiness",    "docs": ["Scope Definition", "Control Inventory"]},
+            {"label": "Phase 2 — Observation",  "docs": ["Testing Period"]},
+            {"label": "Phase 3 — Report",       "docs": ["Auditor Report", "Management Assertion"]},
+        ],
+    },
+    # ── Privacy / International ───────────────────────────────────────────────
+    {
+        "short_name": "GDPR",
+        "name": "GDPR Compliance",
+        "category": "privacy",
+        "description": "EU General Data Protection Regulation compliance for systems handling EU personal data.",
+        "sub_categories": ["DPIA", "Article 30 Records", "DPA Registration"],
+        "phases": [
+            {"label": "Phase 1 — Inventory",       "docs": ["Data Mapping", "Article 30 Records"]},
+            {"label": "Phase 2 — Assessment",      "docs": ["DPIA", "Lawful Basis Analysis"]},
+            {"label": "Phase 3 — Controls",        "docs": ["Privacy Notice", "Consent Mechanisms", "Retention Policy"]},
+            {"label": "Phase 4 — Ongoing",         "docs": ["Annual Review", "Breach Response Plan"]},
+        ],
+    },
+    {
+        "short_name": "ISO27701",
+        "name": "ISO/IEC 27701 Certification",
+        "category": "privacy",
+        "description": "Privacy Information Management System extension to ISO 27001.",
+        "sub_categories": None,
+        "phases": [
+            {"label": "Phase 1 — PIMS Design",    "docs": ["ISO_SCOPE", "GDPR_MAP"]},
+            {"label": "Phase 2 — Implementation", "docs": ["ISO27701_PIMS", "Privacy Controls"]},
+            {"label": "Phase 3 — Certification",  "docs": ["Stage 1 Audit", "Stage 2 Audit", "AUTH_DECISION"]},
+            {"label": "Phase 4 — Surveillance",   "docs": ["Annual Surveillance Audit"]},
+        ],
+    },
+    {
+        "short_name": "CCPA",
+        "name": "CCPA Compliance",
+        "category": "privacy",
+        "description": "California Consumer Privacy Act compliance for systems handling California resident data.",
+        "sub_categories": None,
+        "phases": [
+            {"label": "Phase 1 — Inventory",  "docs": ["CCPA_INV", "CCPA_ASSESS"]},
+            {"label": "Phase 2 — Controls",   "docs": ["Privacy Notice", "Consumer Rights Procedures"]},
+            {"label": "Phase 3 — Ongoing",    "docs": ["Annual Review", "AUTH_DECISION"]},
+        ],
+    },
+    # ── Contractor / Defense ──────────────────────────────────────────────────
+    {
+        "short_name": "CMMC",
+        "name": "CMMC Certification",
+        "category": "contractor",
+        "description": "Cybersecurity Maturity Model Certification for DoD contractors handling CUI/FCI.",
+        "sub_categories": ["Level 1", "Level 2", "Level 3"],
+        "phases": [
+            {"label": "Phase 1 — Self-Assessment",  "docs": ["System Security Plan", "SPRS Score Entry"]},
+            {"label": "Phase 2 — Gap Remediation",  "docs": ["POAM", "Evidence Collection"]},
+            {"label": "Phase 3 — C3PAO Assessment", "docs": ["Assessment Scope", "Artifacts Package"]},
+            {"label": "Phase 4 — Certification",    "docs": ["Final Report", "CMMC Certificate"]},
+        ],
+    },
+    # ── Other / Cross-industry ────────────────────────────────────────────────
+    {
+        "short_name": "ISO27001",
+        "name": "ISO/IEC 27001 Certification",
+        "category": "other",
+        "description": "International standard for information security management systems (ISMS).",
+        "sub_categories": None,
+        "phases": [
+            {"label": "Phase 1 — ISMS Design",      "docs": ["Scope Statement", "Risk Assessment", "Statement of Applicability"]},
+            {"label": "Phase 2 — Implementation",   "docs": ["Policies & Controls", "Training", "Internal Audit"]},
+            {"label": "Phase 3 — Certification",    "docs": ["Stage 1 Audit", "Stage 2 Audit", "Certificate"]},
+            {"label": "Phase 4 — Surveillance",     "docs": ["Annual Surveillance Audit", "3-Year Recertification"]},
+        ],
+    },
+    {
+        "short_name": "SOC2",
+        "name": "SOC 2 Type II Report",
+        "category": "other",
+        "description": "AICPA trust service criteria report (Security, Availability, Confidentiality, Processing Integrity, Privacy).",
+        "sub_categories": ["Security", "Availability", "Confidentiality", "Processing Integrity", "Privacy"],
+        "phases": [
+            {"label": "Phase 1 — Readiness",    "docs": ["Scope Definition", "Control Inventory", "Gap Assessment"]},
+            {"label": "Phase 2 — Observation",  "docs": ["12-Month Testing Period", "Evidence Collection"]},
+            {"label": "Phase 3 — Report",       "docs": ["Auditor Fieldwork", "Management Assertion", "SOC 2 Report"]},
+        ],
+    },
+    {
+        "short_name": "SOC2-T1",
+        "name": "SOC 2 Type I Report",
+        "category": "other",
+        "description": "Point-in-time AICPA trust service criteria report — design suitability only.",
+        "sub_categories": ["Security", "Availability", "Confidentiality", "Processing Integrity", "Privacy"],
+        "phases": [
+            {"label": "Phase 1 — Readiness",    "docs": ["Scope Definition", "Control Design Review"]},
+            {"label": "Phase 2 — Assessment",   "docs": ["Auditor Fieldwork", "SOC 2 Type I Report"]},
+        ],
+    },
+    {
+        "short_name": "CSA-STAR",
+        "name": "CSA STAR Certification",
+        "category": "other",
+        "description": "Cloud Security Alliance Security Trust Assurance and Risk program for cloud providers.",
+        "sub_categories": ["Level 1 (Self-Assessment)", "Level 2 (Third-Party Audit)", "Level 3 (Continuous Monitoring)"],
+        "phases": [
+            {"label": "Phase 1 — Self-Assessment", "docs": ["CSA_CAIQ", "CSA_CCM"]},
+            {"label": "Phase 2 — Certification",   "docs": ["3PAO Assessment", "AUTH_DECISION"]},
+            {"label": "Phase 3 — Monitoring",      "docs": ["Annual Review"]},
+        ],
+    },
+]
+
+
+async def _seed_auth_package_types(session: AsyncSession) -> None:
+    """Insert catalog entries that don't already exist (INSERT OR IGNORE pattern)."""
+    for entry in AUTH_PACKAGE_CATALOG:
+        await session.execute(
+            text(_upsert_sql(
+                "INSERT INTO auth_package_types "
+                "(id, name, short_name, category, description, phases_json, sub_categories_json, is_active) "
+                "VALUES (:id, :name, :sn, :cat, :desc, :phases, :subcats, 1) "
+                "ON CONFLICT DO NOTHING",
+                _DB_DIALECT
+            )),
+            {
+                "id":     str(uuid.uuid4()),
+                "name":   entry["name"],
+                "sn":     entry["short_name"],
+                "cat":    entry["category"],
+                "desc":   entry.get("description"),
+                "phases": json.dumps(entry["phases"]) if entry.get("phases") else None,
+                "subcats": json.dumps(entry["sub_categories"]) if entry.get("sub_categories") else None,
+            },
+        )
+    await session.commit()
+
+
+async def _pkg_relevant_doc_keys(session, system_id: str) -> list[str]:
+    """
+    Return the ordered list of ATO doc type keys relevant to this system's active
+    auth packages. Falls back to all doc types when no packages are registered
+    (backward compatible with systems created before Phase 31).
+    """
+    pkg_rows = await session.execute(
+        text(
+            "SELECT apt.short_name FROM system_auth_packages sap "
+            "JOIN auth_package_types apt ON apt.id = sap.package_type_id "
+            "WHERE sap.system_id = :sid"
+        ),
+        {"sid": system_id},
+    )
+    pkg_sns = [r[0] for r in pkg_rows.all()]
+    if not pkg_sns:
+        return _ATO_DOC_KEYS  # no packages registered — show all (backward compat)
+    relevant: set = set()
+    for sn in pkg_sns:
+        relevant |= _PKG_DOC_TYPES.get(sn, frozenset())
+    # Preserve canonical key ordering (core first, program-specific last)
+    return [k for k in _ATO_DOC_KEYS if k in relevant]
+
+
+async def _pkg_short_names(session, system_id: str) -> list[str]:
+    """Return the list of auth package short_names registered for a system."""
+    rows = await session.execute(
+        text(
+            "SELECT apt.short_name FROM system_auth_packages sap "
+            "JOIN auth_package_types apt ON apt.id = sap.package_type_id "
+            "WHERE sap.system_id = :sid"
+        ),
+        {"sid": system_id},
+    )
+    return [r[0] for r in rows.all()]
+
+
+async def _populate_controls_from_baseline(
+    session: AsyncSession, system_id: str, baseline_fw_id: str, user: str
+) -> int:
+    """
+    Auto-populate SystemControl records for a system from a baseline framework.
+    Only inserts controls that don't already exist for the system.
+    Returns the number of controls inserted.
+    """
+    # Get the framework's catalog short_name to set source_catalog
+    fw_row = (await session.execute(
+        text("SELECT short_name, category FROM compliance_frameworks WHERE id = :fid"),
+        {"fid": baseline_fw_id},
+    )).fetchone()
+    if not fw_row:
+        return 0
+    fw_sn = fw_row[0]
+    # user_generated baseline has no pre-seeded controls — questionnaire will populate them
+    if fw_sn == "user_generated":
+        return 0
+
+    # Use baseline_controls + catalog_controls (catalog-agnostic architecture)
+    bc_rows = (await session.execute(
+        text("""
+            SELECT cc.control_id, cc.domain, cc.title, cf.short_name AS cat_sn
+            FROM baseline_controls bc
+            JOIN catalog_controls cc ON cc.id = bc.catalog_control_id
+            JOIN compliance_frameworks cf ON cf.id = cc.framework_id
+            WHERE bc.baseline_id = :fid
+        """),
+        {"fid": baseline_fw_id},
+    )).fetchall()
+
+    if bc_rows:
+        rows_with_src = [(cid, dom, tit, cat_sn) for cid, dom, tit, cat_sn in bc_rows]
+    else:
+        # Legacy fallback: framework_controls (pre-migration installs)
+        source_cat = "iso27001" if "iso27001" in fw_sn else "nist80053r5"
+        fc_rows = (await session.execute(
+            text("SELECT control_id, domain, title FROM framework_controls WHERE framework_id = :fid"),
+            {"fid": baseline_fw_id},
+        )).fetchall()
+        rows_with_src = [(cid, dom, tit, source_cat) for cid, dom, tit in fc_rows]
+
+    if not rows_with_src:
+        return 0
+
+    # Get existing control IDs for this system to avoid duplicates
+    existing = set(r[0].lower() for r in (await session.execute(
+        text("SELECT control_id FROM system_controls WHERE system_id = :sid"),
+        {"sid": system_id},
+    )).fetchall())
+
+    inserted = 0
+    for ctrl_id, domain, title, source_cat in rows_with_src:
+        cid_lower = ctrl_id.lower()
+        if cid_lower in existing:
+            continue
+        # Enrich from in-memory CATALOG for NIST controls if available
+        catalog_entry = CATALOG.get(cid_lower, {})
+        ctrl_family = catalog_entry.get("family_id", domain or cid_lower.split("-")[0].upper())
+        ctrl_title  = catalog_entry.get("title", title or ctrl_id.upper())
+        await session.execute(
+            text(_upsert_sql(
+                "INSERT INTO system_controls "
+                "(id, system_id, control_id, control_family, control_title, "
+                " status, source_catalog, created_by, created_at, updated_at) "
+                "VALUES (:id, :sid, :cid, :fam, :tit, 'not_started', :src, :usr, "
+                "        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
+                "ON CONFLICT DO NOTHING",
+                _DB_DIALECT
+            )),
+            {
+                "id":  str(uuid.uuid4()),
+                "sid": system_id,
+                "cid": ctrl_id,
+                "fam": ctrl_family,
+                "tit": ctrl_title,
+                "src": source_cat,
+                "usr": user,
+            },
+        )
+        existing.add(cid_lower)
+        inserted += 1
+
+    if inserted:
+        await session.commit()
+        log.info("Populated %d controls for system %s from baseline %s", inserted, system_id, fw_sn)
+    return inserted
+
+
+# ISO 27001 Annex A (Core) — ~50 controls commonly applicable to most organisations.
+_ISO_CORE_CONTROLS = {
+    "A.5.1","A.5.2","A.5.3","A.5.4","A.5.7","A.5.8","A.5.9","A.5.12","A.5.13",
+    "A.5.14","A.5.15","A.5.16","A.5.17","A.5.18","A.5.19","A.5.24","A.5.25",
+    "A.5.26","A.5.27","A.5.31","A.5.33","A.5.35","A.5.36",
+    "A.6.1","A.6.2","A.6.3","A.6.4","A.6.5","A.6.6","A.6.7","A.6.8",
+    "A.7.1","A.7.2","A.7.3","A.7.4","A.7.5","A.7.6","A.7.7","A.7.8",
+    "A.8.1","A.8.2","A.8.3","A.8.4","A.8.5","A.8.6","A.8.7","A.8.8",
+    "A.8.9","A.8.12","A.8.15","A.8.16","A.8.19","A.8.22","A.8.23","A.8.28",
+}
+
+
+async def _seed_iso_baselines(session: AsyncSession) -> None:
+    """Seed framework_controls for iso27001_annex_a and iso27001_core from the
+    iso27001 catalog's controls. Idempotent — only inserts when baseline has 0 controls."""
+    iso_src = (await session.execute(
+        text("SELECT id FROM compliance_frameworks WHERE short_name='iso27001' LIMIT 1")
+    )).scalar()
+    if not iso_src:
+        return
+
+    src_controls = (await session.execute(
+        text("SELECT control_id, domain, title FROM framework_controls WHERE framework_id=:fid"),
+        {"fid": iso_src},
+    )).fetchall()
+    if not src_controls:
+        log.warning("iso27001 has no framework_controls yet — skipping ISO baseline seeding")
+        return
+
+    for bl_sn, control_filter in [
+        ("iso27001_annex_a", None),
+        ("iso27001_core",    _ISO_CORE_CONTROLS),
+    ]:
+        bl_id = (await session.execute(
+            text("SELECT id FROM compliance_frameworks WHERE short_name=:sn LIMIT 1"),
+            {"sn": bl_sn},
+        )).scalar()
+        if not bl_id:
+            continue
+        cnt = (await session.execute(
+            text("SELECT COUNT(*) FROM framework_controls WHERE framework_id=:fid"),
+            {"fid": bl_id},
+        )).scalar() or 0
+        if cnt > 0:
+            continue
+        inserted = 0
+        for ctrl_id, domain, title in src_controls:
+            if control_filter and ctrl_id not in control_filter:
+                continue
+            await session.execute(
+                text(_upsert_sql(
+                    "INSERT INTO framework_controls "
+                    "(framework_id, control_id, domain, title) VALUES (:fid,:cid,:dom,:tit) "
+                    "ON CONFLICT DO NOTHING",
+                    _DB_DIALECT
+                )),
+                {"fid": bl_id, "cid": ctrl_id, "dom": domain, "tit": title},
+            )
+            inserted += 1
+        await session.commit()
+        log.info("Seeded %d controls into %s.", inserted, bl_sn)
+
+
+async def _seed_nist_baselines(session: AsyncSession) -> None:
+    """
+    Seed framework_controls for nist_low / nist_mod / nist_high from the
+    OSCAL baseline profile files (downloaded by updater).  Only inserts rows
+    when the framework has zero existing controls — safe to call every startup.
+    """
+    controls_dir = Path(CONFIG.get("nist", {}).get("controls_dir", "controls"))
+    baselines = load_baselines(controls_dir)
+    if not baselines:
+        return
+
+    for short_name, ctrl_ids in baselines.items():
+        if not ctrl_ids:
+            continue
+        # Look up framework ID
+        row = (await session.execute(
+            text("SELECT id FROM compliance_frameworks WHERE short_name = :sn"),
+            {"sn": short_name},
+        )).fetchone()
+        if not row:
+            continue
+        fw_id = row[0]
+
+        # Check if already seeded
+        cnt = (await session.execute(
+            text("SELECT COUNT(*) FROM framework_controls WHERE framework_id = :fid"),
+            {"fid": fw_id},
+        )).scalar()
+        if cnt and cnt > 0:
+            continue
+
+        # Determine family / domain from CATALOG (global)
+        inserted = 0
+        for ctrl_id in ctrl_ids:
+            catalog_entry = CATALOG.get(ctrl_id, {})
+            domain = catalog_entry.get("family_id", ctrl_id.split("-")[0].upper())
+            title  = catalog_entry.get("title", ctrl_id.upper())
+            await session.execute(
+                text(_upsert_sql(
+                    "INSERT INTO framework_controls "
+                    "(framework_id, control_id, domain, title) "
+                    "VALUES (:fid, :cid, :dom, :tit) "
+                    "ON CONFLICT DO NOTHING",
+                    _DB_DIALECT
+                )),
+                {
+                    "fid": fw_id,
+                    "cid": ctrl_id,
+                    "dom": domain,
+                    "tit": title,
+                },
+            )
+            inserted += 1
+        await session.commit()
+        log.info("Seeded %d controls into %s baseline.", inserted, short_name)
+
+
+async def _seed_nist_all(session: AsyncSession) -> None:
+    """
+    Seed framework_controls for nist_all with all entries from CATALOG
+    (the full SP 800-53 Rev 5 control set).  Only inserts when zero rows exist.
+    """
+    row = (await session.execute(
+        text("SELECT id FROM compliance_frameworks WHERE short_name = 'nist_all'"),
+    )).fetchone()
+    if not row:
+        return
+    fw_id = row[0]
+
+    cnt = (await session.execute(
+        text("SELECT COUNT(*) FROM framework_controls WHERE framework_id = :fid"),
+        {"fid": fw_id},
+    )).scalar()
+    if cnt and cnt > 0:
+        return
+
+    inserted = 0
+    for ctrl_id, entry in CATALOG.items():
+        domain = entry.get("family_id", ctrl_id.split("-")[0].upper())
+        title  = entry.get("title", ctrl_id.upper())
+        await session.execute(
+            text(_upsert_sql(
+                "INSERT INTO framework_controls "
+                "(framework_id, control_id, domain, title) "
+                "VALUES (:fid, :cid, :dom, :tit) "
+                "ON CONFLICT DO NOTHING",
+                _DB_DIALECT
+            )),
+            {"fid": fw_id, "cid": ctrl_id, "dom": domain, "tit": title},
+        )
+        inserted += 1
+    await session.commit()
+    log.info("Seeded %d controls into nist_all baseline.", inserted)
+
+
+async def _seed_supplemental_frameworks(session: AsyncSession) -> None:
+    """
+    Seed compliance_frameworks + framework_controls for SP 800-171 r2/r3,
+    CSF 2.0, and FedRAMP High/Moderate/Low.  Inserts each framework once
+    (INSERT OR IGNORE) and seeds controls from the in-memory catalog dicts.
+    Safe to call every startup — skips already-seeded frameworks.
+    """
+    _fw_defs = [
+        {
+            "short_name": "sp800171r2",
+            "name": "NIST SP 800-171 Rev 2",
+            "version": "2.0",
+            "kind": "catalog",
+            "category": "contractor",
+            "published_by": "NIST",
+            "catalog": SP171_R2,
+        },
+        {
+            "short_name": "sp800171r3",
+            "name": "NIST SP 800-171 Rev 3",
+            "version": "3.0.0",
+            "kind": "catalog",
+            "category": "contractor",
+            "published_by": "NIST",
+            "catalog": SP171_R3,
+        },
+        {
+            "short_name": "csf2",
+            "name": "NIST CSF 2.0",
+            "version": "2.0",
+            "kind": "framework",
+            "category": "federal",
+            "published_by": "NIST",
+            "catalog": CSF2_CATALOG,
+        },
+        {
+            "short_name": "fedramp_high",
+            "name": "FedRAMP High",
+            "version": "rev5",
+            "kind": "baseline",
+            "category": "federal",
+            "published_by": "GSA",
+            "catalog": FEDRAMP_HIGH,
+        },
+        {
+            "short_name": "fedramp_mod",
+            "name": "FedRAMP Moderate",
+            "version": "rev5",
+            "kind": "baseline",
+            "category": "federal",
+            "published_by": "GSA",
+            "catalog": FEDRAMP_MOD,
+        },
+        {
+            "short_name": "fedramp_low",
+            "name": "FedRAMP Low",
+            "version": "rev5",
+            "kind": "baseline",
+            "category": "federal",
+            "published_by": "GSA",
+            "catalog": FEDRAMP_LOW,
+        },
+    ]
+
+    for fw in _fw_defs:
+        sn = fw["short_name"]
+        cat = fw["catalog"]
+        if not cat:
+            log.info("Supplemental framework %s: catalog not loaded, skipping seed.", sn)
+            continue
+
+        # Ensure framework row exists
+        await session.execute(
+            text(_upsert_sql(
+                "INSERT INTO compliance_frameworks "
+                "(short_name, name, version, kind, category, published_by) "
+                "VALUES (:sn, :name, :version, :kind, :category, :pub) "
+                "ON CONFLICT DO NOTHING",
+                _DB_DIALECT
+            )),
+            {
+                "sn":       sn,
+                "name":     fw["name"],
+                "version":  fw["version"],
+                "kind":     fw["kind"],
+                "category": fw["category"],
+                "pub":      fw["published_by"],
+            },
+        )
+        await session.commit()
+
+        # Get framework id
+        row = (await session.execute(
+            text("SELECT id FROM compliance_frameworks WHERE short_name = :sn"),
+            {"sn": sn},
+        )).fetchone()
+        if not row:
+            continue
+        fw_id = row[0]
+
+        # Check if controls already seeded
+        cnt = (await session.execute(
+            text("SELECT COUNT(*) FROM framework_controls WHERE framework_id = :fid"),
+            {"fid": fw_id},
+        )).scalar() or 0
+        if cnt > 0:
+            continue
+
+        inserted = 0
+        for ctrl_id, entry in cat.items():
+            domain = entry.get("family_id", ctrl_id.split("-")[0].upper())
+            title  = entry.get("title", ctrl_id.upper())
+            await session.execute(
+                text(_upsert_sql(
+                    "INSERT INTO framework_controls "
+                    "(framework_id, control_id, domain, title) "
+                    "VALUES (:fid, :cid, :dom, :tit) "
+                    "ON CONFLICT DO NOTHING",
+                    _DB_DIALECT
+                )),
+                {"fid": fw_id, "cid": ctrl_id, "dom": domain, "tit": title},
+            )
+            inserted += 1
+        await session.commit()
+        log.info("Seeded %d controls into %s.", inserted, fw["name"])
+
+
 # Doc types that can be auto-generated from existing system data
 _GENERATABLE_DOCS: frozenset = frozenset({
+    # ── Core RMF / FedRAMP ────────────────────────────────────────────────────
     "FIPS199",        # from system FIPS impact levels
     "SSP",            # from SystemControl implementation records
     "POAM",           # from PoamItem records
@@ -1498,11 +3568,52 @@ _GENERATABLE_DOCS: frozenset = frozenset({
     "SSP_APP_M",      # from InventoryItem (integrated inventory workbook)
     "CONMON_MONTHLY", # from POAMs + controls summary
     "ADD",            # auto-generated when AO records approval decision
+    # ── HIPAA ─────────────────────────────────────────────────────────────────
+    "HIPAA_RA",       # from system data flags + controls + POAM items
+    "HIPAA_RMP",      # from POAM items + system info
+    "HIPAA_WTP",      # from system info + workforce training control summary
+    "HIPAA_BAA",      # from system info (template with ISA/interconnection context)
+    # ── HITRUST ───────────────────────────────────────────────────────────────
+    "HITRUST_GAP",    # from control implementation status
+    "HITRUST_CAP",    # from POAM items as corrective actions
+    "HITRUST_EVD",    # from controls with narratives
+    # ── PCI-DSS ───────────────────────────────────────────────────────────────
+    "PCI_SCOPE",      # from system info + financial data flags + inventory
+    "PCI_SAQ",        # from controls + data classification flags
+    "PCI_RISK",       # from POAM items + control gaps
+    # ── SOC ───────────────────────────────────────────────────────────────────
+    "SOC1_SCOPE",     # from system info + service description
+    "SOC1_CTRLS",     # from system controls
+    "SOC2_SCOPE",     # from system info + applicable trust service categories
+    "SOC2_TSC",       # from controls grouped by trust service criteria
+    "SOC2_GAP",       # from controls with status != implemented
+    # ── GDPR ──────────────────────────────────────────────────────────────────
+    "GDPR_ART30",     # from system info + data attributes + purpose/owner
+    "GDPR_DPIA",      # from system info + privacy flags + POAM items
+    "GDPR_MAP",       # from system info + data attribute flags
+    # ── ISO 27701 ─────────────────────────────────────────────────────────────
+    "ISO27701_PIMS",  # from privacy controls + data attributes
+    # ── CCPA ──────────────────────────────────────────────────────────────────
+    "CCPA_ASSESS",    # from system info + PII/personal data flags
+    "CCPA_INV",       # from system info + data attribute flags
+    # ── CMMC ──────────────────────────────────────────────────────────────────
+    "CMMC_SSP",       # from system info + controls (SP 800-171 families)
+    "CMMC_SPRS",      # from control implementation counts (practice score)
+    "CMMC_PLAN",      # from POAM items + CUI context
+    # ── ISO 27001 ─────────────────────────────────────────────────────────────
+    "ISO_SOA",        # from ISO controls with applicability status
+    "ISO_SCOPE",      # from system boundary + environment + description
+    "ISO_RISK",       # from POAM items + controls as risk treatment records
+    # ── CSA STAR ──────────────────────────────────────────────────────────────
+    "CSA_CCM",        # from controls mapped to CCM domains
+    "CSA_CAIQ",       # from system info + control implementation responses
+    # ── Generic ───────────────────────────────────────────────────────────────
+    "AUTH_DECISION",  # generic authorization/certification decision document
 })
 
 # ── Ticker cache ────────────────────────────────────────────────────────────────
 
-_ticker_cache: dict = {"ts": 0.0, "items": [], "count": 0}
+_ticker_cache: dict[str, dict] = {}  # keyed by username; each entry: {"ts": float, "items": [], "count": int}
 
 
 # ── Background: process SSP ────────────────────────────────────────────────────
@@ -1567,6 +3678,55 @@ async def _process_ssp(assessment_id: str, file_path: str):
                 summary.get("controls_na", 0),
             )
 
+            # ── Crosswalk propagation (GRC mode: SSP linked to a system) ──────
+            # When the assessment is linked to a system, auto-propagate any
+            # non-NIST framework controls detected in the document.
+            if asmt.system_id:
+                multi_fw = parsed.get("multi_fw_controls", {})
+                if multi_fw:
+                    log.info(
+                        "Assessment %s: propagating multi-fw controls for system %s — %s",
+                        assessment_id, asmt.system_id,
+                        {k: len(v) for k, v in multi_fw.items()}
+                    )
+                    async with SessionLocal() as xw_session:
+                        xw_total = 0
+                        for fw_name, ctrl_ids in multi_fw.items():
+                            for raw_ctrl_id in ctrl_ids:
+                                # Find this non-NIST control's NIST mappings, then
+                                # propagate each NIST mapping to all enrolled frameworks.
+                                nist_ids_row = await xw_session.execute(text(
+                                    "SELECT cc2.control_id, cr.confidence "
+                                    "FROM control_relationships cr "
+                                    "JOIN catalog_controls cc1 ON cr.control_a_id = cc1.id "
+                                    "JOIN catalog_controls cc2 ON cr.control_b_id = cc2.id "
+                                    "JOIN compliance_frameworks cf1 ON cc1.framework_id = cf1.id "
+                                    "JOIN compliance_frameworks cf2 ON cc2.framework_id = cf2.id "
+                                    "WHERE cf1.short_name = :fw AND lower(cc1.control_id) = :cid "
+                                    "  AND cf2.short_name = 'nist80053r5' "
+                                    "  AND cr.confidence IN ('high', 'medium')"
+                                ), {"fw": fw_name, "cid": raw_ctrl_id.lower()})
+                                nist_mappings = nist_ids_row.fetchall()
+
+                                # For each NIST hub control, determine effective status from
+                                # the existing system_control record (if imported already)
+                                for (nist_ctrl_id, confidence) in nist_mappings:
+                                    sc_row = await xw_session.execute(
+                                        select(SystemControl)
+                                        .where(SystemControl.system_id == asmt.system_id)
+                                        .where(SystemControl.control_id == nist_ctrl_id)
+                                    )
+                                    sc = sc_row.scalar_one_or_none()
+                                    if sc and sc.status not in ("not_started",):
+                                        xw_total += await _crosswalk_propagate(
+                                            xw_session, asmt.system_id,
+                                            nist_ctrl_id, sc.status,
+                                            f"system:{asmt.system_id}"
+                                        )
+                        await xw_session.commit()
+                        log.info("Crosswalk propagated %d non-NIST controls for system %s",
+                                 xw_total, asmt.system_id)
+
         except Exception as e:
             log.exception("Assessment %s failed: %s", assessment_id, e)
             asmt.status        = "error"
@@ -1588,6 +3748,7 @@ _ROLE_DASHBOARD: dict = {
     "issm":               "/issm/dashboard",
     "ciso":               "/ciso/dashboard",
     "ao":                 "/ao/decisions",
+    "isso":               "/isso/dashboard",
     "admin":              "/admin",
 }
 
@@ -1624,6 +3785,32 @@ async def logout():
     return RedirectResponse(url=url, status_code=302)
 
 
+@app.post("/switch-org")
+async def switch_org(request: Request, org_id: str = Form(...)):
+    """Switch the user's active organization context (signed cookie)."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    # Platform admins can switch to any org; others must be members
+    if not _is_admin(request):
+        async with SessionLocal() as session:
+            if not await _is_org_member(org_id, user, session):
+                raise HTTPException(status_code=403, detail="Not a member of this organization")
+    redirect_to = request.headers.get("Referer", "/systems")
+    response = RedirectResponse(redirect_to, status_code=303)
+    response.set_cookie("bsv_active_org", _sign_org(org_id), httponly=True, samesite="lax", secure=True)
+    return response
+
+
+@app.post("/leave-org")
+async def leave_org_context(request: Request):
+    """Clear active org cookie (reverts to DEFAULT_ORG_ID)."""
+    redirect_to = request.headers.get("Referer", "/systems")
+    response = RedirectResponse(redirect_to, status_code=303)
+    response.delete_cookie("bsv_active_org")
+    return response
+
+
 # ── View mode toggle (admin only) ──────────────────────────────────────────────
 
 @app.get("/switch-view")
@@ -1649,9 +3836,6 @@ async def switch_role_view(request: Request, role: str = ""):
     user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
-    ref = request.headers.get("Referer", "/systems")
-    response = RedirectResponse(url=ref, status_code=303)
-
     async with SessionLocal() as session:
         # Always derive native role from the DB — never from the shell cookie.
         if _is_admin(request):
@@ -1662,7 +3846,10 @@ async def switch_role_view(request: Request, role: str = ""):
             )).scalar_one_or_none()
             native = native_row or "employee"
 
-        allowed = ROLE_CAN_VIEW_DOWN.get(native, [])
+        if _cfg("demo_mode", False):
+            allowed = [r for r in _DEMO_SHELL_ROLES if r != native]
+        else:
+            allowed = ROLE_CAN_VIEW_DOWN.get(native, [])
         grant  = (role != "reset") and (role in allowed)
 
         if grant:
@@ -1671,6 +3858,10 @@ async def switch_role_view(request: Request, role: str = ""):
                               "_real_role": native})
             await session.commit()
 
+    # Always redirect to the target role's home dashboard — never back to Referer,
+    # because the previous page may belong to a different role (403).
+    dest = _ROLE_DASHBOARD.get(role, "/dashboard") if grant else _ROLE_DASHBOARD.get(native, "/dashboard")
+    response = RedirectResponse(url=dest, status_code=303)
     if grant:
         response.set_cookie("bsv_role_shell", _sign_shell(role), httponly=True, samesite="lax", secure=True)
     else:
@@ -1680,10 +3871,12 @@ async def switch_role_view(request: Request, role: str = ""):
 
 
 @app.get("/exit-shell")
-async def exit_shell(request: Request):
-    """Exit role shell — return to the page the user came from."""
-    ref = request.headers.get("Referer", "/")
-    response = RedirectResponse(url=ref, status_code=303)
+async def exit_shell(request: Request, next: str = ""):
+    """Exit role shell — return to admin home or caller-specified URL."""
+    # Default destination: admin home. Never let Referer send an admin back into
+    # a shell'd page, which would look identical to still being in the shell.
+    dest = next if next else ("/admin" if _is_admin(request) else "/")
+    response = RedirectResponse(url=dest, status_code=303)
     response.delete_cookie("bsv_role_shell")
     response.delete_cookie("bsv_role_view")
     return response
@@ -2062,183 +4255,197 @@ async def quiz_submit(request: Request, assessment_id: str):
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
+    if not request.headers.get(_REMOTE_USER_HDR, ""):
+        raise HTTPException(status_code=401)
     if not _is_admin(request):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     async with SessionLocal() as session:
-        rows = await session.execute(
-            select(Assessment, Candidate)
-            .join(Candidate, Assessment.candidate_id == Candidate.id)
-            .order_by(Assessment.uploaded_at.desc())
-            .limit(200)
-        )
-        entries = [{"assessment": a, "candidate": c} for a, c in rows.all()]
+        today_str = date.today().isoformat()
 
-        # Analytics: weakest control families by average AI score
-        weak_rows = await session.execute(
-            select(ControlResult.control_family,
-                   func.avg(ControlResult.ai_score).label("avg_score"))
-            .where(ControlResult.ai_grade != "NA")
-            .group_by(ControlResult.control_family)
-            .order_by(func.avg(ControlResult.ai_score).asc())
-            .limit(8)
-        )
-        weak_families = [
-            {"family": r.control_family, "avg": round(r.avg_score, 2)}
-            for r in weak_rows
+        # All active systems
+        systems = list((await session.execute(
+            select(System)
+            .where(System.deleted_at.is_(None))
+            .order_by(System.name)
+        )).scalars().all())
+
+        system_count = len(systems)
+
+        # Auth status breakdown
+        auth_counts: dict[str, int] = {"authorized": 0, "in_progress": 0,
+                                        "expired": 0, "not_authorized": 0}
+        for s in systems:
+            k = s.auth_status or "not_authorized"
+            auth_counts[k] = auth_counts.get(k, 0) + 1
+
+        # FIPS 199 impact classification breakdown
+        impact_counts: dict[str, int] = {"High": 0, "Moderate": 0, "Low": 0}
+        for s in systems:
+            lvl = s.overall_impact or "Low"
+            impact_counts[lvl] = impact_counts.get(lvl, 0) + 1
+
+        # POAM totals
+        total_open_poams = (await session.execute(
+            select(func.count(PoamItem.id))
+            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
+        )).scalar() or 0
+
+        total_overdue_poams = (await session.execute(
+            select(func.count(PoamItem.id))
+            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
+            .where(PoamItem.scheduled_completion.isnot(None))
+            .where(PoamItem.scheduled_completion < today_str)
+        )).scalar() or 0
+
+        # Open risks
+        total_open_risks = (await session.execute(
+            select(func.count(Risk.id))
+            .where(Risk.status == "open")
+        )).scalar() or 0
+
+        # Per-system POAM counts (bulk)
+        sys_ids = [s.id for s in systems]
+        _open_map:    dict = {}
+        _overdue_map: dict = {}
+        if sys_ids:
+            _open_map = dict((await session.execute(
+                select(PoamItem.system_id, func.count(PoamItem.id))
+                .where(PoamItem.system_id.in_(sys_ids))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
+                .group_by(PoamItem.system_id)
+            )).all())
+            _overdue_map = dict((await session.execute(
+                select(PoamItem.system_id, func.count(PoamItem.id))
+                .where(PoamItem.system_id.in_(sys_ids))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
+                .where(PoamItem.scheduled_completion.isnot(None))
+                .where(PoamItem.scheduled_completion < today_str)
+                .group_by(PoamItem.system_id)
+            )).all())
+
+        _today = date.today()
+        def _days_to_expiry(expiry_str: str) -> int | None:
+            if not expiry_str:
+                return None
+            try:
+                return (date.fromisoformat(expiry_str) - _today).days
+            except ValueError:
+                return None
+
+        sys_summaries = [
+            {
+                "id":             s.id,
+                "name":           s.name,
+                "abbreviation":   s.abbreviation or "",
+                "auth_status":    s.auth_status or "not_authorized",
+                "auth_expiry":    s.auth_expiry or "",
+                "overall_impact": s.overall_impact or "Low",
+                "open_poams":     _open_map.get(s.id, 0),
+                "overdue_poams":  _overdue_map.get(s.id, 0),
+                "issm_name":      s.issm_name or "",
+                "days_to_expiry": _days_to_expiry(s.auth_expiry or ""),
+            }
+            for s in systems
         ]
 
-        # Phase 3: System count
-        sys_count_row = await session.execute(select(func.count(System.id)))
-        systems_count = sys_count_row.scalar() or 0
-
-        # Phase 3: Open POA&M count
-        poam_open_row = await session.execute(
-            select(func.count(PoamItem.id))
-            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
-        )
-        poam_open_count = poam_open_row.scalar() or 0
-
-        # Phase 3: Open Risk count
-        risk_open_row = await session.execute(
-            select(func.count(Risk.id))
-            .where(Risk.status != "closed")
-        )
-        risk_open_count = risk_open_row.scalar() or 0
-
-        # Phase 3: POA&M aging
-        today_str = date.today().isoformat()
-        week_str  = (date.today() + timedelta(days=7)).isoformat()
-
-        poam_overdue_row = await session.execute(
-            select(func.count(PoamItem.id))
-            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
-            .where(PoamItem.scheduled_completion != None)
-            .where(PoamItem.scheduled_completion < today_str)
-        )
-        poam_overdue = poam_overdue_row.scalar() or 0
-
-        poam_due_soon_row = await session.execute(
-            select(func.count(PoamItem.id))
-            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
-            .where(PoamItem.scheduled_completion != None)
-            .where(PoamItem.scheduled_completion >= today_str)
-            .where(PoamItem.scheduled_completion <= week_str)
-        )
-        poam_due_soon = poam_due_soon_row.scalar() or 0
-
-        poam_on_track = max(0, poam_open_count - poam_overdue - poam_due_soon)
-
-        # Phase 3: Risk level breakdown
-        risk_rows = await session.execute(
-            select(Risk.risk_level, func.count(Risk.id))
-            .where(Risk.status != "closed")
-            .group_by(Risk.risk_level)
-        )
-        risk_by_level_raw = {r: c for r, c in risk_rows.all()}
-        risk_by_level = {
-            "Critical": risk_by_level_raw.get("Critical", 0),
-            "High":     risk_by_level_raw.get("High", 0),
-            "Moderate": risk_by_level_raw.get("Moderate", 0),
-            "Low":      risk_by_level_raw.get("Low", 0),
-        }
-
-        # Phase 3: Audit log last 10 entries
-        audit_rows = await session.execute(
-            select(AuditLog)
-            .order_by(AuditLog.timestamp.desc())
-            .limit(10)
-        )
-        recent_audit = audit_rows.scalars().all()
-        recent_audit_display = [_format_audit_entry(e) for e in recent_audit]
-
-        # Phase 5: System auth breakdown
-        sys_auth_row = await session.execute(
-            select(func.count(System.id)).where(System.auth_status == "authorized")
-        )
-        systems_auth_count = sys_auth_row.scalar() or 0
-
-        sys_ip_row = await session.execute(
-            select(func.count(System.id)).where(System.auth_status == "in_progress")
-        )
-        systems_in_progress_count = sys_ip_row.scalar() or 0
-
-        # Phase 5: Submissions under review
-        sub_review_row = await session.execute(
+        # Submissions under review
+        submissions_review_count = (await session.execute(
             select(func.count(Submission.id))
             .where(Submission.status.in_(["submitted", "under_review"]))
-        )
-        submissions_review_count = sub_review_row.scalar() or 0
+        )).scalar() or 0
 
-        # Phase 5: Open observations
-        obs_open_row = await session.execute(
+        # Open observations
+        obs_open_count = (await session.execute(
             select(func.count(Observation.id))
             .where(Observation.status == "open")
-        )
-        obs_open_count = obs_open_row.scalar() or 0
+        )).scalar() or 0
+
+        # Recent audit log
+        recent_audit = (await session.execute(
+            select(AuditLog).order_by(AuditLog.timestamp.desc()).limit(10)
+        )).scalars().all()
+        recent_audit_display = [_format_audit_entry(e) for e in recent_audit]
 
     now = datetime.now(timezone.utc)
-    week_ago = now - timedelta(days=7)
 
-    complete   = [e for e in entries if e["assessment"].status == "complete"]
-    pending    = [e for e in complete if not e["assessment"].email_sent]
-    allstar_ct = sum(1 for e in complete if e["assessment"].is_allstar)
-    avg_ssp    = round(
-        sum(e["assessment"].ssp_score for e in complete) / len(complete), 1
-    ) if complete else 0.0
-    this_week  = [
-        e for e in entries
-        if e["assessment"].uploaded_at and
-        e["assessment"].uploaded_at.replace(tzinfo=timezone.utc) >= week_ago
-    ]
+    # Demo visitor stats (30-day window) — read directly from demo DB
+    demo_visitors_total  = 0
+    demo_visitors_unique = 0
+    try:
+        import sqlite3 as _sqlite3
+        _demo_db = Path(CONFIG.get("demo", {}).get(
+            "db_path", "/home/graycat/projects/blacksite-demo/stock.db"
+        ))
+        if _demo_db.exists():
+            _dc = _sqlite3.connect(str(_demo_db), timeout=3)
+            _cur = _dc.cursor()
+            _ts_cols = [r[1] for r in _cur.execute("PRAGMA table_info(immutable_audit_log)").fetchall()]
+            _ts_col  = "timestamp" if "timestamp" in _ts_cols else "created_at"
+            _cutoff  = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+            demo_visitors_total  = _cur.execute(
+                f"SELECT COUNT(*) FROM immutable_audit_log WHERE {_ts_col} >= ?", (_cutoff,)
+            ).fetchone()[0]
+            demo_visitors_unique = _cur.execute(
+                f"SELECT COUNT(DISTINCT remote_ip) FROM immutable_audit_log "
+                f"WHERE remote_ip IS NOT NULL AND remote_ip != '' AND {_ts_col} >= ?", (_cutoff,)
+            ).fetchone()[0]
+            _dc.close()
+    except Exception:
+        pass
 
-    # Analytics: score distribution (10% bins)
-    score_bins = [0] * 10
-    for e in complete:
-        bucket = min(int(e["assessment"].ssp_score // 10), 9)
-        score_bins[bucket] += 1
+    # ── Training & quiz activity for admin dashboard ─────────────────
+    adm_quiz_rows_list = []
+    adm_train_rows_list = []
+    async with SessionLocal() as session:
+        # All quiz activity in last 7 days
+        adm_quiz_result = await session.execute(
+            select(DailyQuizActivity)
+            .where(DailyQuizActivity.quiz_date >= (date.today() - timedelta(days=7)).isoformat())
+            .order_by(DailyQuizActivity.completed_at.desc())
+        )
+        adm_quiz_rows_list = adm_quiz_result.scalars().all()
 
-    # Analytics: weekly submission counts (last 8 weeks)
-    today = datetime.now(timezone.utc).date()
-    weekly_labels = [
-        (today - timedelta(weeks=7 - i)).strftime("%Y-W%W")
-        for i in range(8)
-    ]
-    weekly_counts_map: dict = defaultdict(int)
-    for e in entries:
-        if e["assessment"].uploaded_at:
-            wk = e["assessment"].uploaded_at.strftime("%Y-W%W")
-            weekly_counts_map[wk] += 1
-    weekly_counts = [weekly_counts_map.get(w, 0) for w in weekly_labels]
+        # All training clicks in last 30 days
+        adm_train_result = await session.execute(
+            select(TrainingClick)
+            .where(TrainingClick.clicked_at >= (datetime.utcnow() - timedelta(days=30)))
+            .order_by(TrainingClick.clicked_at.desc())
+        )
+        adm_train_rows_list = adm_train_result.scalars().all()
 
-    employees = CONFIG.get("employees", [])
+    # Aggregate per-user
+    adm_user_stats: dict = {}
+    for r in adm_quiz_rows_list:
+        s = adm_user_stats.setdefault(r.remote_user, {"quiz_attempts": 0, "quiz_passed": 0, "avg_score": 0, "_scores": [], "training_clicks": 0})
+        s["quiz_attempts"] += 1
+        if r.passed:
+            s["quiz_passed"] += 1
+        s["_scores"].append(r.score)
+    for r in adm_train_rows_list:
+        s = adm_user_stats.setdefault(r.remote_user, {"quiz_attempts": 0, "quiz_passed": 0, "avg_score": 0, "_scores": [], "training_clicks": 0})
+        s["training_clicks"] += 1
+    for u, s in adm_user_stats.items():
+        s["avg_score"] = round(sum(s["_scores"]) / len(s["_scores"]), 1) if s["_scores"] else 0
+        del s["_scores"]
+    adm_user_stats_list = sorted(adm_user_stats.items(), key=lambda x: -x[1]["quiz_attempts"])
 
     return templates.TemplateResponse("admin.html", {
-        "request":          request,
-        "entries":          entries,
-        "pending":          pending,
-        "complete_ct":      len(complete),
-        "allstar_ct":       allstar_ct,
-        "avg_ssp":          avg_ssp,
-        "this_week_ct":     len(this_week),
-        "employees":        employees,
-        "score_bins":       score_bins,
-        "weekly_labels":    weekly_labels,
-        "weekly_counts":    weekly_counts,
-        "weak_families":    weak_families,
-        "systems_count":    systems_count,
-        "poam_open_count":  poam_open_count,
-        "risk_open_count":  risk_open_count,
-        "poam_overdue":     poam_overdue,
-        "poam_due_soon":    poam_due_soon,
-        "poam_on_track":    poam_on_track,
-        "risk_by_level":             risk_by_level,
-        "recent_audit":              recent_audit,
-        "recent_audit_display":      recent_audit_display,
-        "systems_auth_count":        systems_auth_count,
-        "systems_in_progress_count": systems_in_progress_count,
+        "request":                   request,
+        "now":                       now,
+        "system_count":              system_count,
+        "auth_counts":               auth_counts,
+        "impact_counts":             impact_counts,
+        "total_open_poams":          total_open_poams,
+        "total_overdue_poams":       total_overdue_poams,
+        "total_open_risks":          total_open_risks,
+        "sys_summaries":             sys_summaries,
         "submissions_review_count":  submissions_review_count,
         "obs_open_count":            obs_open_count,
+        "recent_audit_display":      recent_audit_display,
+        "demo_visitors_total":       demo_visitors_total,
+        "demo_visitors_unique":      demo_visitors_unique,
+        "training_user_stats":       adm_user_stats_list,
         **_tpl_ctx(request),
     })
 
@@ -2399,6 +4606,250 @@ async def admin_audit(
         "rtype_urls":     _RTYPE_URLS,
         **_tpl_ctx(request),
     })
+
+
+# ── Admin: demo visitor access log ─────────────────────────────────────────────
+
+@app.get("/admin/demo-access", response_class=HTMLResponse)
+async def admin_demo_access(
+    request: Request,
+    days: int = 30,
+    page: int = 1,
+    per_page: int = 100,
+):
+    """Read-only view of visitor IPs from the demo.borisov.network instance.
+    Queries the demo instance's SQLite DB (unencrypted stock.db) directly.
+    """
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+
+    import sqlite3 as _sqlite3
+
+    demo_db_path = Path(CONFIG.get("demo", {}).get(
+        "db_path", "/home/graycat/projects/blacksite-demo/stock.db"
+    ))
+
+    rows = []
+    error = None
+    total = 0
+    unique_ips = 0
+    unique_paths = 0
+
+    if not demo_db_path.exists():
+        error = f"Demo DB not found at {demo_db_path}"
+    else:
+        try:
+            conn = _sqlite3.connect(str(demo_db_path), timeout=5)
+            conn.row_factory = _sqlite3.Row
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            cur = conn.cursor()
+
+            # Detect timestamp column name (schema differs between instances)
+            _ts_col_rows = cur.execute("PRAGMA table_info(immutable_audit_log)").fetchall()
+            _ts_col = "timestamp" if any(r[1] == "timestamp" for r in _ts_col_rows) else "created_at"
+
+            # Extract first IP from X-Forwarded-For chains (e.g. "client, proxy")
+            _first_ip_expr = (
+                "TRIM(SUBSTR(remote_ip, 1, "
+                "CASE WHEN INSTR(remote_ip,',')>0 "
+                "THEN INSTR(remote_ip,',')-1 "
+                "ELSE LENGTH(remote_ip) END))"
+            )
+            # Exclude RFC 1918 private, loopback, and link-local ranges
+            _pub = (
+                f"{_first_ip_expr} NOT LIKE '127.%' "
+                f"AND {_first_ip_expr} NOT LIKE '192.168.%' "
+                f"AND {_first_ip_expr} NOT LIKE '10.%' "
+                f"AND {_first_ip_expr} NOT LIKE '169.254.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.16.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.17.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.18.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.19.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.20.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.21.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.22.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.23.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.24.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.25.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.26.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.27.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.28.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.29.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.30.%' "
+                f"AND {_first_ip_expr} NOT LIKE '172.31.%'"
+            )
+
+            # Total rows in window (public IPs only)
+            total = cur.execute(
+                f"SELECT COUNT(*) FROM immutable_audit_log "
+                f"WHERE remote_ip IS NOT NULL AND remote_ip != '' AND {_ts_col} >= ? AND {_pub}",
+                (cutoff,)
+            ).fetchone()[0]
+
+            unique_ips = cur.execute(
+                f"SELECT COUNT(DISTINCT {_first_ip_expr}) FROM immutable_audit_log "
+                f"WHERE remote_ip IS NOT NULL AND remote_ip != '' AND {_ts_col} >= ? AND {_pub}",
+                (cutoff,)
+            ).fetchone()[0]
+
+            unique_paths = cur.execute(
+                f"SELECT COUNT(DISTINCT path) FROM immutable_audit_log "
+                f"WHERE {_ts_col} >= ? AND {_pub}",
+                (cutoff,)
+            ).fetchone()[0]
+
+            offset = (page - 1) * per_page
+            raw = cur.execute(
+                f"""SELECT {_first_ip_expr} AS remote_ip,
+                          COUNT(*) as hits,
+                          MIN({_ts_col}) as first_seen,
+                          MAX({_ts_col}) as last_seen,
+                          COUNT(DISTINCT path) as pages_visited
+                   FROM immutable_audit_log
+                   WHERE remote_ip IS NOT NULL AND remote_ip != ''
+                     AND {_ts_col} >= ? AND {_pub}
+                   GROUP BY {_first_ip_expr}
+                   ORDER BY last_seen DESC
+                   LIMIT ? OFFSET ?""",
+                (cutoff, per_page, offset),
+            ).fetchall()
+            rows = [dict(r) for r in raw]
+            conn.close()
+        except Exception as exc:
+            error = str(exc)
+
+    # Geo-enrich rows
+    if rows:
+        # remote_ip may be "clientIP, proxyIP" (X-Forwarded-For); use first token only
+        def _first_ip(raw: str) -> str:
+            return raw.split(",")[0].strip() if raw else ""
+        first_ips = [_first_ip(r["remote_ip"]) for r in rows]
+        geo_map = await _geo_lookup(first_ips)
+        country_counts: dict[str, int] = {}
+        for row, fip in zip(rows, first_ips):
+            g = geo_map.get(fip, {})
+            row["geo_city"]         = g.get("city", "")
+            row["geo_country"]      = g.get("country", "")
+            row["geo_country_code"] = g.get("country_code", "")
+            row["geo_org"]          = g.get("org", "")
+            row["geo_flag"]         = _country_flag(g.get("country_code", ""))
+            cc = g.get("country", "") or "Unknown"
+            country_counts[cc] = country_counts.get(cc, 0) + 1
+        top_countries = sorted(country_counts.items(), key=lambda x: -x[1])[:5]
+    else:
+        top_countries = []
+
+    total_pages = max(1, (unique_ips + per_page - 1) // per_page)
+
+    ctx = {
+        **_tpl_ctx(request),
+        "request":       request,
+        "rows":          rows,
+        "error":         error,
+        "days":          days,
+        "page":          page,
+        "per_page":      per_page,
+        "total":         total,
+        "unique_ips":    unique_ips,
+        "unique_paths":  unique_paths,
+        "total_pages":   total_pages,
+        "demo_db_path":  str(demo_db_path),
+        "top_countries": top_countries,
+    }
+    return templates.TemplateResponse("admin_demo_access.html", ctx)
+
+
+# ── Admin: demo visitor detail ─────────────────────────────────────────────────
+
+@app.get("/admin/demo-access/ip/{ip}", response_class=HTMLResponse)
+async def admin_demo_ip_detail(request: Request, ip: str, days: int = 30):
+    """Drill-down: all activity for a single visitor IP from the demo instance."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+
+    import sqlite3 as _sqlite3
+
+    demo_db_path = Path(CONFIG.get("demo", {}).get(
+        "db_path", "/home/graycat/projects/blacksite-demo/stock.db"
+    ))
+
+    records = []
+    error = None
+    geo: dict = {}
+
+    if not demo_db_path.exists():
+        error = f"Demo DB not found at {demo_db_path}"
+    else:
+        try:
+            conn = _sqlite3.connect(str(demo_db_path), timeout=5)
+            conn.row_factory = _sqlite3.Row
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            cur = conn.cursor()
+
+            _ts_col_rows = cur.execute("PRAGMA table_info(immutable_audit_log)").fetchall()
+            _ts_col = "timestamp" if any(r[1] == "timestamp" for r in _ts_col_rows) else "created_at"
+
+            _first_ip_expr = (
+                "TRIM(SUBSTR(remote_ip, 1, "
+                "CASE WHEN INSTR(remote_ip,',')>0 "
+                "THEN INSTR(remote_ip,',')-1 "
+                "ELSE LENGTH(remote_ip) END))"
+            )
+
+            # Preload name lookup: systems + assessments
+            _names: dict[str, str] = {}
+            for tbl, col in (("systems", "name"), ("assessments", "name")):
+                try:
+                    for nr in cur.execute(f"SELECT id, {col} FROM {tbl}").fetchall():
+                        _names[nr[0]] = nr[1]
+                except Exception:
+                    pass
+
+            raw = cur.execute(
+                f"""SELECT {_ts_col} as ts, method, path, status_code,
+                           event_type, resource_type, resource_id, details, session_id
+                    FROM immutable_audit_log
+                    WHERE {_first_ip_expr} = ? AND {_ts_col} >= ?
+                    ORDER BY {_ts_col} DESC
+                    LIMIT 2000""",
+                (ip, cutoff),
+            ).fetchall()
+            # Label each record; filter out background noise (label=None)
+            records = []
+            for r in raw:
+                d = dict(r)
+                d["label"] = _describe_request(
+                    d.get("method", ""),
+                    d.get("path", ""),
+                    d.get("status_code") or 0,
+                    _names,
+                )
+                if d["label"] is not None:
+                    records.append(d)
+            conn.close()
+        except Exception as exc:
+            error = str(exc)
+
+    # Geo-enrich
+    geo_map = await _geo_lookup([ip])
+    g = geo_map.get(ip, {})
+    geo = {
+        "flag":    _country_flag(g.get("country_code", "")),
+        "city":    g.get("city", ""),
+        "country": g.get("country", ""),
+        "org":     g.get("org", ""),
+    }
+
+    ctx = {
+        **_tpl_ctx(request),
+        "request": request,
+        "ip":      ip,
+        "days":    days,
+        "records": records,
+        "error":   error,
+        "geo":     geo,
+    }
+    return templates.TemplateResponse("admin_demo_ip_detail.html", ctx)
 
 
 # ── Admin: view-as ─────────────────────────────────────────────────────────────
@@ -2750,7 +5201,7 @@ async def employee_dashboard(request: Request):
 
     quiz_cfg        = CONFIG.get("quiz", {})
     pass_threshold  = quiz_cfg.get("pass_threshold", 75)
-    question_count  = quiz_cfg.get("question_count", 15)
+    question_count  = quiz_cfg.get("question_count", 10)
 
     return templates.TemplateResponse("dashboard.html", {
         "request":          request,
@@ -2791,7 +5242,7 @@ async def daily_quiz_page(request: Request):
             return RedirectResponse(url="/dashboard", status_code=302)
 
     quiz_cfg    = CONFIG.get("quiz", {})
-    n_questions = quiz_cfg.get("question_count", 15)
+    n_questions = quiz_cfg.get("question_count", 10)
     threshold   = quiz_cfg.get("pass_threshold", 75)
 
     selected = random.sample(QUESTIONS, min(n_questions, len(QUESTIONS)))
@@ -2901,9 +5352,10 @@ async def profile_feeds(request: Request):
     async with SessionLocal() as s:
         enabled = await _get_user_feeds(user, s)
     return templates.TemplateResponse("profile_feeds.html", {
-        "request": request,
-        "feeds":   CURATED_FEEDS,
-        "enabled": enabled,
+        "request":      request,
+        "feeds":        CURATED_FEEDS,
+        "enabled":      enabled,
+        "enabled_list": list(enabled),
         **_tpl_ctx(request),
     })
 
@@ -3003,7 +5455,7 @@ async def profile_save(
             profile = UserProfile(remote_user=user)
             session.add(profile)
 
-        profile.display_name        = display_name.strip() or None
+        profile.display_name        = display_name.strip().title() or None
         profile.email               = email.strip() or None
         profile.department          = department.strip() or None
         profile.notifications_email = notifications_email
@@ -3072,6 +5524,8 @@ async def profile_avatar_upload(
     user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
+    if _cfg("demo_mode", False):
+        raise HTTPException(status_code=403, detail="Profile changes are disabled in the demo.")
 
     ext = Path(file.filename or "").suffix.lower()
     if ext not in _AVATAR_TYPES:
@@ -3116,6 +5570,176 @@ async def serve_avatar(username: str):
     raise HTTPException(status_code=404)
 
 
+@app.post("/profile/chat-name")
+async def set_chat_name(request: Request):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    body = await request.json()
+    name = str(body.get("chat_name", "")).strip()[:20]
+    if not name:
+        return JSONResponse({"ok": False, "detail": "Name cannot be empty."}, status_code=400)
+    async with SessionLocal() as session:
+        # Uniqueness check (case-insensitive, excluding self)
+        existing = (await session.execute(
+            select(UserProfile)
+            .where(func.lower(UserProfile.chat_name) == name.lower())
+            .where(UserProfile.remote_user != user)
+        )).scalar_one_or_none()
+        if existing:
+            return JSONResponse({"ok": False, "detail": "That name is already taken."}, status_code=409)
+        profile = await session.get(UserProfile, user)
+        if profile is None:
+            profile = UserProfile(remote_user=user)
+            session.add(profile)
+        profile.chat_name = name
+        await _log_audit(session, user, "UPDATE", "profile", user, {"action": "chat_name", "value": name})
+        await session.commit()
+    resp = JSONResponse({"ok": True, "chat_name": name})
+    resp.set_cookie("bsv_chat_name", name, max_age=365*24*3600, httponly=False, samesite="lax")
+    return resp
+
+
+# ── Accessibility Statement ────────────────────────────────────────────────────
+
+@app.get("/accessibility", response_class=HTMLResponse)
+async def accessibility_statement(request: Request):
+    ctx = {**_tpl_ctx(request), "request": request}
+    return templates.TemplateResponse("accessibility_statement.html", ctx)
+
+
+@app.get("/accessibility/vpat", response_class=HTMLResponse)
+async def vpat_page(request: Request):
+    """VPAT — public, no auth required."""
+    ctx = {**_tpl_ctx(request), "request": request}
+    return templates.TemplateResponse("vpat.html", ctx)
+
+
+# ── Public Legal / Compliance Pages ───────────────────────────────────────────
+
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_notice(request: Request):
+    """Privacy Notice — public, no auth required."""
+    ctx = {**_tpl_ctx(request), "request": request}
+    return templates.TemplateResponse("privacy_notice.html", ctx)
+
+
+@app.get("/terms", response_class=HTMLResponse)
+async def terms_of_use(request: Request):
+    """Terms of Acceptable Use — public, no auth required."""
+    ctx = {**_tpl_ctx(request), "request": request}
+    return templates.TemplateResponse("terms.html", ctx)
+
+
+@app.get("/compliance-info", response_class=HTMLResponse)
+async def compliance_info(request: Request):
+    """Platform Compliance & Security — public, no auth required."""
+    ctx = {**_tpl_ctx(request), "request": request}
+    return templates.TemplateResponse("compliance_info.html", ctx)
+
+
+@app.post("/accessibility/feedback")
+async def accessibility_feedback(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    user = request.headers.get(_REMOTE_USER_HDR, "") or "anonymous"
+    ip   = request.headers.get("X-Real-IP", "") or request.headers.get("X-Forwarded-For", "")
+    details = json.dumps({
+        "name":        str(body.get("name", ""))[:200],
+        "email":       str(body.get("email", ""))[:200],
+        "description": str(body.get("description", ""))[:2000],
+    })
+    async with SessionLocal() as session:
+        session.add(ImmutableAuditEntry(
+            remote_user   = user,
+            remote_ip     = ip or None,
+            method        = "POST",
+            path          = "/accessibility/feedback",
+            status_code   = 200,
+            event_type    = "accessibility_feedback",
+            resource_type = "feedback",
+            details       = details,
+        ))
+        await session.commit()
+    return JSONResponse({"status": "received"})
+
+
+# ── Data Subject Rights (CCPA/CPRA) ───────────────────────────────────────────
+
+@app.get("/privacy/my-data", response_class=HTMLResponse)
+async def my_data_page(request: Request):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as session:
+        audit_count = (await session.execute(
+            select(func.count(ImmutableAuditEntry.id)).where(ImmutableAuditEntry.remote_user == user)
+        )).scalar() or 0
+        profile = (await session.execute(
+            select(UserProfile).where(UserProfile.remote_user == user)
+        )).scalar_one_or_none()
+    ctx = {
+        **_tpl_ctx(request),
+        "request":     request,
+        "audit_count": audit_count,
+        "profile":     profile,
+        "username":    user,
+    }
+    return templates.TemplateResponse("my_data.html", ctx)
+
+
+@app.post("/privacy/export-request")
+async def data_export_request(request: Request):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    ip = request.headers.get("X-Real-IP", "") or request.headers.get("X-Forwarded-For", "")
+    async with SessionLocal() as session:
+        session.add(ImmutableAuditEntry(
+            remote_user   = user,
+            remote_ip     = ip or None,
+            method        = "POST",
+            path          = "/privacy/export-request",
+            status_code   = 202,
+            event_type    = "data_subject_request",
+            resource_type = "export_request",
+            details       = f"User {user} requested data export (CCPA/CPRA)",
+        ))
+        await session.commit()
+    return JSONResponse(
+        {"status": "received",
+         "message": "Your export request has been received. An administrator will prepare your data export within 30 days."},
+        status_code=202,
+    )
+
+
+@app.post("/privacy/deletion-request")
+async def data_deletion_request(request: Request):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    ip = request.headers.get("X-Real-IP", "") or request.headers.get("X-Forwarded-For", "")
+    async with SessionLocal() as session:
+        session.add(ImmutableAuditEntry(
+            remote_user   = user,
+            remote_ip     = ip or None,
+            method        = "POST",
+            path          = "/privacy/deletion-request",
+            status_code   = 202,
+            event_type    = "data_subject_request",
+            resource_type = "deletion_request",
+            details       = f"User {user} requested data deletion (CCPA/CPRA right to erasure)",
+        ))
+        await session.commit()
+    return JSONResponse(
+        {"status": "received",
+         "message": "Your deletion request has been received. An administrator will review and process within 45 days. Note: compliance audit records may be retained per legal obligations."},
+        status_code=202,
+    )
+
+
 # ── System Catalog ─────────────────────────────────────────────────────────────
 
 @app.get("/systems", response_class=HTMLResponse)
@@ -3126,13 +5750,36 @@ async def systems_list(request: Request):
 
     async with SessionLocal() as session:
         _list_role = await _get_user_role(request, session)
-        if _is_admin(request) or _list_role in ("ao", "ciso"):
+        _active_org = _get_active_org_id(request)
+        if _is_admin(request) or _list_role in ("ao", "ciso", "risk_manager"):
+            # Full catalog — AO, CISO, and Risk Manager need org-wide system visibility
+            # Admins see ALL orgs; others scoped to active org
+            _sys_where = [System.deleted_at.is_(None)]
+            if not _is_admin(request):
+                _sys_where.append(System.org_id == _active_org)
             rows = await session.execute(
-                select(System).where(System.deleted_at.is_(None)).order_by(System.name)
+                select(System).where(*_sys_where).order_by(System.name)
+            )
+            systems = rows.scalars().all()
+        elif _list_role == "privacy_officer":
+            # Privacy officers see systems with any privacy-review-triggering data attribute
+            privacy_sys_ids = (
+                select(SystemDataAttribute.system_id).distinct()
+                .join(DataAttributeDefinition,
+                      SystemDataAttribute.attribute_key == DataAttributeDefinition.key)
+                .where(DataAttributeDefinition.triggers_privacy_review == True,
+                       DataAttributeDefinition.is_active.isnot(False))
+                .scalar_subquery()
+            )
+            rows = await session.execute(
+                select(System).where(
+                    System.deleted_at.is_(None),
+                    System.id.in_(privacy_sys_ids),
+                ).order_by(System.name)
             )
             systems = rows.scalars().all()
         else:
-            # Non-admins only see systems they are assigned to (deleted excluded via _user_system_ids)
+            # All other roles (including developer) see only assigned systems
             allowed_ids = await _user_system_ids(request, session)
             if allowed_ids:
                 rows = await session.execute(
@@ -3159,6 +5806,7 @@ async def systems_list(request: Request):
 
         ctx = await _full_ctx(request, session,
             systems      = systems,
+            active_org_id = _active_org,
             authorized_ct  = sum(1 for s in systems if s.auth_status == "authorized"),
             in_progress_ct = sum(1 for s in systems if s.auth_status == "in_progress"),
             expired_ct     = sum(1 for s in systems if s.auth_status == "expired"),
@@ -3175,20 +5823,63 @@ async def system_new_form(request: Request):
     user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
-    return templates.TemplateResponse("system_form.html", {
-        "request": request,
-        "system":  None,
-        "action":  "/systems",
-        **_tpl_ctx(request),
-    })
+    async with SessionLocal() as session:
+        all_fw_rows = (await session.execute(
+            select(ComplianceFramework).where(ComplianceFramework.is_active == True, ComplianceFramework.id.in_(_org_enabled_fw_subq()))
+            .order_by(ComplianceFramework.category, ComplianceFramework.name)
+        )).scalars().all()
+        # Catalogs and baselines are handled separately in the form
+        catalog_rows   = [f for f in all_fw_rows if f.kind == "catalog"]
+        baseline_rows  = [f for f in all_fw_rows if f.kind == "baseline"]
+        # Overlays/frameworks/regulations go into the framework picker
+        all_frameworks = [f for f in all_fw_rows if f.kind not in ("catalog", "baseline")]
+        default_sn = CONFIG.get("grc", {}).get("default_framework", "")
+        default_fw = next((f for f in all_frameworks if f.short_name == default_sn), None)
+        default_fws = [default_fw] if default_fw else []
+        default_ids = {default_fw.id} if default_fw else set()
+        # catalog_affinity: which catalogs each overlay/framework applies to
+        # nist_only = only relevant for NIST 800-53-based programs
+        # iso_only  = only relevant for ISO 27001-based programs
+        # both      = applicable regardless of catalog (most regulations, crosswalk frameworks)
+        _NIST_ONLY = {"fedramp","nist_privacy","dod_srg","nist_ics","sp800171","cmmc2"}
+        _ISO_ONLY  = {"iso27017","iso27018","iso27701"}
+        fw_json = [{"id": f.id, "name": f.name, "short_name": f.short_name,
+                    "category": f.category, "kind": f.kind,
+                    "catalog_affinity": "nist" if f.short_name in _NIST_ONLY
+                                        else "iso" if f.short_name in _ISO_ONLY
+                                        else "both"}
+                   for f in all_frameworks]
+        catalog_json = [{"id": f.id, "name": f.name, "short_name": f.short_name,
+                         "description": f.description or ""}
+                        for f in catalog_rows]
+        baseline_json = [{"id": f.id, "name": f.name, "short_name": f.short_name,
+                          "kind": f.kind, "category": f.category}
+                         for f in baseline_rows]
+        attr_defs = (await session.execute(
+            select(DataAttributeDefinition)
+            .where(DataAttributeDefinition.is_active.isnot(False))
+            .order_by(DataAttributeDefinition.sort_order, DataAttributeDefinition.key)
+        )).scalars().all()
+        ctx = await _full_ctx(request, session,
+                              system=None,
+                              action="/systems",
+                              all_frameworks=all_frameworks,
+                              fw_json=fw_json,
+                              catalog_json=catalog_json,
+                              baseline_json=baseline_json,
+                              selected_framework_ids=default_ids,
+                              selected_frameworks=default_fws,
+                              attr_defs=attr_defs,
+                              system_attr_keys=set())
+    return templates.TemplateResponse("system_form.html", ctx)
 
 
 async def _resolve_abbreviation(session, abbr_raw: str, exclude_id: str | None = None) -> str:
-    """Normalize abbreviation to exactly 4 uppercase letters.
+    """Normalize abbreviation to exactly 4 alphanumeric chars (letters + digits, no special chars).
     If the abbreviation is already taken by another system, append/replace with '1'.
     If shorter than 4, pad with 'X'; if longer, truncate to 4.
     """
-    abbr = _re.sub(r'[^A-Za-z]', '', abbr_raw).upper()[:4]
+    abbr = _re.sub(r'[^A-Za-z0-9]', '', abbr_raw).upper()[:4]
     abbr = abbr.ljust(4, 'X')  # pad if < 4 chars
 
     # Check uniqueness
@@ -3247,6 +5938,16 @@ async def system_create(request: Request):
         abbr_raw = str(form.get("abbreviation", "")).strip()
         abbr = await _resolve_abbreviation(session, abbr_raw) if abbr_raw else "XXXX"
 
+        # Validate email fields
+        _bad_emails = _validate_emails(
+            owner_email = str(form.get("owner_email", "")).strip(),
+            ao_email    = str(form.get("ao_email", "")).strip(),
+            issm_email  = str(form.get("issm_email", "")).strip(),
+            isso_email  = str(form.get("isso_email", "")).strip(),
+        )
+        if _bad_emails:
+            raise HTTPException(status_code=400, detail=f"Invalid email address in field(s): {', '.join(_bad_emails)}")
+
         # Auto-generate inventory number
         inv_num = await _next_inventory_number(session, abbr)
 
@@ -3283,14 +5984,73 @@ async def system_create(request: Request):
             is_public_facing       = bool(form.get("is_public_facing")),
             has_cui                = bool(form.get("has_cui")),
             connects_to_federal    = bool(form.get("connects_to_federal")),
+            has_gdpr_data          = bool(form.get("has_gdpr_data")),
+            is_federal             = bool(form.get("is_federal")),
+            primary_catalog        = str(form.get("primary_catalog", "nist80053r5")) or "nist80053r5",
             categorization_status  = str(form.get("categorization_status", "draft")),
             categorization_note    = str(form.get("categorization_note", "")).strip() or None,
+            # Phase 36 — org tenancy
+            org_id                 = str(form.get("org_id", "")).strip() or _get_active_org_id(request),
         )
         session.add(sys)
         await session.flush()
         sys_id = sys.id
+
+        # Compliance frameworks — executive roles only
+        if role in ("admin", "ao", "ciso"):
+            for fid in form.getlist("framework_ids"):
+                session.add(SystemFramework(system_id=sys_id, framework_id=fid, added_by=user))
+
+            # Apply selected baseline and auto-populate controls
+            baseline_id = str(form.get("baseline_id", "")).strip()
+            if baseline_id:
+                session.add(SystemFramework(system_id=sys_id, framework_id=baseline_id, added_by=user))
+                await session.flush()
+                await _populate_controls_from_baseline(session, sys_id, baseline_id, user)
+
+        # Write SystemDataAttribute records from the dynamic attribute picker
+        selected_attr_keys = set(form.getlist("data_attributes"))
+        # Also map legacy boolean fields → attribute keys for backwards compat
+        _BOOL_TO_ATTR = {
+            "has_pii": "pii", "has_phi": "phi", "has_ephi": "ephi",
+            "has_cui": "cui", "has_gdpr_data": "gdpr",
+            "has_financial_data": "financial", "is_public_facing": "public_facing",
+            "connects_to_federal": "federal_connection", "is_federal": "federal",
+        }
+        for bool_field, attr_key in _BOOL_TO_ATTR.items():
+            if form.get(bool_field):
+                selected_attr_keys.add(attr_key)
+        for attr_key in selected_attr_keys:
+            try:
+                session.add(SystemDataAttribute(
+                    system_id=sys_id, attribute_key=attr_key, added_by=user
+                ))
+                await session.flush()
+            except Exception:
+                await session.rollback()
+
         await _log_audit(session, user, "CREATE", "system", sys_id,
                          {"name": sys.name, "inventory_number": inv_num})
+
+        # Alert privacy officers for notification-triggering data attributes on new system
+        notify_rows = await session.execute(
+            select(DataAttributeDefinition.short_label)
+            .join(SystemDataAttribute,
+                  SystemDataAttribute.attribute_key == DataAttributeDefinition.key)
+            .where(SystemDataAttribute.system_id == sys_id,
+                   DataAttributeDefinition.triggers_notification == True,
+                   DataAttributeDefinition.is_active.isnot(False))
+        )
+        notify_labels = [r[0] for r in notify_rows.all()]
+        if notify_labels:
+            await _notify_role(
+                session, "privacy_officer", "pii_system_registered",
+                title=f"New System Registered: {sys.name}",
+                body=f"{sys.name} ({sys.inventory_number}) registered with data attributes: {', '.join(notify_labels)}. Privacy review required.",
+                action_url=f"/systems/{sys_id}",
+                exclude_user=user,
+            )
+
         await session.commit()
 
     return RedirectResponse(url=f"/systems/{sys_id}", status_code=303)
@@ -3445,6 +6205,46 @@ async def system_detail(request: Request, system_id: str):
         )
         ato_docs = list(ato_doc_rows.scalars().all())
 
+        # SystemAuthPackage entries — what authorization packages this system is tracking
+        _sap_rows = await session.execute(
+            text(
+                "SELECT sap.id, sap.sub_category, sap.status, sap.started_at, sap.achieved_at, sap.expires_at, sap.notes, "
+                "       apt.name, apt.short_name, apt.category, apt.phases_json, apt.sub_categories_json "
+                "FROM system_auth_packages sap "
+                "JOIN auth_package_types apt ON sap.package_type_id = apt.id "
+                "WHERE sap.system_id = :sid ORDER BY apt.category, apt.name"
+            ),
+            {"sid": system_id},
+        )
+        sys_auth_packages: list[dict] = []
+        for r in _sap_rows.all():
+            phases = json.loads(r[10]) if r[10] else None
+            sub_cats = json.loads(r[11]) if r[11] else None
+            sys_auth_packages.append({
+                "id": r[0], "sub_category": r[1], "status": r[2],
+                "started_at": r[3], "achieved_at": r[4], "expires_at": r[5], "notes": r[6],
+                "pkg_name": r[7], "pkg_short": r[8], "pkg_category": r[9],
+                "phases": phases, "sub_categories": sub_cats,
+            })
+
+        # Legacy: authorization types from submissions (for ATO document workflow display)
+        sub_type_rows = await session.execute(
+            text("SELECT DISTINCT authorization_type FROM submissions WHERE system_id = :sid"),
+            {"sid": system_id}
+        )
+        _raw_types = [r[0] for r in sub_type_rows.all() if r[0]]
+        sys_auth_types = [t for t in ("ATO", "ATP", "IATO", "EIS") if t in _raw_types] or ["ATO"]
+
+        # Auth package type catalog for the add-package modal
+        _apt_catalog_rows = await session.execute(
+            text("SELECT id, name, short_name, category, sub_categories_json FROM auth_package_types WHERE is_active=1 ORDER BY category, name")
+        )
+        auth_pkg_catalog: list[dict] = [
+            {"id": r[0], "name": r[1], "short_name": r[2], "category": r[3],
+             "sub_categories": json.loads(r[4]) if r[4] else None}
+            for r in _apt_catalog_rows.all()
+        ]
+
         # Phase 25: today's logbook summary for Daily Ops tab badge
         _today_iso = date.today().isoformat()
         _detail_lb = (await session.execute(
@@ -3490,10 +6290,130 @@ async def system_detail(request: Request, system_id: str):
         "obs_open_count":          obs_open_count,
         "can_edit":                can_edit,
         "ato_docs":                ato_docs,
+        "sys_auth_types":          sys_auth_types,
+        "auth_type_phases":        AUTH_TYPE_PHASES,
+        "auth_type_labels":        AUTH_TYPE_LABELS,
+        "sys_auth_packages":       sys_auth_packages,
+        "auth_pkg_catalog":        auth_pkg_catalog,
         "daily_tasks_done":        _daily_tasks_done,
         "daily_tasks_total":       _daily_tasks_total,
+        "terms":                   _sys_terms(sys.primary_catalog),
+        # Premium feature flags for this system's org
+        "scan_feature_enabled":    _is_admin(request) or (
+            await _get_org_setting(sys.org_id or DEFAULT_ORG_ID, "scan_enabled", session, "false") == "true"
+        ),
         **_tpl_ctx(request),
     })
+
+
+@app.post("/systems/{system_id}/auth-packages/add")
+async def system_auth_package_add(request: Request, system_id: str):
+    """Add an authorization package type to a system."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    form = await request.form()
+    pkg_type_id  = str(form.get("package_type_id", "")).strip()
+    sub_category = str(form.get("sub_category", "")).strip() or None
+    notes        = str(form.get("notes", "")).strip() or None
+
+    if not pkg_type_id:
+        raise HTTPException(status_code=400, detail="package_type_id required")
+
+    async with SessionLocal() as session:
+        role = await _get_user_role(request, session)
+        _require_role(role, ["admin", "ao", "ciso", "issm", "isso"])
+
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        # Validate that package_type_id is a known UUID (prevents FK violation → 500)
+        valid_type = (await session.execute(
+            select(AuthPackageType.id).where(AuthPackageType.id == pkg_type_id)
+        )).scalar_one_or_none()
+        if not valid_type:
+            raise HTTPException(status_code=400, detail="Invalid package_type_id — must be a valid auth package type UUID")
+
+        await session.execute(
+            text(_upsert_sql(
+                "INSERT INTO system_auth_packages "
+                "(system_id, package_type_id, sub_category, status, started_at, notes, created_by) "
+                "VALUES (:sid, :ptid, :sub, 'in_progress', :now, :notes, :user) "
+                "ON CONFLICT DO NOTHING",
+                _DB_DIALECT
+            )),
+            {"sid": system_id, "ptid": pkg_type_id, "sub": sub_category,
+             "now": datetime.now(timezone.utc).isoformat(), "notes": notes, "user": user},
+        )
+        await session.commit()
+
+    return RedirectResponse(url=f"/systems/{system_id}#auth-packages", status_code=303)
+
+
+@app.post("/systems/{system_id}/auth-packages/{pkg_id}/update")
+async def system_auth_package_update(request: Request, system_id: str, pkg_id: int):
+    """Update status/sub_category/notes on a system auth package entry."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    form = await request.form()
+    new_status   = str(form.get("status", "in_progress"))
+    sub_category = str(form.get("sub_category", "")).strip() or None
+    achieved_at  = str(form.get("achieved_at", "")).strip() or None
+    expires_at   = str(form.get("expires_at", "")).strip() or None
+    notes        = str(form.get("notes", "")).strip() or None
+
+    async with SessionLocal() as session:
+        role = await _get_user_role(request, session)
+        _require_role(role, ["admin", "ao", "ciso", "issm", "isso"])
+
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        # ISSOs can register and track progress but cannot complete (grant) an authorization
+        if role == "isso" and new_status == "achieved":
+            raise HTTPException(status_code=403,
+                                detail="ISSO cannot mark an authorization as achieved. "
+                                       "This action requires ISSM, CISO, AO, or administrator.")
+
+        await session.execute(
+            text(
+                "UPDATE system_auth_packages SET status=:st, sub_category=:sub, "
+                "achieved_at=:ach, expires_at=:exp, notes=:notes, updated_at=:now "
+                "WHERE id=:id AND system_id=:sid"
+            ),
+            {"st": new_status, "sub": sub_category, "ach": achieved_at,
+             "exp": expires_at, "notes": notes, "now": datetime.now(timezone.utc).isoformat(),
+             "id": pkg_id, "sid": system_id},
+        )
+        await session.commit()
+
+    return RedirectResponse(url=f"/systems/{system_id}#auth-packages", status_code=303)
+
+
+@app.post("/systems/{system_id}/auth-packages/{pkg_id}/remove")
+async def system_auth_package_remove(request: Request, system_id: str, pkg_id: int):
+    """Remove an auth package entry from a system."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        role = await _get_user_role(request, session)
+        _require_role(role, ["admin", "ao", "ciso"])
+
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        await session.execute(
+            text("DELETE FROM system_auth_packages WHERE id=:id AND system_id=:sid"),
+            {"id": pkg_id, "sid": system_id},
+        )
+        await session.commit()
+
+    return RedirectResponse(url=f"/systems/{system_id}#auth-packages", status_code=303)
 
 
 @app.get("/systems/{system_id}/report", response_class=HTMLResponse)
@@ -3619,9 +6539,61 @@ async def system_edit_form(request: Request, system_id: str):
         if not sys:
             raise HTTPException(status_code=404)
 
+        # Load all active frameworks and which ones are already selected
+        all_fw_rows = (await session.execute(
+            select(ComplianceFramework).where(ComplianceFramework.is_active == True, ComplianceFramework.id.in_(_org_enabled_fw_subq()))
+            .order_by(ComplianceFramework.category, ComplianceFramework.name)
+        )).scalars().all()
+        catalog_rows  = [f for f in all_fw_rows if f.kind == "catalog"]
+        baseline_rows = [f for f in all_fw_rows if f.kind == "baseline"]
+        all_frameworks = [f for f in all_fw_rows if f.kind not in ("catalog", "baseline")]
+
+        sel_rows = (await session.execute(
+            select(SystemFramework).where(SystemFramework.system_id == system_id)
+        )).scalars().all()
+        selected_framework_ids = {r.framework_id for r in sel_rows}
+        selected_frameworks = [f for f in all_frameworks if f.id in selected_framework_ids]
+        # catalog_affinity: which catalogs each overlay/framework applies to
+        # nist_only = only relevant for NIST 800-53-based programs
+        # iso_only  = only relevant for ISO 27001-based programs
+        # both      = applicable regardless of catalog (most regulations, crosswalk frameworks)
+        _NIST_ONLY = {"fedramp","nist_privacy","dod_srg","nist_ics","sp800171","cmmc2"}
+        _ISO_ONLY  = {"iso27017","iso27018","iso27701"}
+        fw_json = [{"id": f.id, "name": f.name, "short_name": f.short_name,
+                    "category": f.category, "kind": f.kind,
+                    "catalog_affinity": "nist" if f.short_name in _NIST_ONLY
+                                        else "iso" if f.short_name in _ISO_ONLY
+                                        else "both"}
+                   for f in all_frameworks]
+        catalog_json = [{"id": f.id, "name": f.name, "short_name": f.short_name,
+                         "description": f.description or ""}
+                        for f in catalog_rows]
+        baseline_json = [{"id": f.id, "name": f.name, "short_name": f.short_name,
+                          "kind": f.kind, "category": f.category}
+                         for f in baseline_rows]
+
+        attr_defs = (await session.execute(
+            select(DataAttributeDefinition)
+            .where(DataAttributeDefinition.is_active.isnot(False))
+            .order_by(DataAttributeDefinition.sort_order, DataAttributeDefinition.key)
+        )).scalars().all()
+        sda_rows = (await session.execute(
+            select(SystemDataAttribute.attribute_key)
+            .where(SystemDataAttribute.system_id == system_id)
+        )).scalars().all()
+        system_attr_keys = set(sda_rows)
+
         ctx = await _full_ctx(request, session,
                               system=sys,
-                              action=f"/systems/{system_id}/edit")
+                              action=f"/systems/{system_id}/edit",
+                              all_frameworks=all_frameworks,
+                              fw_json=fw_json,
+                              catalog_json=catalog_json,
+                              baseline_json=baseline_json,
+                              selected_framework_ids=selected_framework_ids,
+                              selected_frameworks=selected_frameworks,
+                              attr_defs=attr_defs,
+                              system_attr_keys=system_attr_keys)
 
     return templates.TemplateResponse("system_form.html", ctx)
 
@@ -3648,6 +6620,20 @@ async def system_update(request: Request, system_id: str):
         sys = sys_row.scalar_one_or_none()
         if not sys:
             raise HTTPException(status_code=404)
+
+        # Validate email fields before applying changes
+        _bad_emails = _validate_emails(
+            owner_email = str(form.get("owner_email", "")).strip(),
+            ao_email    = str(form.get("ao_email", "")).strip(),
+            issm_email  = str(form.get("issm_email", "")).strip(),
+            isso_email  = str(form.get("isso_email", "")).strip(),
+        )
+        if _bad_emails:
+            raise HTTPException(status_code=400, detail=f"Invalid email address in field(s): {', '.join(_bad_emails)}")
+
+        # Capture pre-edit PII state so we can alert privacy officers if flags are newly set
+        _was_pii = sys.has_pii
+        _was_gdpr = sys.has_gdpr_data
 
         sys.name                   = str(form.get("name", "")).strip() or sys.name
         abbr_raw = str(form.get("abbreviation", "")).strip()
@@ -3683,11 +6669,71 @@ async def system_update(request: Request, system_id: str):
         sys.is_public_facing      = bool(form.get("is_public_facing"))
         sys.has_cui               = bool(form.get("has_cui"))
         sys.connects_to_federal   = bool(form.get("connects_to_federal"))
+        sys.has_gdpr_data         = bool(form.get("has_gdpr_data"))
+        sys.is_federal            = bool(form.get("is_federal"))
+        sys.primary_catalog       = str(form.get("primary_catalog", "nist80053r5")) or "nist80053r5"
         cat_status = str(form.get("categorization_status", "draft"))
         sys.categorization_status = cat_status
         sys.categorization_note   = str(form.get("categorization_note", "")).strip() or None
 
+        # Compliance frameworks — executive roles only
+        if _effective_role in ("admin", "ao", "ciso"):
+            submitted_ids = set(form.getlist("framework_ids"))
+            existing = (await session.execute(
+                select(SystemFramework).where(SystemFramework.system_id == system_id)
+            )).scalars().all()
+            existing_ids = {r.framework_id for r in existing}
+            for fid in submitted_ids - existing_ids:
+                session.add(SystemFramework(system_id=system_id, framework_id=fid, added_by=user))
+            for row in existing:
+                if row.framework_id not in submitted_ids:
+                    await session.delete(row)
+
+        # Sync SystemDataAttribute records from dynamic picker
+        selected_attr_keys = set(form.getlist("data_attributes"))
+        _BOOL_TO_ATTR = {
+            "has_pii": "pii", "has_phi": "phi", "has_ephi": "ephi",
+            "has_cui": "cui", "has_gdpr_data": "gdpr",
+            "has_financial_data": "financial", "is_public_facing": "public_facing",
+            "connects_to_federal": "federal_connection", "is_federal": "federal",
+        }
+        for bool_field, attr_key in _BOOL_TO_ATTR.items():
+            if form.get(bool_field):
+                selected_attr_keys.add(attr_key)
+        existing_attrs = (await session.execute(
+            select(SystemDataAttribute)
+            .where(SystemDataAttribute.system_id == system_id)
+        )).scalars().all()
+        existing_attr_keys = {a.attribute_key for a in existing_attrs}
+        for attr_key in selected_attr_keys - existing_attr_keys:
+            session.add(SystemDataAttribute(
+                system_id=system_id, attribute_key=attr_key, added_by=user
+            ))
+        for attr_row in existing_attrs:
+            if attr_row.attribute_key not in selected_attr_keys:
+                await session.delete(attr_row)
+
         await _log_audit(session, user, "UPDATE", "system", system_id, {"name": sys.name})
+
+        # Alert privacy officers for any newly-added notification-triggering attributes
+        new_notify_rows = await session.execute(
+            select(DataAttributeDefinition.short_label)
+            .join(SystemDataAttribute,
+                  SystemDataAttribute.attribute_key == DataAttributeDefinition.key)
+            .where(SystemDataAttribute.system_id == system_id,
+                   DataAttributeDefinition.triggers_notification == True,
+                   DataAttributeDefinition.is_active.isnot(False))
+        )
+        new_notify_labels = [r[0] for r in new_notify_rows.all()]
+        if new_notify_labels:
+            await _notify_role(
+                session, "privacy_officer", "pii_flag_added",
+                title=f"Data Attribute Added: {sys.name}",
+                body=f"{sys.name} ({sys.inventory_number}) updated with data attributes: {', '.join(new_notify_labels)}. Privacy review required.",
+                action_url=f"/systems/{system_id}",
+                exclude_user=user,
+            )
+
         await session.commit()
 
     return RedirectResponse(url=f"/systems/{system_id}", status_code=303)
@@ -3752,6 +6798,8 @@ async def evidence_upload(
             raise HTTPException(status_code=404)
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(status_code=403)
+        if not _is_admin(request) and await _get_user_role(request, session) not in _SSP_WRITE_ROLES:
+            raise HTTPException(status_code=403, detail="Insufficient role to upload evidence")
 
         # Read file bytes and validate size
         raw = await file.read()
@@ -3873,6 +6921,135 @@ async def system_delete(request: Request, system_id: str):
         await session.commit()
 
     return RedirectResponse(url="/systems", status_code=303)
+
+
+# ── Organization management (Phase 36) ────────────────────────────────────────
+
+@app.get("/admin/orgs", response_class=HTMLResponse)
+async def admin_orgs(request: Request):
+    """Admin page: list all organizations, create new ones."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+    async with SessionLocal() as session:
+        orgs_rows = await session.execute(
+            select(Organization).order_by(Organization.name)
+        )
+        orgs = orgs_rows.scalars().all()
+        # Count systems and members per org
+        org_stats = {}
+        for org in orgs:
+            sys_ct = (await session.execute(
+                select(func.count(System.id)).where(
+                    System.org_id == org.id, System.deleted_at.is_(None)
+                )
+            )).scalar() or 0
+            mem_ct = (await session.execute(
+                select(func.count(UserOrganizationMembership.id)).where(
+                    UserOrganizationMembership.org_id == org.id,
+                    UserOrganizationMembership.is_active == True,
+                )
+            )).scalar() or 0
+            org_stats[org.id] = {"systems": sys_ct, "members": mem_ct}
+        # Fetch all org settings for toggle display
+        settings_rows = (await session.execute(select(OrgSettings))).scalars().all()
+        org_settings_map: dict = {}
+        for s in settings_rows:
+            org_settings_map.setdefault(s.org_id, {})[s.key] = s.value
+        ctx = await _full_ctx(request, session,
+            orgs=orgs, org_stats=org_stats, org_settings=org_settings_map,
+        )
+    return templates.TemplateResponse("admin_orgs.html", ctx)
+
+
+@app.post("/admin/orgs/create")
+async def admin_create_org(
+    request: Request,
+    name: str = Form(...),
+    slug: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+):
+    """Create a new organization (platform admin only)."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+    creator = request.headers.get(_REMOTE_USER_HDR, "system")
+    async with SessionLocal() as session:
+        org = Organization(
+            id=str(uuid.uuid4()),
+            name=name.strip(),
+            slug=slug.strip() if slug else None,
+            description=description.strip() if description else None,
+            created_by=creator,
+        )
+        session.add(org)
+        await session.commit()
+    return RedirectResponse("/admin/orgs", status_code=303)
+
+
+@app.post("/admin/orgs/{org_id}/add-member")
+async def admin_add_org_member(
+    request: Request,
+    org_id: str,
+    remote_user: str = Form(...),
+    org_role: str = Form("member"),
+):
+    """Add a user to an organization."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+    actor = request.headers.get(_REMOTE_USER_HDR, "system")
+    async with SessionLocal() as session:
+        # Ensure user_profile exists
+        profile = (await session.execute(
+            select(UserProfile).where(UserProfile.remote_user == remote_user)
+        )).scalar_one_or_none()
+        if not profile:
+            raise HTTPException(status_code=404, detail="User not found")
+        existing = (await session.execute(
+            select(UserOrganizationMembership).where(
+                UserOrganizationMembership.org_id == org_id,
+                UserOrganizationMembership.remote_user == remote_user,
+            )
+        )).scalar_one_or_none()
+        if existing:
+            existing.is_active = True
+            existing.org_role = org_role
+        else:
+            m = UserOrganizationMembership(
+                org_id=org_id,
+                remote_user=remote_user,
+                org_role=org_role,
+                invited_by=actor,
+            )
+            session.add(m)
+        await session.commit()
+    return RedirectResponse(f"/admin/orgs", status_code=303)
+
+
+@app.post("/admin/orgs/{org_id}/settings")
+async def admin_set_org_setting(
+    request: Request,
+    org_id: str,
+    key: str = Form(...),
+    value: str = Form(...),
+):
+    """Set a per-org feature flag or setting. Platform admin only."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+    actor = request.headers.get(_REMOTE_USER_HDR, "system")
+    _ALLOWED_ORG_SETTINGS = {
+        "scan_enabled",        # SCAP scanning premium feature
+        "ai_enabled",          # per-org AI narrative generator
+        "ai_api_key",          # per-org LLM API key (encrypted at rest TBD)
+        "ai_provider",         # groq | ollama | openai | anthropic
+        "ai_model",            # model name override
+        "ai_base_url",         # custom base URL (for Ollama)
+        "max_systems",         # system count cap (0 = unlimited)
+        "max_users",           # user count cap (0 = unlimited)
+    }
+    if key not in _ALLOWED_ORG_SETTINGS:
+        raise HTTPException(status_code=400, detail=f"Unknown setting key: {key}")
+    async with SessionLocal() as session:
+        await _set_org_setting(org_id, key, value, actor, session)
+    return RedirectResponse(f"/admin/orgs", status_code=303)
 
 
 # ── Archived Systems (Phase 15) ────────────────────────────────────────────────
@@ -4030,6 +7207,12 @@ async def poam_dashboard(request: Request):
     overdue_filter           = request.query_params.get("overdue", "")           # "1" → past due date
     due_soon_filter          = request.query_params.get("due_soon", "")          # "1" → due within 7 days
     closed_this_month_filter = request.query_params.get("closed_this_month", "") # "1" → closed last 30 days
+    sort_field = request.query_params.get("sort", "due")   # id|control|weakness|severity|responsible|due|status
+    sort_dir   = request.query_params.get("dir",  "asc")   # asc|desc
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "asc"
+    if sort_field not in ("id", "control", "weakness", "severity", "responsible", "due", "status"):
+        sort_field = "due"
     try:
         PAGE_SIZE = max(10, min(int(request.query_params.get("per_page", 10)), 100))
     except ValueError:
@@ -4142,10 +7325,25 @@ async def poam_dashboard(request: Request):
             elif age <= 90: aging["61_90"] += 1
             else:           aging["90_plus"] += 1
 
-        # Filtered + paginated list
-        list_q = _build_q(select(PoamItem)).order_by(
-            PoamItem.severity, PoamItem.scheduled_completion
+        # Filtered + paginated list — dynamic sort
+        _sev_order = sa_case(
+            (PoamItem.severity == "Critical", 0),
+            (PoamItem.severity == "High",     1),
+            (PoamItem.severity == "Moderate", 2),
+            (PoamItem.severity == "Low",      3),
+            else_=4,
         )
+        _sort_col = {
+            "id":          PoamItem.poam_id,
+            "control":     PoamItem.control_id,
+            "weakness":    PoamItem.weakness_name,
+            "severity":    _sev_order,
+            "responsible": PoamItem.responsible_party,
+            "due":         PoamItem.scheduled_completion,
+            "status":      PoamItem.status,
+        }[sort_field]
+        _sort_expr = _sort_col.asc() if sort_dir == "asc" else _sort_col.desc()
+        list_q = _build_q(select(PoamItem)).order_by(_sort_expr)
         total_filtered = (await session.execute(
             _build_q(select(func.count(PoamItem.id)))
         )).scalar() or 0
@@ -4199,8 +7397,15 @@ async def poam_dashboard(request: Request):
         "total_filtered":    total_filtered,
         "today_str":         today_str,
         "week_str":          week_str,
+        "sort_field":        sort_field,
+        "sort_dir":          sort_dir,
         "poam_statuses":     POAM_STATUSES,
         "poam_status_labels": POAM_STATUS_LABELS,
+        # Terminology: if filtered to a specific system, use that system's terms
+        "terms": _sys_terms(
+            systems_map[system_filter].primary_catalog
+            if system_filter and system_filter in systems_map else None
+        ),
         **_tpl_ctx(request),
     })
 
@@ -4232,6 +7437,7 @@ async def poam_export(request: Request):
         "items":       items,
         "systems_map": systems_map,
         "export_date": date.today().isoformat(),
+        "terms":       _sys_terms(None),  # cross-system export uses neutral default
         **_tpl_ctx(request),
     })
 
@@ -4433,6 +7639,7 @@ async def poam_new_form(request: Request):
         "allowed_statuses":   list(POAM_PUSH_POWER.keys()),
         "catalog_ids":        catalog_ids,
         "user_role":          role,
+        "terms":              _sys_terms(None),  # new item — no system selected yet
         **_tpl_ctx(request),
     })
 
@@ -4451,6 +7658,10 @@ async def poam_create(request: Request):
         role = await _get_user_role(request, session)
         _require_role(role, ["admin", "ao", "ciso", "issm", "isso", "sca"])
 
+        # IDOR guard: verify user has access to the target system
+        if sys_id and not await _can_access_system(sys_id, request, session):
+            raise HTTPException(status_code=403, detail="Access denied to the specified system")
+
         # Resolve system abbreviation for POAM ID
         abbr = "XXXX"
         if sys_id:
@@ -4463,6 +7674,18 @@ async def poam_create(request: Request):
         serial = 1000 + total_ct
         poam_id_val = _generate_poam_id(abbr, ctrl_id, serial)
 
+        root_cause_val = str(form.get("root_cause", "")).strip()
+        if not root_cause_val:
+            raise HTTPException(status_code=422, detail="Root cause is required to create a POA&M item")
+
+        # Initial remediation plan and resources — log-formatted with timestamp
+        _ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        def _init_log(field_name: str) -> str | None:
+            val = str(form.get(field_name, "")).strip()
+            if not val:
+                return None
+            return f"[{_ts} — {user}]\n{val}"
+
         item = PoamItem(
             poam_id              = poam_id_val,
             system_id            = sys_id,
@@ -4473,10 +7696,11 @@ async def poam_create(request: Request):
             detection_source     = str(form.get("detection_source", "")).strip() or None,
             severity             = str(form.get("severity", "Moderate")),
             responsible_party    = str(form.get("responsible_party", "")).strip() or None,
-            resources_required   = str(form.get("resources_required", "")).strip() or None,
+            resources_required   = _init_log("resources_required"),
             scheduled_completion = str(form.get("scheduled_completion", "")).strip() or None,
             status               = "open",
-            remediation_plan     = str(form.get("remediation_plan", "")).strip() or None,
+            remediation_plan     = _init_log("remediation_plan"),
+            root_cause           = root_cause_val,
             comments             = str(form.get("comments", "")).strip() or None,
             created_by           = user,
         )
@@ -4537,6 +7761,7 @@ async def poam_item_detail(request: Request, item_id: str):
         "poam_push_power":    POAM_PUSH_POWER,
         "catalog_ids":        catalog_ids,
         "user_role":          role,
+        "terms":              _sys_terms(linked_system.primary_catalog if linked_system else None),
         **_tpl_ctx(request),
     })
 
@@ -4559,7 +7784,18 @@ async def poam_update(request: Request, item_id: str):
 
         role = await _get_user_role(request, session)
         if role in _READ_ONLY_ROLES:
+            await _log_audit(session, user, "DENIED", "poam", item_id,
+                             {"reason": "read_only_role", "role": role})
+            await session.commit()
             raise HTTPException(status_code=403, detail="Your role cannot update POA&M items")
+
+        # Scope: user must be assigned to the item's system (mirrors /api/poam/{id}/status)
+        if item.system_id and not await _can_access_system(item.system_id, request, session):
+            await _log_audit(session, user, "DENIED", "poam", item_id,
+                             {"reason": "system_scope", "role": role})
+            await session.commit()
+            raise HTTPException(status_code=403, detail="Not assigned to this system")
+
         new_status = str(form.get("status", item.status))
         old_status = item.status
         # Role-based push-power check — always verify, even for same-status submissions.
@@ -4573,19 +7809,44 @@ async def poam_update(request: Request, item_id: str):
                 raise HTTPException(status_code=403,
                                     detail=f"Role '{role}' cannot set status to '{new_status}'")
 
-        item.system_id            = str(form.get("system_id", "")).strip() or None
-        item.control_id           = (str(form.get("control_id", "")).strip().upper() or None)
-        item.weakness_name        = str(form.get("weakness_name", item.weakness_name)).strip()
-        item.weakness_description = str(form.get("weakness_description", "")).strip() or None
-        item.detection_source     = str(form.get("detection_source", "")).strip() or None
-        item.severity             = str(form.get("severity", item.severity))
+        # ── Locked identification fields (immutable after creation) ──────────
+        # system_id, control_id, weakness_name, weakness_description,
+        # detection_source, and severity are fingerprints of what was found.
+        # They are never overwritten on update.
+
         item.responsible_party    = str(form.get("responsible_party", "")).strip() or None
-        item.resources_required   = str(form.get("resources_required", "")).strip() or None
         item.scheduled_completion = str(form.get("scheduled_completion", "")).strip() or None
         item.status               = new_status
-        item.remediation_plan     = str(form.get("remediation_plan", "")).strip() or None
-        item.root_cause           = str(form.get("root_cause", "")).strip() or None
-        item.closure_evidence     = str(form.get("closure_evidence", "")).strip() or None
+
+        # ── Append-only: remediation_plan ────────────────────────────────────
+        append_plan = str(form.get("remediation_plan_append", "")).strip()
+        if append_plan:
+            _ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            _entry = f"\n\n[{_ts} — {user}]\n{append_plan}"
+            item.remediation_plan = (item.remediation_plan or "") + _entry
+
+        # ── Append-only: resources_required ──────────────────────────────────
+        append_resources = str(form.get("resources_required_append", "")).strip()
+        if append_resources:
+            _ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            _entry = f"\n\n[{_ts} — {user}]\n{append_resources}"
+            item.resources_required = (item.resources_required or "") + _entry
+
+        # ── root_cause: mandatory; locked after first set ─────────────────────
+        new_root_cause = str(form.get("root_cause", "")).strip()
+        if not item.root_cause:
+            if not new_root_cause:
+                raise HTTPException(status_code=422, detail="Root cause is required")
+            item.root_cause = new_root_cause
+        # else: already set — ignore form value (immutable)
+
+        # ── closure_evidence: editable; required before closed_verified ───────
+        new_closure_ev = str(form.get("closure_evidence", "")).strip() or None
+        if new_closure_ev:
+            item.closure_evidence = new_closure_ev
+        if new_status == "closed_verified" and not item.closure_evidence:
+            raise HTTPException(status_code=422,
+                                detail="Closure evidence is required before marking Closed Verified")
         item.residual_risk        = str(form.get("residual_risk", "")).strip() or None
         item.risk_accept_review   = str(form.get("risk_accept_review", "")).strip() or None
         item.completion_date      = str(form.get("completion_date", "")).strip() or None
@@ -4611,6 +7872,24 @@ async def poam_update(request: Request, item_id: str):
         # Accepted Risk flow: ISSO creates → pending AO; AO/Admin → approved directly
         if new_status == "accepted_risk" and old_status != "accepted_risk":
             item.approval_stage = "pending_ao" if role in ("isso", "sca", "system_owner") else "approved"
+        # Deferred Waiver flow: non-ISSM roles → pending ISSM review; ISSM/Admin → approved directly
+        elif new_status == "deferred_waiver" and old_status != "deferred_waiver":
+            if role in ("issm", "admin"):
+                item.approval_stage = "approved"
+            else:
+                item.approval_stage = "pending_issm"
+                if item.system_id:
+                    sys_name = (await session.execute(
+                        select(System.name).where(System.id == item.system_id)
+                    )).scalar_one_or_none() or item.system_id
+                    await _notify_issms_for_system(
+                        session, item.system_id,
+                        "poam_deferred_waiver_pending",
+                        f"Deferred Waiver Needs Your Review — {item.weakness_name or item_id}",
+                        body=f"Submitted by {user} on {sys_name}. Approve or disapprove this deferral.",
+                        action_url=f"/poam/{item_id}",
+                        exclude_user=user,
+                    )
         elif new_status not in ("accepted_risk", "deferred_waiver"):
             item.approval_stage = None
         # Record approval event when status changes
@@ -4677,6 +7956,29 @@ async def poam_quick_status(request: Request, item_id: str):
         item.updated_at = datetime.now(timezone.utc)
         if new_status == "closed_verified" and not item.completion_date:
             item.completion_date = date.today().isoformat()
+        # Mirror the approval-chain logic from poam_update so the quick-status
+        # API cannot silently bypass the AO risk-acceptance sign-off requirement.
+        if new_status == "accepted_risk" and old_status != "accepted_risk":
+            item.approval_stage = "pending_ao" if role in ("isso", "sca", "system_owner") else "approved"
+        elif new_status == "deferred_waiver" and old_status != "deferred_waiver":
+            if role in ("issm", "admin"):
+                item.approval_stage = "approved"
+            else:
+                item.approval_stage = "pending_issm"
+                if item.system_id:
+                    sys_name = (await session.execute(
+                        select(System.name).where(System.id == item.system_id)
+                    )).scalar_one_or_none() or item.system_id
+                    await _notify_issms_for_system(
+                        session, item.system_id,
+                        "poam_deferred_waiver_pending",
+                        f"Deferred Waiver Needs Your Review — {item.weakness_name or item_id}",
+                        body=f"Submitted by {user} on {sys_name}. Approve or disapprove this deferral.",
+                        action_url=f"/poam/{item_id}",
+                        exclude_user=user,
+                    )
+        elif new_status not in ("accepted_risk", "deferred_waiver"):
+            item.approval_stage = None
         await _log_audit(session, user, "UPDATE", "poam", item_id,
                          {"role": role, "old_status": old_status, "new_status": new_status,
                           "system_id": item.system_id})
@@ -4684,6 +7986,85 @@ async def poam_quick_status(request: Request, item_id: str):
 
     return JSONResponse({"ok": True, "status": new_status,
                          "label": POAM_STATUS_LABELS.get(new_status, new_status)})
+
+
+@app.post("/api/poam/{item_id}/issm-decision")
+async def poam_issm_decision(request: Request, item_id: str):
+    """ISSM approve or disapprove a pending deferred-waiver request.
+
+    Body JSON: {"decision": "approve" | "disapprove"}
+    - approve:    keeps status as deferred_waiver, sets approval_stage="approved"
+    - disapprove: reverts status to "open", clears approval_stage, notifies submitter
+    """
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    body = await request.json()
+    decision = str(body.get("decision", "")).strip().lower()
+    if decision not in ("approve", "disapprove"):
+        raise HTTPException(status_code=400, detail="decision must be 'approve' or 'disapprove'")
+
+    async with SessionLocal() as session:
+        role = await _get_user_role(request, session)
+        if role not in ("issm", "admin"):
+            raise HTTPException(status_code=403, detail="Only ISSM or admin may decide on deferred waivers")
+
+        row = await session.execute(select(PoamItem).where(PoamItem.id == item_id))
+        item = row.scalar_one_or_none()
+        if not item:
+            raise HTTPException(status_code=404)
+        if item.status != "deferred_waiver" or item.approval_stage != "pending_issm":
+            raise HTTPException(status_code=400,
+                                detail="This POA&M is not awaiting ISSM deferred-waiver review")
+
+        if item.system_id and not await _can_access_system(item.system_id, request, session):
+            raise HTTPException(status_code=403, detail="Not assigned to this system")
+
+        if decision == "approve":
+            item.approval_stage = "approved"
+            action_label = "approved"
+            notif_type   = "poam_deferred_waiver_approved"
+            notif_title  = f"Deferred Waiver Approved — {item.weakness_name or item_id}"
+            notif_body   = f"ISSM {user} approved the deferral request."
+        else:
+            item.status        = "open"
+            item.approval_stage = None
+            action_label = "disapproved"
+            notif_type   = "poam_deferred_waiver_disapproved"
+            notif_title  = f"Deferred Waiver Disapproved — {item.weakness_name or item_id}"
+            notif_body   = f"ISSM {user} disapproved the deferral. POA&M returned to Open."
+
+        item.updated_at = datetime.now(timezone.utc)
+
+        # Notify original creator / system team
+        if item.created_by and item.created_by != user:
+            await _notify_user(session, item.created_by, notif_type, notif_title,
+                               body=notif_body, action_url=f"/poam/{item_id}")
+        if item.system_id:
+            await _notify_system_team(session, item.system_id, notif_type, notif_title,
+                                      body=notif_body, action_url=f"/poam/{item_id}",
+                                      exclude_user=user)
+
+        trail = []
+        try:
+            trail = json.loads(item.signoff_trail or "[]")
+        except Exception:
+            trail = []
+        trail.append({
+            "role": role, "user": user, "date": date.today().isoformat(),
+            "action": f"deferred_waiver_{action_label}", "notes": "",
+        })
+        item.signoff_trail = json.dumps(trail)
+
+        await _log_audit(session, user, "UPDATE", "poam", item_id,
+                         {"role": role, "decision": decision,
+                          "old_approval_stage": "pending_issm",
+                          "new_status": item.status, "system_id": item.system_id})
+        await session.commit()
+
+    return JSONResponse({"ok": True, "decision": decision, "status": item.status,
+                         "approval_stage": item.approval_stage})
 
 
 @app.post("/poam/{item_id}/evidence")
@@ -5865,6 +9246,127 @@ def _ctrl_families() -> list[tuple[str, str]]:
     return sorted(seen.items())
 
 
+# ── Framework-aware terminology ────────────────────────────────────────────────
+# Keyed by primary_catalog short_name (or any ancestor baseline short_name).
+# Each dict provides the display labels used in system-specific templates.
+_PROGRAM_TERMS: dict[str, dict] = {
+    # ── NIST / FedRAMP / DoD ──────────────────────────────────────────────────
+    "nist80053r5": {
+        "poam":       "POA&M",
+        "poam_full":  "Plan of Action & Milestones",
+        "poam_item":  "POA&M Item",
+        "poam_items": "POA&M Items",
+        "weakness":   "Weakness",
+        "deficiency": "Weakness",
+        "finding":    "Finding",
+    },
+    "fedramp": {
+        "poam":       "POA&M",
+        "poam_full":  "Plan of Action & Milestones",
+        "poam_item":  "POA&M Item",
+        "poam_items": "POA&M Items",
+        "weakness":   "Weakness",
+        "deficiency": "Weakness",
+        "finding":    "Finding",
+    },
+    "cmmc2": {
+        "poam":       "POA&M",
+        "poam_full":  "Plan of Action & Milestones",
+        "poam_item":  "POA&M Item",
+        "poam_items": "POA&M Items",
+        "weakness":   "Weakness",
+        "deficiency": "Weakness",
+        "finding":    "Finding",
+    },
+    # ── ISO 27001 ─────────────────────────────────────────────────────────────
+    "iso27001": {
+        "poam":       "Corrective Action",
+        "poam_full":  "Corrective Action Record",
+        "poam_item":  "NCR",          # Nonconformity Record
+        "poam_items": "Corrective Actions",
+        "weakness":   "Nonconformity",
+        "deficiency": "Nonconformity",
+        "finding":    "Observation",
+    },
+    # ── HIPAA ─────────────────────────────────────────────────────────────────
+    "hipaa": {
+        "poam":       "Corrective Action Plan",
+        "poam_full":  "Corrective Action Plan (CAP)",
+        "poam_item":  "CAP Item",
+        "poam_items": "Corrective Action Items",
+        "weakness":   "Deficiency",
+        "deficiency": "Deficiency",
+        "finding":    "Finding",
+    },
+    # ── PCI DSS ───────────────────────────────────────────────────────────────
+    "pci_dss": {
+        "poam":       "Remediation Plan",
+        "poam_full":  "Remediation Plan",
+        "poam_item":  "Finding",
+        "poam_items": "Findings",
+        "weakness":   "Finding",
+        "deficiency": "Gap",
+        "finding":    "Finding",
+    },
+    # ── CIS Controls ──────────────────────────────────────────────────────────
+    "cis8": {
+        "poam":       "Remediation Tracker",
+        "poam_full":  "Remediation Tracker",
+        "poam_item":  "Finding",
+        "poam_items": "Findings",
+        "weakness":   "Gap",
+        "deficiency": "Gap",
+        "finding":    "Finding",
+    },
+    # ── SOC 2 ─────────────────────────────────────────────────────────────────
+    "soc2": {
+        "poam":       "Management Response",
+        "poam_full":  "Management Response & Remediation",
+        "poam_item":  "Exception",
+        "poam_items": "Exceptions",
+        "weakness":   "Exception",
+        "deficiency": "Deficiency",
+        "finding":    "Observation",
+    },
+}
+
+# Default — used when primary_catalog is not in _PROGRAM_TERMS
+_DEFAULT_TERMS: dict = {
+    "poam":       "POA&M",
+    "poam_full":  "Plan of Action & Milestones",
+    "poam_item":  "POA&M Item",
+    "poam_items": "POA&M Items",
+    "weakness":   "Weakness",
+    "deficiency": "Deficiency",
+    "finding":    "Finding",
+}
+
+def _sys_terms(primary_catalog: str | None) -> dict:
+    """Return terminology dict for a system's primary control catalog."""
+    return _PROGRAM_TERMS.get(primary_catalog or "nist80053r5", _DEFAULT_TERMS)
+
+
+def _ctrl_family_stats() -> list[dict]:
+    """Return per-family stats list for the family selection grid."""
+    stats: dict[str, dict] = {}
+    for ctrl_id, ctrl in CATALOG.items():
+        fid = ctrl.get("family_id", ctrl_id.split("-")[0].upper())
+        if not fid:
+            continue
+        if fid not in stats:
+            stats[fid] = {
+                "id":           fid,
+                "title":        ctrl.get("family_title", ""),
+                "count":        0,
+                "enhancements": 0,
+            }
+        if "." in ctrl_id:
+            stats[fid]["enhancements"] += 1
+        else:
+            stats[fid]["count"] += 1
+    return sorted(stats.values(), key=lambda x: x["id"])
+
+
 def _sc_status_color(status: str) -> str:
     return {
         "implemented":    "var(--green)",
@@ -5891,18 +9393,827 @@ def _sc_stats(controls: list) -> dict:
 # ── Control Catalog Browser ───────────────────────────────────────────────────
 
 @app.get("/controls", response_class=HTMLResponse)
-async def controls_catalog(request: Request, family: str = "", q: str = "",
-                            page: int = 1, per_page: int = 20):
+async def controls_catalog(request: Request):
     user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
-    all_items = _catalog_list()
-    families  = _ctrl_families()
+    async with SessionLocal() as session:
+        rows = (await session.execute(
+            text("""
+                SELECT cf.short_name, cf.name, cf.kind, cf.category,
+                       cf.description,
+                       CASE WHEN cf.kind = 'baseline'
+                            THEN (SELECT COUNT(*) FROM baseline_controls bc WHERE bc.baseline_id = cf.id)
+                            ELSE COUNT(cc.id) END AS ctrl_count,
+                       COUNT(DISTINCT cc.domain) AS domain_count
+                FROM compliance_frameworks cf
+                LEFT JOIN catalog_controls cc ON cc.framework_id = cf.id
+                WHERE cf.is_active = 1
+                GROUP BY cf.id
+                ORDER BY cf.kind, cf.category, cf.name
+            """)
+        )).fetchall()
 
-    family_upper = family.upper()
-    if family_upper:
-        all_items = [c for c in all_items if c["family"] == family_upper]
+    fam_stats = _ctrl_family_stats()
+
+    # ── Primary catalogs: featured with baselines + overlay dropdowns ─────────
+    # These are the 4 major frameworks that have structured baselines
+    PRIMARY_SNS     = ["nist80053r5", "iso27001", "cis8", "cmmc2"]
+    PRIMARY_SNS_SET = set(PRIMARY_SNS)
+
+    # Baselines nested under their parent catalog
+    BASELINE_PARENT = {
+        "nist_low":         "nist80053r5",
+        "nist_mod":         "nist80053r5",
+        "nist_high":        "nist80053r5",
+        "iso27001_annex_a": "iso27001",
+        "iso27001_core":    "iso27001",
+        "cmmc_l1":          "cmmc2",
+        "cmmc_l2":          "cmmc2",
+        "cmmc_l3":          "cmmc2",
+        "cis_ig1":          "cis8",
+        "cis_ig2":          "cis8",
+        "cis_ig3":          "cis8",
+    }
+    BASELINE_SNS = set(BASELINE_PARENT.keys()) | {"user_generated"}
+
+    BASELINE_LABEL_MAP = {
+        "nist_high":        ("High",           "cs-bl-row-high"),
+        "nist_mod":         ("Moderate",       "cs-bl-row-mod"),
+        "nist_low":         ("Low",            "cs-bl-row-low"),
+        "iso27001_annex_a": ("Annex A — Full", "cs-bl-row-annex"),
+        "iso27001_core":    ("Annex A — Core", "cs-bl-row-annex"),
+        "cmmc_l3":          ("Level 3",        "cs-bl-row-high"),
+        "cmmc_l2":          ("Level 2",        "cs-bl-row-mod"),
+        "cmmc_l1":          ("Level 1",        "cs-bl-row-low"),
+        "cis_ig3":          ("IG3",            "cs-bl-row-high"),
+        "cis_ig2":          ("IG2",            "cs-bl-row-mod"),
+        "cis_ig1":          ("IG1",            "cs-bl-row-low"),
+    }
+    BASELINE_ORDER = {sn: i for i, sn in enumerate(BASELINE_LABEL_MAP)}
+
+    # Overlay frameworks linked to each primary catalog (for the per-card dropdown)
+    OVERLAY_PARENT_MAP = {
+        "fedramp":      "nist80053r5",
+        "nist_privacy": "nist80053r5",
+        "dod_srg":      "nist80053r5",
+        "nist_ics":     "nist80053r5",
+        "sp800171":     "nist80053r5",
+        "iso27701":     "iso27001",
+        "iso27017":     "iso27001",
+        "iso27018":     "iso27001",
+    }
+
+    catalog_baselines: dict  = {}                          # parent_sn → [baseline entries]
+    catalog_overlays:  dict  = {sn: [] for sn in PRIMARY_SNS}  # parent_sn → [overlay entries]
+    primary_map:       dict  = {}                          # sn → entry
+    overlay_frameworks: list = []
+    reference_frameworks: list = []
+    regulations_by_sector: dict = {}
+
+    SECTOR_LABELS = {
+        "federal":     "Federal & Government",
+        "healthcare":  "Healthcare",
+        "financial":   "Financial Services",
+        "industry":    "Industry & Standards",
+        "privacy":     "Privacy",
+        "contractor":  "Defense Contractor",
+    }
+
+    for sn, name, kind, cat, desc, ctrl_cnt, domain_cnt in rows:
+        # ── Baselines: nest under parent, skip standalone ──────────────────
+        if sn in BASELINE_SNS:
+            parent = BASELINE_PARENT.get(sn)
+            if parent:
+                lbl, cls = BASELINE_LABEL_MAP.get(sn, (name, "cs-bl-row-mod"))
+                catalog_baselines.setdefault(parent, []).append({
+                    "short_name": sn, "name": name, "kind": kind,
+                    "ctrl_count": ctrl_cnt or 0,
+                    "link":       f"/controls/framework/{sn}",
+                    "label":      lbl, "cls": cls,
+                })
+            continue
+
+        # Adjust NIST count from in-memory catalog
+        if sn == "nist80053r5":
+            ctrl_cnt   = len(CATALOG)
+            domain_cnt = len(fam_stats)
+
+        entry = {
+            "short_name":   sn,
+            "name":         name,
+            "kind":         kind or "framework",
+            "category":     cat or "industry",
+            "description":  desc or "",
+            "ctrl_count":   ctrl_cnt or 0,
+            "domain_count": domain_cnt or 0,
+            "link": "/controls/nist" if sn == "nist80053r5" else f"/controls/framework/{sn}",
+        }
+
+        if sn in PRIMARY_SNS_SET:
+            primary_map[sn] = entry
+        elif sn in OVERLAY_PARENT_MAP:
+            parent = OVERLAY_PARENT_MAP[sn]
+            catalog_overlays[parent].append(entry)
+            overlay_frameworks.append(entry)
+        elif kind == "overlay":
+            overlay_frameworks.append(entry)
+        elif kind == "regulation":
+            # Primary catalogs represented as regulations (cmmc2) stay in primary_map
+            bucket = cat or "industry"
+            regulations_by_sector.setdefault(bucket, []).append(entry)
+        else:
+            reference_frameworks.append(entry)
+
+    # Ordered primary catalog list
+    primary_catalogs = [primary_map[sn] for sn in PRIMARY_SNS if sn in primary_map]
+
+    # Sort baselines within each primary by importance order
+    for bls in catalog_baselines.values():
+        bls.sort(key=lambda b: BASELINE_ORDER.get(b["short_name"], 99))
+
+    overlay_frameworks.sort(key=lambda e: e["name"].lower())
+    reference_frameworks.sort(key=lambda e: e["name"].lower())
+    for lst in regulations_by_sector.values():
+        lst.sort(key=lambda e: e["name"].lower())
+
+    total_reg_count = sum(len(v) for v in regulations_by_sector.values())
+
+    return templates.TemplateResponse("controls.html", {
+        "request":               request,
+        "primary_catalogs":      primary_catalogs,
+        "catalog_baselines":     catalog_baselines,
+        "catalog_overlays":      catalog_overlays,
+        "overlay_frameworks":    overlay_frameworks,
+        "reference_frameworks":  reference_frameworks,
+        "regulations_by_sector": regulations_by_sector,
+        "sector_labels":         SECTOR_LABELS,
+        "sector_order":          ["federal","healthcare","financial","industry","privacy","contractor"],
+        "total_overlay_count":   len(overlay_frameworks),
+        "total_reg_count":       total_reg_count,
+        "total_ref_count":       len(reference_frameworks),
+        **_tpl_ctx(request),
+    })
+
+
+@app.get("/controls/overlays", response_class=HTMLResponse)
+async def controls_overlays_page(request: Request):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as session:
+        rows = (await session.execute(
+            text("""
+                SELECT cf.short_name, cf.name, cf.kind, cf.category, cf.description,
+                       COUNT(cc.id) AS ctrl_count, COUNT(DISTINCT cc.domain) AS domain_count
+                FROM compliance_frameworks cf
+                LEFT JOIN catalog_controls cc ON cc.framework_id = cf.id
+                WHERE cf.is_active = 1 AND cf.kind = 'overlay'
+                  AND cf.id IN (SELECT framework_id FROM org_enabled_frameworks WHERE is_enabled = 1)
+                GROUP BY cf.id ORDER BY cf.name
+            """)
+        )).fetchall()
+    frameworks = [
+        {"short_name": sn, "name": name, "kind": kind, "category": cat,
+         "description": desc or "", "ctrl_count": ctrl_cnt or 0, "domain_count": dom_cnt or 0,
+         "link": f"/controls/framework/{sn}"}
+        for sn, name, kind, cat, desc, ctrl_cnt, dom_cnt in rows
+    ]
+    return templates.TemplateResponse("controls_overlays.html", {
+        "request": request, "frameworks": frameworks, **_tpl_ctx(request),
+    })
+
+
+@app.get("/controls/regulations", response_class=HTMLResponse)
+async def controls_regulations_page(request: Request):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as session:
+        rows = (await session.execute(
+            text("""
+                SELECT cf.short_name, cf.name, cf.kind, cf.category, cf.description,
+                       COUNT(cc.id) AS ctrl_count, COUNT(DISTINCT cc.domain) AS domain_count
+                FROM compliance_frameworks cf
+                LEFT JOIN catalog_controls cc ON cc.framework_id = cf.id
+                WHERE cf.is_active = 1 AND cf.kind = 'regulation'
+                  AND cf.id IN (SELECT framework_id FROM org_enabled_frameworks WHERE is_enabled = 1)
+                GROUP BY cf.id ORDER BY cf.category, cf.name
+            """)
+        )).fetchall()
+    SECTOR_LABELS = {
+        "federal": "Federal & Government", "healthcare": "Healthcare",
+        "financial": "Financial Services",  "industry": "Industry & Standards",
+        "privacy": "Privacy",               "contractor": "Defense Contractor",
+    }
+    SECTOR_ORDER = ["federal","healthcare","financial","industry","privacy","contractor"]
+    regs_by_sector: dict = {}
+    for sn, name, kind, cat, desc, ctrl_cnt, dom_cnt in rows:
+        bucket = cat or "industry"
+        regs_by_sector.setdefault(bucket, []).append({
+            "short_name": sn, "name": name, "kind": kind,
+            "description": desc or "", "ctrl_count": ctrl_cnt or 0, "domain_count": dom_cnt or 0,
+            "link": f"/controls/framework/{sn}",
+        })
+    return templates.TemplateResponse("controls_regulations.html", {
+        "request": request, "regs_by_sector": regs_by_sector,
+        "sector_labels": SECTOR_LABELS, "sector_order": SECTOR_ORDER,
+        **_tpl_ctx(request),
+    })
+
+
+@app.get("/controls/reference", response_class=HTMLResponse)
+async def controls_reference_page(request: Request):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as session:
+        rows = (await session.execute(
+            text("""
+                SELECT cf.short_name, cf.name, cf.kind, cf.category, cf.description,
+                       COUNT(cc.id) AS ctrl_count, COUNT(DISTINCT cc.domain) AS domain_count
+                FROM compliance_frameworks cf
+                LEFT JOIN catalog_controls cc ON cc.framework_id = cf.id
+                WHERE cf.is_active = 1
+                  AND cf.kind NOT IN ('catalog','baseline','overlay','regulation')
+                  AND cf.id IN (SELECT framework_id FROM org_enabled_frameworks WHERE is_enabled = 1)
+                GROUP BY cf.id ORDER BY cf.name
+            """)
+        )).fetchall()
+    frameworks = [
+        {"short_name": sn, "name": name, "kind": kind, "category": cat,
+         "description": desc or "", "ctrl_count": ctrl_cnt or 0, "domain_count": dom_cnt or 0,
+         "link": f"/controls/framework/{sn}"}
+        for sn, name, kind, cat, desc, ctrl_cnt, dom_cnt in rows
+    ]
+    return templates.TemplateResponse("controls_reference.html", {
+        "request": request, "frameworks": frameworks, **_tpl_ctx(request),
+    })
+
+
+@app.get("/controls/nist", response_class=HTMLResponse)
+async def controls_nist(request: Request):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    if _cfg("demo_mode", False):
+        return _demo_nist_paywall_response(request, "NIST SP 800-53 Rev 5")
+    return templates.TemplateResponse("controls_nist.html", {
+        "request":      request,
+        "family_stats": _ctrl_family_stats(),
+        "total":        len(CATALOG),
+        **_tpl_ctx(request),
+    })
+
+
+@app.get("/controls/framework/{short_name}", response_class=HTMLResponse)
+async def controls_framework(request: Request, short_name: str, q: str = "",
+                              domain: str = "", page: int = 1, per_page: int = 20):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        fw_row = (await session.execute(
+            select(ComplianceFramework).where(
+                ComplianceFramework.short_name == short_name,
+                ComplianceFramework.is_active == True, ComplianceFramework.id.in_(_org_enabled_fw_subq())
+            )
+        )).scalar_one_or_none()
+        if not fw_row:
+            raise HTTPException(status_code=404, detail=f"Framework '{short_name}' not found")
+
+        # ── Paywall gate for licensed framework content ────────────────────────
+        if _is_paywalled_fw(fw_row.short_name):
+            fw_ctrls = (await session.execute(
+                text("SELECT control_id, domain FROM catalog_controls WHERE framework_id = :fid ORDER BY domain"),
+                {"fid": fw_row.id}
+            )).fetchall()
+            fw_ctrls_sorted = sorted(fw_ctrls, key=lambda r: (r[1] or "", _ctrl_sort_key(r[0])))
+            return templates.TemplateResponse("controls_paywalled.html", {
+                "request":     request,
+                "fw":          fw_row,
+                "fw_controls": [{"control_id": r[0], "domain": r[1]} for r in fw_ctrls_sorted],
+                **_tpl_ctx(request),
+            })
+
+        # All controls with peer-catalog mappings (via control_relationships)
+        raw = (await session.execute(
+            text("""
+                SELECT cc.control_id, cc.title, cc.domain,
+                       GROUP_CONCAT(
+                           cc_peer.control_id || '|' || cr.confidence, '~'
+                       ) AS mappings
+                FROM catalog_controls cc
+                LEFT JOIN control_relationships cr
+                    ON (cr.control_a_id = cc.id OR cr.control_b_id = cc.id)
+                LEFT JOIN catalog_controls cc_peer
+                    ON ((cr.control_a_id = cc.id AND cc_peer.id = cr.control_b_id)
+                        OR (cr.control_b_id = cc.id AND cc_peer.id = cr.control_a_id))
+                LEFT JOIN compliance_frameworks cf_peer ON cf_peer.id = cc_peer.framework_id
+                WHERE cc.framework_id = :fw_id
+                  AND (cf_peer.short_name = 'nist80053r5' OR cc_peer.id IS NULL)
+                GROUP BY cc.id
+                ORDER BY cc.domain
+            """), {"fw_id": fw_row.id}
+        )).fetchall()
+        raw = sorted(raw, key=lambda r: (r[2] or "", _ctrl_sort_key(r[0])))
+
+    # Build per-domain stats for the domain-selection page
+    domain_stats: dict = {}
+    all_items_full = []
+    for ctrl_id, title, dom, mappings_raw in raw:
+        dom = dom or "General"
+        nist_maps = []
+        if mappings_raw:
+            for part in mappings_raw.split("~"):
+                nid, conf = part.split("|", 1)
+                nist_maps.append({"id": nid.upper(), "link": f"/controls/{nid.lower()}", "confidence": conf})
+        all_items_full.append({"control_id": ctrl_id, "title": title, "domain": dom, "nist_maps": nist_maps})
+        if dom not in domain_stats:
+            domain_stats[dom] = 0
+        domain_stats[dom] += 1
+
+    # ── No domain selected → show domain list ────────────────────────────────
+    if not domain and not q:
+        domain_list = [{"name": d, "count": c} for d, c in sorted(domain_stats.items())]
+        return templates.TemplateResponse("controls_framework.html", {
+            "request":      request,
+            "fw":           fw_row,
+            "domain_list":  domain_list,
+            "total_controls": len(all_items_full),
+            **_tpl_ctx(request),
+        })
+
+    # ── Domain or search selected → show control list ─────────────────────────
+    all_items = all_items_full
+    if domain:
+        all_items = [c for c in all_items if c["domain"] == domain]
+    if q:
+        ql = q.lower()
+        all_items = [c for c in all_items if ql in c["control_id"].lower() or ql in c["title"].lower()]
+
+    per_page    = max(10, min(per_page, 100))
+    page        = max(1, page)
+    total       = len(all_items)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page        = min(page, total_pages)
+    offset      = (page - 1) * per_page
+    items       = all_items[offset : offset + per_page]
+
+    return templates.TemplateResponse("controls_framework_domain.html", {
+        "request":        request,
+        "fw":             fw_row,
+        "domain":         domain,
+        "q":              q,
+        "items":          items,
+        "filtered_total": total,
+        "page":           page,
+        "total_pages":    total_pages,
+        "per_page":       per_page,
+        **_tpl_ctx(request),
+    })
+
+
+@app.get("/controls/catalog/{short_name}/overlays", response_class=HTMLResponse)
+async def controls_catalog_overlays(request: Request, short_name: str,
+                                     baseline: str = Query(default=""),
+                                     ovl: List[str] = Query(default=[])):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    _NIST_OVERLAY_SNS = {"fedramp","nist_privacy","dod_srg","nist_ics","sp800171"}
+    _ISO_OVERLAY_SNS  = {"iso27701","iso27017","iso27018"}
+    affinity_map = {"nist80053r5": _NIST_OVERLAY_SNS, "iso27001": _ISO_OVERLAY_SNS}
+    if short_name not in affinity_map:
+        raise HTTPException(status_code=404, detail=f"Catalog '{short_name}' not found")
+
+    async with SessionLocal() as session:
+        cat_fw = (await session.execute(
+            select(ComplianceFramework).where(
+                ComplianceFramework.short_name == short_name,
+                ComplianceFramework.is_active == True
+            )
+        )).scalar_one_or_none()
+        if not cat_fw:
+            raise HTTPException(status_code=404)
+
+        # Resolve baseline framework (if provided)
+        baseline_fw = None
+        if baseline:
+            baseline_fw = (await session.execute(
+                select(ComplianceFramework).where(
+                    ComplianceFramework.short_name == baseline,
+                    ComplianceFramework.is_active == True
+                )
+            )).scalar_one_or_none()
+
+        sns = list(affinity_map[short_name])
+        rows = (await session.execute(
+            select(
+                ComplianceFramework.short_name,
+                ComplianceFramework.name,
+                ComplianceFramework.kind,
+                ComplianceFramework.description,
+            ).where(
+                ComplianceFramework.short_name.in_(sns),
+                ComplianceFramework.is_active == True,
+                ComplianceFramework.id.in_(_org_enabled_fw_subq()),
+            ).order_by(ComplianceFramework.kind, ComplianceFramework.name)
+        )).fetchall()
+
+        _sns_sql = f"SELECT cf.short_name, COUNT(cc.id) FROM compliance_frameworks cf LEFT JOIN catalog_controls cc ON cc.framework_id=cf.id WHERE cf.short_name IN ({','.join(repr(s) for s in sns)}) GROUP BY cf.short_name"  # nosec B608
+        cnt_rows = (await session.execute(text(_sns_sql))).fetchall()
+        cnt_map = {r[0]: r[1] for r in cnt_rows}
+
+    # The base used for Build View links: prefer the selected baseline, fall back to catalog
+    build_base = baseline if baseline_fw else short_name
+
+    overlays = [
+        {
+            "short_name": r[0], "name": r[1], "kind": r[2],
+            "description": r[3] or "",
+            "ctrl_count": cnt_map.get(r[0], 0),
+            "link": f"/controls/build?base={build_base}&ovl={r[0]}",
+        }
+        for r in rows
+    ]
+
+    # "No Overlay" destination: selected baseline's framework page, or catalog root
+    if baseline_fw:
+        no_overlay_link = f"/controls/framework/{baseline}"
+    elif short_name == "nist80053r5":
+        no_overlay_link = "/controls/nist"
+    else:
+        no_overlay_link = f"/controls/framework/{short_name}"
+
+    catalog = {
+        "short_name": cat_fw.short_name, "name": cat_fw.name,
+        "link": "/controls/nist" if short_name == "nist80053r5" else f"/controls/framework/{short_name}",
+    }
+    return templates.TemplateResponse("controls_catalog_overlays.html", {
+        "request":          request,
+        "catalog":          catalog,
+        "overlays":         overlays,
+        "baseline_sn":      baseline_fw.short_name if baseline_fw else "",
+        "baseline_name":    baseline_fw.name if baseline_fw else "",
+        "no_overlay_link":  no_overlay_link,
+        "selected_ovl_sns": set(ovl),
+        **_tpl_ctx(request),
+    })
+
+
+@app.get("/controls/build", response_class=HTMLResponse)
+async def controls_build(request: Request, base: str = "",
+                          ovl: List[str] = Query(default=[])):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    if _cfg("demo_mode", False):
+        return _demo_nist_paywall_response(request, "Control Baseline Builder")
+
+    # All known baseline short_names — shown in base selector
+    _ALL_BASELINE_SNS = {
+        "nist_low","nist_mod","nist_high",
+        "iso27001_annex_a","iso27001_core",
+        "cmmc_l1","cmmc_l2","cmmc_l3",
+        "cis_ig1","cis_ig2","cis_ig3",
+    }
+
+    async with SessionLocal() as session:
+        all_fw = (await session.execute(
+            select(ComplianceFramework).where(
+                ComplianceFramework.is_active == True,
+                ComplianceFramework.id.in_(_org_enabled_fw_subq())
+            )
+        )).scalars().all()
+
+        # Look up NIST fw_id for 2-hop coverage traversal
+        nist_fw_row = (await session.execute(
+            text("SELECT id FROM compliance_frameworks WHERE short_name='nist80053r5' LIMIT 1")
+        )).fetchone()
+        nist_fw_id = nist_fw_row[0] if nist_fw_row else None
+
+    fw_by_sn = {f.short_name: f for f in all_fw}
+    baselines = [
+        {"short_name": f.short_name, "name": f.name, "ctrl_count": None}
+        for f in all_fw
+        if f.short_name in _ALL_BASELINE_SNS
+    ]
+
+    # Overlays: anything except the currently selected base and user_generated.
+    # Other baselines (CMMC, CIS IG, etc.) are valid overlays for cross-baseline gap analysis.
+    _ALWAYS_SKIP_AS_OVERLAY = {"user_generated"}
+    available_overlays = [
+        {"short_name": f.short_name, "name": f.name, "ctrl_count": None}
+        for f in all_fw
+        if f.short_name not in _ALWAYS_SKIP_AS_OVERLAY and f.short_name != base
+    ]
+
+    controls = []
+    overlay_info: dict = {}
+
+    if base and base in fw_by_sn:
+        base_fw = fw_by_sn[base]
+        selected_ovl_sns = [
+            s for s in ovl
+            if s in fw_by_sn and s not in _ALWAYS_SKIP_AS_OVERLAY and s != base
+        ]
+
+        async with SessionLocal() as session:
+            # Get controls: baselines use baseline_controls→catalog_controls;
+            # catalogs/frameworks (no baseline layer) use catalog_controls directly.
+            if base_fw.kind in ("catalog", "framework", "regulation", "overlay"):
+                base_rows = (await session.execute(
+                    text("""
+                        SELECT cc.id, cc.control_id, cc.title, cc.domain
+                        FROM catalog_controls cc
+                        WHERE cc.framework_id = :fwid
+                        ORDER BY cc.domain
+                    """), {"fwid": base_fw.id}
+                )).fetchall()
+                base_rows = sorted(base_rows, key=lambda r: (r[3] or "", _ctrl_sort_key(r[1])))
+            else:
+                base_rows = (await session.execute(
+                    text("""
+                        SELECT cc.id, cc.control_id, cc.title, cc.domain
+                        FROM baseline_controls bc
+                        JOIN catalog_controls cc ON cc.id = bc.catalog_control_id
+                        WHERE bc.baseline_id = :fwid
+                        ORDER BY cc.domain
+                    """), {"fwid": base_fw.id}
+                )).fetchall()
+                base_rows = sorted(base_rows, key=lambda r: (r[3] or "", _ctrl_sort_key(r[1])))
+
+            # Update baselines ctrl_count
+            for bl in baselines:
+                if bl["short_name"] == base:
+                    bl["ctrl_count"] = len(base_rows)
+
+            base_cc_ids = [r[0] for r in base_rows]
+
+            # For each overlay, compute coverage via control_relationships
+            # Uses 2-hop (base → NIST → overlay) when no direct relationship exists
+            ovl_by_base_cc: dict[str, list] = {}  # base_cc_id → [overlay hits]
+            covered_ovl_text_ids: dict[str, set] = {}   # ovl_sn → matched overlay control_id strings
+            ovl_all_ctrl_rows:    dict[str, list] = {}  # ovl_sn → [(cc_id, ctrl_id, title, domain)]
+
+            for ovl_sn in selected_ovl_sns:
+                ovl_fw = fw_by_sn[ovl_sn]
+
+                if not base_cc_ids:
+                    overlay_info[ovl_sn] = {"name": ovl_fw.name, "covered_count": 0}
+                    continue
+
+                # Resolve overlay's catalog_control IDs (fetch full details for missing-control calc).
+                if ovl_fw.kind == "baseline":
+                    ovl_cc_rows = (await session.execute(
+                        text("""SELECT bc.catalog_control_id, cc.control_id, cc.title, cc.domain
+                                FROM baseline_controls bc
+                                JOIN catalog_controls cc ON cc.id=bc.catalog_control_id
+                                WHERE bc.baseline_id = :bid
+                                ORDER BY cc.domain"""),
+                        {"bid": ovl_fw.id}
+                    )).fetchall()
+                    ovl_cc_rows = sorted(ovl_cc_rows, key=lambda r: (r[3] or "", _ctrl_sort_key(r[1])))
+                else:
+                    ovl_cc_rows = (await session.execute(
+                        text("""SELECT id, control_id, title, domain
+                                FROM catalog_controls WHERE framework_id = :fid
+                                ORDER BY domain"""),
+                        {"fid": ovl_fw.id}
+                    )).fetchall()
+                    ovl_cc_rows = sorted(ovl_cc_rows, key=lambda r: (r[3] or "", _ctrl_sort_key(r[1])))
+                ovl_cc_ids = [r[0] for r in ovl_cc_rows]
+                ovl_all_ctrl_rows[ovl_sn] = [(r[0], r[1] or "", r[2] or "", r[3] or "") for r in ovl_cc_rows]
+
+                if not ovl_cc_ids:
+                    overlay_info[ovl_sn] = {"name": ovl_fw.name, "covered_count": 0}
+                    continue
+
+                # === Direct: base_cc ↔ ovl_cc (one hop) ===
+                direct_rows = (await session.execute(
+                    text("""
+                        SELECT
+                            CASE WHEN cr.control_a_id IN :bids
+                                 THEN cr.control_a_id ELSE cr.control_b_id END AS base_id,
+                            cc_ovl.control_id, cc_ovl.title, cr.confidence
+                        FROM control_relationships cr
+                        JOIN catalog_controls cc_ovl ON (
+                            (cr.control_a_id IN :bids
+                             AND cc_ovl.id = cr.control_b_id
+                             AND cc_ovl.id IN :oids)
+                            OR
+                            (cr.control_b_id IN :bids
+                             AND cc_ovl.id = cr.control_a_id
+                             AND cc_ovl.id IN :oids)
+                        )
+                    """).bindparams(
+                        bindparam("bids", expanding=True),
+                        bindparam("oids", expanding=True),
+                    ),
+                    {"bids": base_cc_ids, "oids": ovl_cc_ids}
+                )).fetchall()
+
+                covered_base_ids: set = set()
+                for base_id, oc_id, oc_title, conf in direct_rows:
+                    ovl_by_base_cc.setdefault(base_id, []).append({
+                        "framework": ovl_fw.name, "control_id": oc_id,
+                        "title": oc_title, "confidence": conf,
+                    })
+                    covered_base_ids.add(base_id)
+                    covered_ovl_text_ids.setdefault(ovl_sn, set()).add(oc_id)
+
+                # === Two-hop via NIST: base → NIST → overlay ===
+                if nist_fw_id and ovl_fw.id != nist_fw_id and base_fw.id != nist_fw_id:
+                    uncovered = [bid for bid in base_cc_ids if bid not in covered_base_ids]
+                    if uncovered:
+                        # Step 1: base → NIST
+                        b2n = (await session.execute(
+                            text("""
+                                SELECT
+                                    CASE WHEN cr.control_a_id IN :bids
+                                         THEN cr.control_a_id ELSE cr.control_b_id END AS base_id,
+                                    CASE WHEN cr.control_a_id IN :bids
+                                         THEN cr.control_b_id ELSE cr.control_a_id END AS nist_id
+                                FROM control_relationships cr
+                                JOIN catalog_controls cc_nist ON (
+                                    (cr.control_a_id IN :bids
+                                     AND cc_nist.id = cr.control_b_id
+                                     AND cc_nist.framework_id = :nfwid)
+                                    OR
+                                    (cr.control_b_id IN :bids
+                                     AND cc_nist.id = cr.control_a_id
+                                     AND cc_nist.framework_id = :nfwid)
+                                )
+                            """).bindparams(bindparam("bids", expanding=True)),
+                            {"bids": uncovered, "nfwid": nist_fw_id}
+                        )).fetchall()
+
+                        if b2n:
+                            from collections import defaultdict as _dd
+                            nist_to_bases: dict = _dd(set)
+                            for base_id, nist_id in b2n:
+                                nist_to_bases[nist_id].add(base_id)
+                            nist_ids = list(nist_to_bases.keys())
+
+                            # Step 2: NIST → overlay (using resolved ovl_cc_ids)
+                            n2o = (await session.execute(
+                                text("""
+                                    SELECT
+                                        CASE WHEN cr.control_a_id IN :nids
+                                             THEN cr.control_a_id ELSE cr.control_b_id END AS nist_id,
+                                        cc_ovl.control_id, cc_ovl.title, cr.confidence
+                                    FROM control_relationships cr
+                                    JOIN catalog_controls cc_ovl ON (
+                                        (cr.control_a_id IN :nids
+                                         AND cc_ovl.id = cr.control_b_id
+                                         AND cc_ovl.id IN :oids)
+                                        OR
+                                        (cr.control_b_id IN :nids
+                                         AND cc_ovl.id = cr.control_a_id
+                                         AND cc_ovl.id IN :oids)
+                                    )
+                                """).bindparams(
+                                    bindparam("nids", expanding=True),
+                                    bindparam("oids", expanding=True),
+                                ),
+                                {"nids": nist_ids, "oids": ovl_cc_ids}
+                            )).fetchall()
+
+                            for nist_id, oc_id, oc_title, conf in n2o:
+                                for base_id in nist_to_bases.get(nist_id, set()):
+                                    existing = {e["control_id"] for e in ovl_by_base_cc.get(base_id, [])}
+                                    if oc_id not in existing:
+                                        ovl_by_base_cc.setdefault(base_id, []).append({
+                                            "framework": ovl_fw.name, "control_id": oc_id,
+                                            "title": oc_title, "confidence": conf,
+                                        })
+                                        covered_base_ids.add(base_id)
+                                        covered_ovl_text_ids.setdefault(ovl_sn, set()).add(oc_id)
+
+                overlay_info[ovl_sn] = {
+                    "name": ovl_fw.name,
+                    "covered_count": len(covered_base_ids),
+                }
+
+        # Overlay controls with no baseline match = "missing required controls"
+        missing_controls: list = []
+        for ovl_sn in selected_ovl_sns:
+            ovl_fw = fw_by_sn.get(ovl_sn)
+            if not ovl_fw:
+                continue
+            matched = covered_ovl_text_ids.get(ovl_sn, set())
+            for _cc_id, ctrl_id, title, domain in ovl_all_ctrl_rows.get(ovl_sn, []):
+                if ctrl_id not in matched:
+                    missing_controls.append({
+                        "control_id": ctrl_id,
+                        "title":      title,
+                        "domain":     domain,
+                        "framework":  ovl_fw.name,
+                        "framework_sn": ovl_sn,
+                    })
+
+        # Build control list with overlay hits
+        for cc_id, ctrl_id, title, domain in base_rows:
+            hits = ovl_by_base_cc.get(cc_id, [])
+            controls.append({
+                "control_id": ctrl_id,
+                "title": title or "",
+                "domain": domain or "",
+                "ovl_controls": hits,
+            })
+    else:
+        selected_ovl_sns = []
+        missing_controls = []
+
+    # Fill ctrl_count for all baselines from baseline_controls (batch)
+    if not base:
+        async with SessionLocal() as session:
+            _bl_sn_list = ",".join(f"'{bl['short_name']}'" for bl in baselines)  # nosec B608
+            _bl_sql = (
+                f"SELECT cf.short_name, COUNT(bc.id) "
+                f"FROM compliance_frameworks cf "
+                f"LEFT JOIN baseline_controls bc ON bc.baseline_id=cf.id "
+                f"WHERE cf.short_name IN ({_bl_sn_list}) "
+                f"GROUP BY cf.short_name"
+            )
+            cnt_rows = (await session.execute(text(_bl_sql))).fetchall()
+        cnt_map = {r[0]: r[1] for r in cnt_rows}
+        for bl in baselines:
+            bl["ctrl_count"] = cnt_map.get(bl["short_name"], 0)
+
+    return templates.TemplateResponse("controls_build.html", {
+        "request":           request,
+        "baselines":         sorted(baselines, key=lambda x: x["short_name"]),
+        "available_overlays": sorted(available_overlays, key=lambda x: x["name"]),
+        "selected_base":     base,
+        "selected_ovl_sns":  selected_ovl_sns,
+        "controls":          controls,
+        "overlay_info":      overlay_info,
+        "missing_controls":  missing_controls,
+        **_tpl_ctx(request),
+    })
+
+
+@app.get("/controls/family/{family_id}", response_class=HTMLResponse)
+async def controls_family(request: Request, family_id: str, q: str = "",
+                           framework: str = "", page: int = 1, per_page: int = 20):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    if _cfg("demo_mode", False):
+        return _demo_nist_paywall_response(request, "NIST SP 800-53 — Control Families")
+
+    family_upper = family_id.upper()
+    families     = _ctrl_families()
+    family_title = next((t for fid, t in families if fid == family_upper), "")
+    if not family_title:
+        raise HTTPException(status_code=404, detail=f"Control family {family_upper} not found")
+
+    all_items = [c for c in _catalog_list() if c["family"] == family_upper]
+
+    # Framework crosswalk filter
+    fw_nist_ids: set[str] = set()
+    fw_name = ""
+    async with SessionLocal() as session:
+        fw_rows = (await session.execute(
+            select(ComplianceFramework).where(ComplianceFramework.is_active == True, ComplianceFramework.id.in_(_org_enabled_fw_subq()))
+            .order_by(ComplianceFramework.category, ComplianceFramework.name)
+        )).scalars().all()
+        all_frameworks = [(f.short_name, f.name, f.category) for f in fw_rows]
+
+        if framework:
+            fw_obj = next((f for f in fw_rows if f.short_name == framework), None)
+            if fw_obj:
+                fw_name = fw_obj.name
+                # Get NIST control IDs covered by this framework via control_relationships
+                xw_rows = (await session.execute(
+                    text("""
+                        SELECT DISTINCT
+                            CASE WHEN cc_nist.id = cr.control_b_id
+                                 THEN cc_nist.control_id
+                                 ELSE cc_nist.control_id END AS nist_ctrl_id
+                        FROM control_relationships cr
+                        JOIN catalog_controls cc_fw ON (
+                            (cc_fw.id = cr.control_a_id AND cc_fw.framework_id = :fw_id) OR
+                            (cc_fw.id = cr.control_b_id AND cc_fw.framework_id = :fw_id)
+                        )
+                        JOIN compliance_frameworks cf_nist ON cf_nist.short_name = 'nist80053r5'
+                        JOIN catalog_controls cc_nist ON (
+                            (cr.control_a_id = cc_fw.id AND cc_nist.id = cr.control_b_id AND cc_nist.framework_id = cf_nist.id) OR
+                            (cr.control_b_id = cc_fw.id AND cc_nist.id = cr.control_a_id AND cc_nist.framework_id = cf_nist.id)
+                        )
+                    """), {"fw_id": fw_obj.id}
+                )).fetchall()
+                fw_nist_ids = {r[0].lower() for r in xw_rows}
+
+    if framework and fw_nist_ids:
+        all_items = [c for c in all_items if c["id"].lower() in fw_nist_ids]
     if q:
         ql = q.lower()
         all_items = [c for c in all_items if
@@ -5911,25 +10222,145 @@ async def controls_catalog(request: Request, family: str = "", q: str = "",
                      ql in c.get("summary", "").lower() or
                      ql in c.get("statement", "").lower()]
 
-    per_page = max(10, min(per_page, 100))
-    page     = max(1, page)
-    total    = len(all_items)
+    per_page    = max(10, min(per_page, 100))
+    page        = max(1, page)
+    total       = len(all_items)
     total_pages = max(1, (total + per_page - 1) // per_page)
-    page     = min(page, total_pages)
-    offset   = (page - 1) * per_page
-    items    = all_items[offset : offset + per_page]
+    page        = min(page, total_pages)
+    offset      = (page - 1) * per_page
+    items       = all_items[offset : offset + per_page]
 
-    return templates.TemplateResponse("controls.html", {
+    return templates.TemplateResponse("controls_family.html", {
         "request":        request,
-        "items":          items,
-        "families":       families,      # list of (family_id, family_title) tuples
         "family":         family_upper,
+        "family_title":   family_title,
+        "items":          items,
         "q":              q,
-        "total":          len(CATALOG),
+        "framework":      framework,
+        "fw_name":        fw_name,
+        "all_frameworks": all_frameworks,
         "filtered_total": total,
         "page":           page,
         "total_pages":    total_pages,
         "per_page":       per_page,
+        **_tpl_ctx(request),
+    })
+
+
+@app.get("/controls/framework/{sn}/control/{ctrl_id:path}", response_class=HTMLResponse)
+async def framework_control_detail(request: Request, sn: str, ctrl_id: str):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        fw_row = (await session.execute(
+            select(ComplianceFramework).where(
+                ComplianceFramework.short_name == sn,
+                ComplianceFramework.is_active == True,
+            )
+        )).scalar_one_or_none()
+        if not fw_row:
+            raise HTTPException(status_code=404)
+
+        # ── Paywall gate for licensed framework content ────────────────────────
+        if _is_paywalled_fw(fw_row.short_name):
+            return templates.TemplateResponse("controls_paywalled.html", {
+                "request":     request,
+                "fw":          fw_row,
+                "fw_controls": [],
+                **_tpl_ctx(request),
+            })
+
+        fc_row = (await session.execute(
+            text("""
+                SELECT cc.id, cc.control_id, cc.title, cc.description, cc.domain, cc.level,
+                       cc.parameters_json
+                FROM catalog_controls cc
+                WHERE cc.framework_id = :fw_id AND cc.control_id = :ctrl_id
+            """), {"fw_id": fw_row.id, "ctrl_id": ctrl_id}
+        )).fetchone()
+        if not fc_row:
+            raise HTTPException(status_code=404)
+
+        cc_db_id = fc_row[0]
+
+        # All related controls (any direction) via control_relationships
+        rel_rows = (await session.execute(
+            text("""
+                SELECT cf.name, cf.short_name, cf.category,
+                       cc_peer.control_id, cc_peer.title, cc_peer.domain,
+                       cr.confidence, cr.relationship
+                FROM control_relationships cr
+                JOIN catalog_controls cc_peer ON (
+                    (cr.control_a_id = :cc_id AND cc_peer.id = cr.control_b_id) OR
+                    (cr.control_b_id = :cc_id AND cc_peer.id = cr.control_a_id)
+                )
+                JOIN compliance_frameworks cf ON cf.id = cc_peer.framework_id
+                WHERE (cr.control_a_id = :cc_id OR cr.control_b_id = :cc_id)
+                  AND cf.is_active = 1
+                ORDER BY cf.category, cf.name
+            """), {"cc_id": cc_db_id}
+        )).fetchall()
+
+        fw_map: dict = {}
+        nist_crosswalks = []   # kept for backward-compat with template section
+        for row in rel_rows:
+            key = row[1]  # short_name
+            if key == "nist80053r5":
+                nist_ctrl = CATALOG.get(row[3].lower(), {})
+                nist_crosswalks.append({
+                    "id":         row[3],
+                    "title":      nist_ctrl.get("title", row[4] or ""),
+                    "confidence": row[6],
+                    "link":       f"/controls/{row[3].lower()}",
+                })
+            if key not in fw_map:
+                fw_map[key] = {"name": row[0], "short_name": row[1],
+                               "category": row[2], "controls": []}
+            fw_map[key]["controls"].append({
+                "id":         row[3],
+                "title":      row[4],
+                "domain":     row[5],
+                "confidence": row[6],
+                "link":       "/controls/" + row[3].lower() if row[1] == "nist80053r5"
+                              else f"/controls/framework/{row[1]}/control/{row[3]}",
+            })
+        for _fw_entry in fw_map.values():
+            _fw_entry["controls"].sort(key=lambda c: _ctrl_sort_key(c["id"]))
+        related = list(fw_map.values())
+
+    # Parse parameters_json into assess_ctx for template rendering
+    assess_ctx = None
+    if fc_row and len(fc_row) > 6:
+        raw_params = fc_row[6] if fc_row[6] else None
+    else:
+        # Re-query to get parameters_json (it's column index 6 in the SELECT)
+        raw_params = None
+    try:
+        if raw_params:
+            pdata = json.loads(raw_params)
+            if any(pdata.get(k) for k in ("examine", "interview", "test")):
+                assess_ctx = {
+                    "examine":   pdata.get("examine", []),
+                    "interview": pdata.get("interview", []),
+                    "test":      pdata.get("test", []),
+                }
+    except Exception:
+        pass
+
+    return templates.TemplateResponse("controls_framework_control_detail.html", {
+        "request":         request,
+        "fw":              {"name": fw_row.name, "short_name": sn,
+                            "category": fw_row.category,
+                            "link": f"/controls/framework/{sn}"},
+        "ctrl_id":         ctrl_id,
+        "ctrl":            {"id": fc_row[1], "title": fc_row[2],
+                            "description": fc_row[3], "domain": fc_row[4],
+                            "level": fc_row[5]},
+        "nist_crosswalks": nist_crosswalks,
+        "related":         related,
+        "assess_ctx":      assess_ctx,
         **_tpl_ctx(request),
     })
 
@@ -5939,6 +10370,9 @@ async def control_detail(request: Request, ctrl_id: str):
     user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
+
+    if _cfg("demo_mode", False):
+        return _demo_nist_paywall_response(request)
 
     ctrl = CATALOG.get(ctrl_id.lower())
     if not ctrl:
@@ -5956,6 +10390,54 @@ async def control_detail(request: Request, ctrl_id: str):
     prev_ctrl_id = all_ids[idx - 1] if idx > 0 else None
     next_ctrl_id = all_ids[idx + 1] if 0 <= idx < len(all_ids) - 1 else None
 
+    # Framework crosswalk — which controls in other frameworks relate to this NIST control
+    fw_mappings: list[dict] = []
+    async with SessionLocal() as session:
+        # Look up the catalog_controls row for this NIST control
+        nist_cc = (await session.execute(
+            text("""
+                SELECT cc.id FROM catalog_controls cc
+                JOIN compliance_frameworks cf ON cf.id = cc.framework_id
+                WHERE cf.short_name = 'nist80053r5' AND cc.control_id = :cid
+                LIMIT 1
+            """), {"cid": ctrl_id.lower()}
+        )).fetchone()
+
+        if nist_cc:
+            rows = (await session.execute(
+                text("""
+                    SELECT cf.name, cf.short_name, cf.category,
+                           cc_peer.control_id, cc_peer.title, cc_peer.domain,
+                           cr.confidence
+                    FROM control_relationships cr
+                    JOIN catalog_controls cc_peer ON (
+                        (cr.control_a_id = :nist_id AND cc_peer.id = cr.control_b_id) OR
+                        (cr.control_b_id = :nist_id AND cc_peer.id = cr.control_a_id)
+                    )
+                    JOIN compliance_frameworks cf ON cf.id = cc_peer.framework_id
+                    WHERE (cr.control_a_id = :nist_id OR cr.control_b_id = :nist_id)
+                      AND cf.short_name != 'nist80053r5'
+                      AND cf.is_active = 1
+                    ORDER BY cf.category, cf.name
+                """), {"nist_id": nist_cc[0]}
+            )).fetchall()
+
+            fw_map: dict = {}
+            for row in rows:
+                key = row[1]
+                if key not in fw_map:
+                    fw_map[key] = {"name": row[0], "short_name": row[1],
+                                   "category": row[2], "controls": []}
+                fw_map[key]["controls"].append({
+                    "id":         row[3],
+                    "title":      row[4],
+                    "domain":     row[5],
+                    "confidence": row[6],
+                })
+            for _fw_entry in fw_map.values():
+                _fw_entry["controls"].sort(key=lambda c: _ctrl_sort_key(c["id"]))
+            fw_mappings = list(fw_map.values())
+
     return templates.TemplateResponse("control_detail.html", {
         "request":       request,
         "ctrl_id":       ctrl_id.lower(),
@@ -5966,6 +10448,7 @@ async def control_detail(request: Request, ctrl_id: str):
         "csf_base_url":  _CSF_BASE_URL,
         "prev_ctrl_id":  prev_ctrl_id,
         "next_ctrl_id":  next_ctrl_id,
+        "fw_mappings":   fw_mappings,
         **_tpl_ctx(request),
     })
 
@@ -6177,7 +10660,9 @@ async def isso_control_workspace_get(request: Request, system_id: str, ctrl_id: 
     prev_ctrl = all_ctrl_ids[idx - 1] if idx > 0 else None
     next_ctrl = all_ctrl_ids[idx + 1] if idx >= 0 and idx < len(all_ctrl_ids) - 1 else None
 
-    can_edit = role in ("admin", "ao", "ciso", "isso")
+    can_edit    = role in ("admin", "ao", "ciso", "isso")
+    can_assess  = role in ("admin", "sca", "issm")   # who may write assessment result/notes
+    assess_ctx  = _build_assessment_ctx(ctrl_id)
 
     return templates.TemplateResponse("system_control_detail.html", {
         "request":       request,
@@ -6188,6 +10673,8 @@ async def isso_control_workspace_get(request: Request, system_id: str, ctrl_id: 
         "prev_ctrl":     prev_ctrl,
         "next_ctrl":     next_ctrl,
         "can_edit":      can_edit,
+        "can_assess":    can_assess,
+        "assess_ctx":    assess_ctx,
         "other_systems": other_systems,
         **_tpl_ctx(request),
     })
@@ -6195,7 +10682,10 @@ async def isso_control_workspace_get(request: Request, system_id: str, ctrl_id: 
 
 @app.post("/systems/{system_id}/workspace/{ctrl_id}")
 async def isso_control_workspace_post(request: Request, system_id: str, ctrl_id: str):
-    """ISSO workspace — save/upsert SystemControl record."""
+    """Control workspace POST — dual-path:
+    - ISSO/admin/AO/CISO: update implementation fields (status, narrative, type, etc.)
+    - SCA/ISSM/admin: update assessment fields (result, notes) via hidden 'save_mode=assess'
+    """
     user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
@@ -6204,13 +10694,14 @@ async def isso_control_workspace_post(request: Request, system_id: str, ctrl_id:
 
     async with SessionLocal() as session:
         role = await _get_user_role(request, session)
-        _require_role(role, ["admin", "ao", "ciso", "isso"])
+        _require_role(role, ["admin", "ao", "ciso", "issm", "isso", "sca"])
 
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(status_code=403)
 
-        form = await request.form()
+        form     = await request.form()
         cat_ctrl = CATALOG.get(ctrl_id, {})
+        save_mode = str(form.get("save_mode", "impl"))
 
         sc_row = await session.execute(
             select(SystemControl)
@@ -6218,13 +10709,6 @@ async def isso_control_workspace_post(request: Request, system_id: str, ctrl_id:
             .where(SystemControl.control_id == ctrl_id)
         )
         sc = sc_row.scalar_one_or_none()
-
-        new_status    = str(form.get("status", "not_started"))
-        new_narrative = str(form.get("narrative", "")).strip()
-        new_role      = str(form.get("responsible_role", "")).strip()
-        new_itype     = str(form.get("implementation_type", "system"))
-        inh_from      = str(form.get("inherited_from", "")).strip() or None
-        inh_narr      = str(form.get("inherited_narrative", "")).strip()
 
         if sc is None:
             sc = SystemControl(
@@ -6236,48 +10720,190 @@ async def isso_control_workspace_post(request: Request, system_id: str, ctrl_id:
             )
             session.add(sc)
 
-        # Evidence enforcement: block "implemented_complete" on evidence-required controls
-        # when no formal artifact or assessment has been recorded for this system.
-        if new_status == "implemented_complete" and ctrl_id in _EVIDENCE_REQUIRED_CONTROLS:
-            artifact_count = (await session.execute(
-                select(func.count(Artifact.id))
-                .where(Artifact.system_id == system_id)
-                .where(Artifact.status.in_(["approved", "finalized"]))
-            )).scalar() or 0
-            if artifact_count == 0:
-                return templates.TemplateResponse(
-                    "system_control_detail.html",
-                    {
-                        **(await _full_ctx(request, session)),
-                        "error": (
-                            f"Control {ctrl_id.upper()} requires formal evidence before marking "
-                            f"'Implemented (Complete)'. Upload an approved artifact or assessment "
-                            f"result for this system first."
-                        ),
-                        "system_id": system_id,
-                        "ctrl_id": ctrl_id,
-                    },
-                    status_code=422,
-                )
+        if save_mode == "assess" and role in ("admin", "sca", "issm"):
+            # ── SCA/ISSM assessment path ──────────────────────────────────────
+            new_result = str(form.get("assessment_result", "")).strip() or None
+            new_notes  = str(form.get("assessment_notes", "")).strip() or None
+            sc.assessment_result = new_result
+            sc.assessment_notes  = new_notes
+            sc.assessed_by       = user
+            sc.assessed_at       = datetime.now(timezone.utc)
+            await _log_audit(session, user, "UPDATE", "system_control",
+                             f"{system_id}:{ctrl_id}",
+                             {"assessment_result": new_result, "via": "sca_assessment"})
 
-        sc.status              = new_status
-        sc.narrative           = new_narrative or None
-        sc.responsible_role    = new_role or None
-        sc.implementation_type = new_itype
-        sc.inherited_from      = inh_from
-        sc.inherited_narrative = inh_narr or None
-        sc.last_updated_by     = user
-        sc.last_updated_at     = datetime.now(timezone.utc)
+        else:
+            # ── ISSO implementation path ───────────────────────────────────────
+            if role not in ("admin", "ao", "ciso", "isso"):
+                raise HTTPException(status_code=403,
+                                    detail="Your role cannot edit implementation records.")
 
-        await _log_audit(session, user, "UPDATE", "system_control",
-                         f"{system_id}:{ctrl_id}",
-                         {"status": new_status, "via": "workspace"})
+            new_status    = str(form.get("status", "not_started"))
+            new_narrative = str(form.get("narrative", "")).strip()
+            new_role      = str(form.get("responsible_role", "")).strip()
+            new_itype     = str(form.get("implementation_type", "system"))
+            inh_from      = str(form.get("inherited_from", "")).strip() or None
+            inh_narr      = str(form.get("inherited_narrative", "")).strip()
+
+            # Evidence enforcement: block "implemented_complete" on evidence-required controls
+            if new_status == "implemented_complete" and ctrl_id in _EVIDENCE_REQUIRED_CONTROLS:
+                artifact_count = (await session.execute(
+                    select(func.count(Artifact.id))
+                    .where(Artifact.system_id == system_id)
+                    .where(Artifact.status.in_(["approved", "finalized"]))
+                )).scalar() or 0
+                if artifact_count == 0:
+                    return templates.TemplateResponse(
+                        "system_control_detail.html",
+                        {
+                            **(await _full_ctx(request, session)),
+                            "error": (
+                                f"Control {ctrl_id.upper()} requires formal evidence before marking "
+                                f"'Implemented (Complete)'. Upload an approved artifact or assessment "
+                                f"result for this system first."
+                            ),
+                            "system_id": system_id,
+                            "ctrl_id": ctrl_id,
+                        },
+                        status_code=422,
+                    )
+
+            sc.status              = new_status
+            sc.narrative           = new_narrative or None
+            sc.responsible_role    = new_role or None
+            sc.implementation_type = new_itype
+            sc.inherited_from      = inh_from
+            sc.inherited_narrative = inh_narr or None
+            sc.last_updated_by     = user
+            sc.last_updated_at     = datetime.now(timezone.utc)
+            await _log_audit(session, user, "UPDATE", "system_control",
+                             f"{system_id}:{ctrl_id}",
+                             {"status": new_status, "via": "workspace"})
+
         await session.commit()
 
     return RedirectResponse(
         url=f"/systems/{system_id}/workspace/{ctrl_id}?saved=1",
         status_code=303
     )
+
+
+# ── Cross-framework control propagation ─────────────────────────────────────────
+#
+# Architecture: control_relationships has 4,904 bidirectional rows.
+# All data: control_a = non-NIST framework, control_b = nist80053r5.
+# NIST acts as the universal hub — to propagate from non-NIST A → non-NIST B,
+# traverse A → NIST → B.
+#
+# When a NIST control gets a status (via SSP import or manual edit), this
+# function fans it out to all enrolled non-NIST framework controls that map
+# to that NIST control, creating or updating SystemControl rows.
+
+_XW_STATUS_MAP: dict[tuple[str, str], str] = {
+    # (source_nist_status, confidence) → target framework status
+    ("implemented",    "high"):   "inherited",
+    ("implemented",    "medium"): "in_progress",
+    ("inherited",      "high"):   "inherited",
+    ("inherited",      "medium"): "in_progress",
+    ("not_applicable", "high"):   "not_applicable",
+    ("not_applicable", "medium"): "not_applicable",
+    ("planned",        "high"):   "planned",
+    ("planned",        "medium"): "in_progress",
+    ("in_progress",    "high"):   "in_progress",
+    ("in_progress",    "medium"): "in_progress",
+}
+
+
+async def _crosswalk_propagate(
+    session,
+    system_id: str,
+    nist_ctrl_id: str,
+    src_status: str,
+    user: str,
+) -> int:
+    """
+    Fan-out a NIST control status to all mapped controls in the system's
+    enrolled compliance frameworks via control_relationships.
+
+    Only overwrites system_controls that are 'not_started' or were previously
+    crosswalk-generated (xw_source is set) — never overwrites manual work.
+
+    Returns the count of system_controls created or updated.
+    """
+    if not src_status or src_status == "not_started":
+        return 0  # Nothing useful to propagate
+
+    # 1. Find the NIST CatalogControl ID (nist80053r5 framework)
+    nist_row = await session.execute(text(
+        "SELECT cc.id FROM catalog_controls cc "
+        "JOIN compliance_frameworks cf ON cc.framework_id = cf.id "
+        "WHERE cf.short_name = 'nist80053r5' AND lower(cc.control_id) = :ctrl LIMIT 1"
+    ), {"ctrl": nist_ctrl_id.lower()})
+    nist_cc_id = nist_row.scalar()
+    if not nist_cc_id:
+        return 0  # NIST control not yet in agnostic catalog
+
+    # 2. Get non-NIST framework IDs enrolled for this system
+    enrolled_row = await session.execute(text(
+        "SELECT sf.framework_id FROM system_frameworks sf "
+        "JOIN compliance_frameworks cf ON sf.framework_id = cf.id "
+        "WHERE sf.system_id = :sys_id AND cf.short_name != 'nist80053r5'"
+    ), {"sys_id": system_id})
+    enrolled_fw_ids = {r[0] for r in enrolled_row.fetchall()}
+    if not enrolled_fw_ids:
+        return 0  # No non-NIST frameworks enrolled
+
+    # 3. Find all non-NIST controls that map to this NIST control
+    #    (control_a = non-NIST, control_b = NIST — confirmed from DB analysis)
+    rel_row = await session.execute(text(
+        "SELECT cr.control_a_id, cr.confidence, cc.framework_id, "
+        "       cc.control_id, cc.title, cc.domain "
+        "FROM control_relationships cr "
+        "JOIN catalog_controls cc ON cr.control_a_id = cc.id "
+        "WHERE cr.control_b_id = :nist_id AND cr.confidence IN ('high', 'medium')"
+    ), {"nist_id": nist_cc_id})
+    # Filter to enrolled frameworks only (avoids tuple IN binding issues)
+    relationships = [r for r in rel_row.fetchall() if r[2] in enrolled_fw_ids]
+    if not relationships:
+        return 0
+
+    updated = 0
+    xw_tag = f"nist80053r5:{nist_ctrl_id.lower()}"
+
+    for (cc_id, confidence, fw_id, raw_ctrl_id, ctrl_title, ctrl_domain) in relationships:
+        target_status = _XW_STATUS_MAP.get((src_status, confidence), "in_progress")
+
+        # Find existing SystemControl by (system_id, control_id)
+        sc_row = await session.execute(
+            select(SystemControl)
+            .where(SystemControl.system_id == system_id)
+            .where(SystemControl.control_id == raw_ctrl_id)
+        )
+        sc = sc_row.scalar_one_or_none()
+
+        if sc is None:
+            sc = SystemControl(
+                system_id       = system_id,
+                control_id      = raw_ctrl_id,
+                control_family  = ctrl_domain or raw_ctrl_id.split(".")[0],
+                control_title   = ctrl_title or raw_ctrl_id,
+                source_catalog  = fw_id,
+                status          = target_status,
+                xw_source       = xw_tag,
+                last_updated_by = user,
+                created_by      = user,
+            )
+            session.add(sc)
+            updated += 1
+        else:
+            # Only overwrite not_started OR previously crosswalk-generated records
+            if sc.status == "not_started" or sc.xw_source:
+                sc.status          = target_status
+                sc.xw_source       = xw_tag
+                sc.last_updated_by = user
+                updated += 1
+
+    return updated
 
 
 @app.post("/systems/{system_id}/import-controls")
@@ -6317,6 +10943,9 @@ async def import_controls_from_assessment(request: Request, system_id: str):
         }
 
         imported = 0
+        xw_propagated = 0
+        propagate_queue: list[tuple[str, str]] = []  # (nist_ctrl_id, new_status)
+
         for cr in ctrl_results:
             sc_row = await session.execute(
                 select(SystemControl)
@@ -6343,6 +10972,7 @@ async def import_controls_from_assessment(request: Request, system_id: str):
                 )
                 session.add(sc)
                 imported += 1
+                propagate_queue.append((cr.control_id, new_status))
             else:
                 # Only update if currently not_started (don't overwrite manual edits)
                 if sc.status == "not_started":
@@ -6350,12 +10980,21 @@ async def import_controls_from_assessment(request: Request, system_id: str):
                     sc.narrative       = sc.narrative or cr.narrative_excerpt
                     sc.last_updated_by = user
                     imported += 1
+                    propagate_queue.append((cr.control_id, new_status))
+
+        # Fan-out NIST statuses to all enrolled non-NIST framework controls
+        for nist_ctrl_id, new_status in propagate_queue:
+            xw_propagated += await _crosswalk_propagate(
+                session, system_id, nist_ctrl_id, new_status, user
+            )
 
         await _log_audit(session, user, "UPDATE", "system", system_id,
-                         {"action": "import_controls", "assessment_id": asmt.id, "imported": imported})
+                         {"action": "import_controls", "assessment_id": asmt.id,
+                          "imported": imported, "xw_propagated": xw_propagated})
         await session.commit()
 
-    return JSONResponse({"ok": True, "imported": imported, "assessment_id": asmt.id})
+    return JSONResponse({"ok": True, "imported": imported, "assessment_id": asmt.id,
+                         "xw_propagated": xw_propagated})
 
 
 # ── Submission (ATO Package) ──────────────────────────────────────────────────
@@ -6507,19 +11146,19 @@ async def submissions_list(request: Request, page: int = 1, per_page: int = 10):
     page     = max(1, page)
     offset   = (page - 1) * per_page
 
-    async with SessionLocal() as session:
-        def _sub_q():
-            if _is_admin(request):
-                return select(Submission).order_by(Submission.created_at.desc())
-            sys_ids = []  # will be resolved in-scope
-            return select(Submission).order_by(Submission.created_at.desc())
+    # Exclude completed/decided submissions — those live on /submissions/approved
+    _ACTIVE_STATUSES = ["submitted", "under_review", "draft"]
 
+    async with SessionLocal() as session:
         if _is_admin(request):
             total = (await session.execute(
                 select(func.count(Submission.id))
+                .where(Submission.status.in_(_ACTIVE_STATUSES))
             )).scalar() or 0
             sub_rows = await session.execute(
-                select(Submission).order_by(Submission.created_at.desc())
+                select(Submission)
+                .where(Submission.status.in_(_ACTIVE_STATUSES))
+                .order_by(Submission.created_at.desc())
                 .offset(offset).limit(per_page)
             )
         else:
@@ -6527,17 +11166,18 @@ async def submissions_list(request: Request, page: int = 1, per_page: int = 10):
             total = (await session.execute(
                 select(func.count(Submission.id))
                 .where(Submission.system_id.in_(sys_ids))
+                .where(Submission.status.in_(_ACTIVE_STATUSES))
             )).scalar() or 0
             sub_rows = await session.execute(
                 select(Submission)
                 .where(Submission.system_id.in_(sys_ids))
+                .where(Submission.status.in_(_ACTIVE_STATUSES))
                 .order_by(Submission.created_at.desc())
                 .offset(offset).limit(per_page)
             )
         submissions = list(sub_rows.scalars().all())
         total_pages = max(1, (total + per_page - 1) // per_page)
 
-        # Attach system names
         sys_ids_used = list({s.system_id for s in submissions})
         sys_map = {}
         if sys_ids_used:
@@ -6547,6 +11187,67 @@ async def submissions_list(request: Request, page: int = 1, per_page: int = 10):
             sys_map = {s.id: s for s in sys_rows.scalars().all()}
 
     return templates.TemplateResponse("submissions.html", {
+        "request":     request,
+        "submissions": submissions,
+        "sys_map":     sys_map,
+        "page":        page,
+        "total_pages": total_pages,
+        "per_page":    per_page,
+        "total":       total,
+        **_tpl_ctx(request),
+    })
+
+
+@app.get("/submissions/approved", response_class=HTMLResponse)
+async def approved_packages(request: Request, page: int = 1, per_page: int = 20):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    per_page = max(10, min(per_page, 100))
+    page     = max(1, page)
+    offset   = (page - 1) * per_page
+
+    _DECIDED_STATUSES = ["authorized", "denied", "withdrawn"]
+
+    async with SessionLocal() as session:
+        if _is_admin(request):
+            total = (await session.execute(
+                select(func.count(Submission.id))
+                .where(Submission.status.in_(_DECIDED_STATUSES))
+            )).scalar() or 0
+            sub_rows = await session.execute(
+                select(Submission)
+                .where(Submission.status.in_(_DECIDED_STATUSES))
+                .order_by(Submission.created_at.desc())
+                .offset(offset).limit(per_page)
+            )
+        else:
+            sys_ids = await _user_system_ids(request, session)
+            total = (await session.execute(
+                select(func.count(Submission.id))
+                .where(Submission.system_id.in_(sys_ids))
+                .where(Submission.status.in_(_DECIDED_STATUSES))
+            )).scalar() or 0
+            sub_rows = await session.execute(
+                select(Submission)
+                .where(Submission.system_id.in_(sys_ids))
+                .where(Submission.status.in_(_DECIDED_STATUSES))
+                .order_by(Submission.created_at.desc())
+                .offset(offset).limit(per_page)
+            )
+        submissions = list(sub_rows.scalars().all())
+        total_pages = max(1, (total + per_page - 1) // per_page)
+
+        sys_ids_used = list({s.system_id for s in submissions})
+        sys_map = {}
+        if sys_ids_used:
+            sys_rows = await session.execute(
+                select(System).where(System.id.in_(sys_ids_used))
+            )
+            sys_map = {s.id: s for s in sys_rows.scalars().all()}
+
+    return templates.TemplateResponse("approved_packages.html", {
         "request":     request,
         "submissions": submissions,
         "sys_map":     sys_map,
@@ -6592,15 +11293,52 @@ async def submission_detail(request: Request, sub_id: str):
         )
         risks = list(risk_rows.scalars().all())
 
+        # Signature chain — convert to dicts inside session to avoid DetachedInstanceError
+        sig_rows = (await session.execute(
+            select(PackageSignature)
+            .where(PackageSignature.submission_id == sub_id)
+            .order_by(PackageSignature.signed_at)
+        )).scalars().all()
+        sigs_by_stage = {
+            s.stage: {
+                "stage":     s.stage,
+                "signed_by": s.signed_by,
+                "signed_at": s.signed_at,
+                "comment":   s.comment,
+                "decision":  s.decision,
+                "is_advisory": s.is_advisory,
+                "file_path": s.file_path,
+                "file_name": s.file_name,
+            }
+            for s in sig_rows
+        }
+
+        role = await _get_user_role(request, session)
+
+        _BLK = ["isso", "issm", "ao"]
+        _ADV = ["privacy_officer", "risk_manager", "contracting_officer"]
+        can_sign_stage = None
+        if role in _BLK and role not in sigs_by_stage:
+            idx = _BLK.index(role)
+            prior = _BLK[idx - 1] if idx > 0 else None
+            if prior is None or prior in sigs_by_stage:
+                can_sign_stage = role
+        elif role in _ADV and role not in sigs_by_stage:
+            can_sign_stage = role
+
         await _log_audit(session, user, "VIEW", "submission", sub_id, {})
         await session.commit()
 
     return templates.TemplateResponse("submission_detail.html", {
-        "request":    request,
-        "sub":        sub,
-        "system":     system,
-        "open_poams": open_poams,
-        "risks":      risks,
+        "request":         request,
+        "sub":             sub,
+        "system":          system,
+        "open_poams":      open_poams,
+        "risks":           risks,
+        "sigs_by_stage":   sigs_by_stage,
+        "can_sign_stage":  can_sign_stage,
+        "blocking_stages": ["isso", "issm", "ao"],
+        "advisory_stages": ["privacy_officer", "risk_manager", "contracting_officer"],
         **_tpl_ctx(request),
     })
 
@@ -6642,6 +11380,325 @@ async def update_submission(request: Request, sub_id: str):
         await session.commit()
 
     return RedirectResponse(url=f"/submissions/{sub_id}", status_code=303)
+
+
+# ── Package Signing Chain ──────────────────────────────────────────────────────
+
+_BLOCKING_STAGES  = ["isso", "issm", "ao"]
+_ADVISORY_STAGES  = ["privacy_officer", "risk_manager", "contracting_officer"]
+_SIGN_UPLOAD_DIR  = os.path.join(os.path.dirname(__file__), "..", "data", "signed_docs")
+
+
+@app.post("/submissions/{sub_id}/sign")
+async def submission_sign(request: Request, sub_id: str):
+    """Record an in-system signature on an ATO submission package."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    form = await request.form()
+    stage   = str(form.get("stage", "")).strip()
+    comment = str(form.get("comment", "")).strip()
+    decision = str(form.get("decision", "")).strip() or None  # ao only: authorized|denied
+
+    all_stages = _BLOCKING_STAGES + _ADVISORY_STAGES
+    if stage not in all_stages:
+        raise HTTPException(status_code=400, detail="Invalid stage")
+
+    async with SessionLocal() as session:
+        sub = (await session.execute(
+            select(Submission).where(Submission.id == sub_id)
+        )).scalar_one_or_none()
+        if not sub:
+            raise HTTPException(status_code=404)
+        if not await _can_access_system(sub.system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        role = await _get_user_role(request, session)
+
+        # Permission: must match the stage being signed (or admin)
+        if not _is_admin(request) and role != stage:
+            raise HTTPException(status_code=403, detail=f"Role '{role}' cannot sign stage '{stage}'")
+
+        # Blocking chain prerequisite
+        if stage in _BLOCKING_STAGES:
+            idx = _BLOCKING_STAGES.index(stage)
+            if idx > 0:
+                prior_stage = _BLOCKING_STAGES[idx - 1]
+                prior_exists = (await session.execute(
+                    select(PackageSignature.id)
+                    .where(PackageSignature.submission_id == sub_id,
+                           PackageSignature.stage == prior_stage)
+                )).scalar_one_or_none()
+                if not prior_exists:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Cannot sign as {stage} — {prior_stage} signature required first"
+                    )
+
+        # Prevent duplicate (UNIQUE constraint enforces, but give a friendly error)
+        existing = (await session.execute(
+            select(PackageSignature.id)
+            .where(PackageSignature.submission_id == sub_id, PackageSignature.stage == stage)
+        )).scalar_one_or_none()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Stage '{stage}' already signed")
+
+        is_advisory = stage in _ADVISORY_STAGES
+        sig = PackageSignature(
+            submission_id = sub_id,
+            stage         = stage,
+            signed_by     = user,
+            comment       = comment or None,
+            decision      = decision,
+            is_advisory   = is_advisory,
+        )
+        session.add(sig)
+
+        # AO signature finalizes the submission
+        if stage == "ao" and decision in ("authorized", "denied"):
+            sub.decision      = decision
+            sub.status        = "authorized" if decision == "authorized" else "denied"
+            sub.reviewer      = user
+            sub.reviewed_at   = datetime.now(timezone.utc)
+            sub.decision_date = datetime.now(timezone.utc).date().isoformat()
+            sub.updated_at    = datetime.now(timezone.utc)
+            # Update system auth status
+            sys_obj = await session.get(System, sub.system_id)
+            if sys_obj and decision == "authorized":
+                sys_obj.auth_status   = "authorized"
+                sys_obj.auth_date     = sub.decision_date
+                sys_obj.auth_expiry   = sub.ato_expiry
+                sys_obj.ato_signed_by = user
+                sys_obj.ato_signed_at = datetime.now(timezone.utc)
+                sys_obj.ato_decision  = "approved"
+                sys_obj.updated_at    = datetime.now(timezone.utc)
+            # Notify system team
+            try:
+                sys_name = sys_obj.name if sys_obj else sub.system_id
+                await _notify_system_team(
+                    session, sub.system_id,
+                    "ao_decision",
+                    f"ATO {'Authorized' if decision == 'authorized' else 'Denied'} — {sys_name}",
+                    body=comment or f"AO decision: {decision}",
+                    action_url=f"/submissions/{sub_id}",
+                    exclude_user=user,
+                )
+            except Exception as _e:
+                log.warning("AO decision notification failed: %s", _e)
+
+        await _log_audit(session, user, "SIGN", "submission", sub_id,
+                         {"stage": stage, "decision": decision})
+        await session.commit()
+
+    return RedirectResponse(url=f"/submissions/{sub_id}", status_code=303)
+
+
+@app.post("/submissions/{sub_id}/sign-upload")
+async def submission_sign_upload(request: Request, sub_id: str):
+    """Upload a signed authorization document and attach it to the AO signature."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        sub = (await session.execute(
+            select(Submission).where(Submission.id == sub_id)
+        )).scalar_one_or_none()
+        if not sub:
+            raise HTTPException(status_code=404)
+        if not await _can_access_system(sub.system_id, request, session):
+            raise HTTPException(status_code=403)
+        role = await _get_user_role(request, session)
+        if role != "ao" and not _is_admin(request):
+            raise HTTPException(status_code=403, detail="AO or admin only")
+
+        ao_sig = (await session.execute(
+            select(PackageSignature)
+            .where(PackageSignature.submission_id == sub_id,
+                   PackageSignature.stage == "ao")
+        )).scalar_one_or_none()
+        if not ao_sig:
+            raise HTTPException(status_code=400, detail="AO must sign before uploading document")
+
+        form = await request.form()
+        upload = form.get("signed_doc")
+        if not upload or not hasattr(upload, "filename"):
+            raise HTTPException(status_code=400, detail="File required")
+
+        os.makedirs(_SIGN_UPLOAD_DIR, exist_ok=True)
+        safe_name = f"{sub_id[:8]}_{upload.filename.replace(' ', '_')}"
+        dest = os.path.join(_SIGN_UPLOAD_DIR, safe_name)
+        content = await upload.read()
+        with open(dest, "wb") as f:
+            f.write(content)
+
+        ao_sig.file_path = dest
+        ao_sig.file_name = upload.filename
+        ao_sig.file_size = len(content)
+        await _log_audit(session, user, "UPLOAD", "package_signature", sub_id,
+                         {"file": upload.filename, "size": len(content)})
+        await session.commit()
+
+    return RedirectResponse(url=f"/submissions/{sub_id}", status_code=303)
+
+
+# ── ATO Package Export ─────────────────────────────────────────────────────────
+
+@app.get("/systems/{system_id}/export/package")
+async def export_ato_package(request: Request, system_id: str):
+    """Download a ZIP of all finalized ATO documents for a system."""
+    import zipfile, io
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+        sys_obj = await session.get(System, system_id)
+        if not sys_obj:
+            raise HTTPException(status_code=404)
+
+        docs = (await session.execute(
+            select(AtoDocument)
+            .where(AtoDocument.system_id == system_id,
+                   AtoDocument.status.in_(["finalized", "approved"]))
+            .order_by(AtoDocument.doc_type)
+        )).scalars().all()
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for doc in docs:
+                if doc.file_path and os.path.exists(doc.file_path):
+                    fname = f"{doc.doc_type}_{os.path.basename(doc.file_path)}"
+                    zf.write(doc.file_path, fname)
+                elif doc.content:
+                    fname = f"{doc.doc_type}_{doc.title.replace(' ','_')[:40]}.txt"
+                    zf.writestr(fname, doc.content)
+            # Include ATO letter if a signed doc exists
+            latest_sub = (await session.execute(
+                select(Submission).where(Submission.system_id == system_id,
+                                        Submission.status == "authorized")
+                .order_by(Submission.created_at.desc()).limit(1)
+            )).scalar_one_or_none()
+            if latest_sub:
+                ao_sig = (await session.execute(
+                    select(PackageSignature)
+                    .where(PackageSignature.submission_id == latest_sub.id,
+                           PackageSignature.stage == "ao")
+                )).scalar_one_or_none()
+                if ao_sig and ao_sig.file_path and os.path.exists(ao_sig.file_path):
+                    zf.write(ao_sig.file_path, f"ATO_LETTER_{ao_sig.file_name or 'signed.pdf'}")
+
+        buf.seek(0)
+        safe = sys_obj.name.replace(" ", "_").replace("/", "-")[:30]
+        await _log_audit(session, user, "EXPORT", "ato_package", system_id, {})
+        await session.commit()
+
+    from starlette.responses import Response
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="ATO_Package_{safe}.zip"'},
+    )
+
+
+@app.get("/systems/{system_id}/export/ato-letter")
+async def export_ato_letter(request: Request, system_id: str):
+    """Generate and download a plain-text ATO authorization letter."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+        sys_obj = await session.get(System, system_id)
+        if not sys_obj:
+            raise HTTPException(status_code=404)
+
+        latest_sub = (await session.execute(
+            select(Submission).where(Submission.system_id == system_id)
+            .order_by(Submission.created_at.desc()).limit(1)
+        )).scalar_one_or_none()
+
+        ao_sig = None
+        if latest_sub:
+            ao_sig = (await session.execute(
+                select(PackageSignature)
+                .where(PackageSignature.submission_id == latest_sub.id,
+                       PackageSignature.stage == "ao")
+            )).scalar_one_or_none()
+            # Serve uploaded signed doc directly if available
+            if ao_sig and ao_sig.file_path and os.path.exists(ao_sig.file_path):
+                from starlette.responses import FileResponse
+                return FileResponse(
+                    ao_sig.file_path,
+                    filename=ao_sig.file_name or "ATO_Letter.pdf",
+                )
+
+        # Generate plaintext letter
+        now = datetime.now(timezone.utc)
+        auth_date = (ao_sig.signed_at.strftime("%B %d, %Y") if ao_sig
+                     else now.strftime("%B %d, %Y"))
+        ao_name = ao_sig.signed_by if ao_sig else "[Authorizing Official]"
+        expiry = (latest_sub.ato_expiry if latest_sub and latest_sub.ato_expiry
+                  else "[Not specified]")
+        decision = (latest_sub.decision or "pending").upper() if latest_sub else "PENDING"
+        sub_type = (latest_sub.submission_type.replace("_", " ").title()
+                    if latest_sub else "Initial")
+
+        letter = f"""AUTHORIZATION TO OPERATE LETTER
+{'=' * 60}
+
+DATE:            {auth_date}
+SYSTEM NAME:     {sys_obj.name}
+SYSTEM ID:       {sys_obj.inventory_number or sys_obj.id[:8]}
+SUBMISSION TYPE: {sub_type}
+DECISION:        {decision}
+ATO EXPIRY:      {expiry}
+
+{'=' * 60}
+
+AUTHORIZATION DECISION
+
+Having reviewed the Security Authorization Package for {sys_obj.name},
+including the System Security Plan, Security Assessment Report, Plan
+of Action and Milestones, and all supporting documentation, I hereby
+{('grant' if decision == 'AUTHORIZED' else 'deny')} authorization to operate this system.
+
+{'This authorization is granted for a period ending ' + expiry + '.' if decision == 'AUTHORIZED' else 'Authorization is denied pending remediation of identified deficiencies.'}
+
+SYSTEM DETAILS
+--------------
+Security Category:  {getattr(sys_obj, 'impact_level', None) or 'Not specified'}
+Authorization Type: {sub_type}
+Primary Catalog:    {getattr(sys_obj, 'primary_catalog', 'nist80053r5')}
+
+RESIDUAL RISK ACCEPTANCE
+{latest_sub.package_notes or 'See Security Assessment Report for residual risk details.' if latest_sub else ''}
+
+{'=' * 60}
+
+AUTHORIZING OFFICIAL SIGNATURE
+{ao_name}
+Authorizing Official
+Date: {auth_date}
+
+{'=' * 60}
+Generated by BLACKSITE GRC Platform — {now.strftime('%Y-%m-%d %H:%M UTC')}
+"""
+        safe = sys_obj.name.replace(" ", "_").replace("/", "-")[:30]
+        await _log_audit(session, user, "EXPORT", "ato_letter", system_id, {})
+        await session.commit()
+
+    from starlette.responses import Response
+    return Response(
+        content=letter.encode("utf-8"),
+        media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="ATO_Letter_{safe}.txt"'},
+    )
 
 
 # ── RSS / Advisory Feed ────────────────────────────────────────────────────────
@@ -6926,7 +11983,11 @@ async def api_ato_expiry_alerts(request: Request):
     Dedupe: one alert per system per threshold window per day (via SystemSettings key).
     """
     user = request.headers.get(_REMOTE_USER_HDR, "")
-    if not user or not _is_admin(request):
+    if not user:
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as _chk:
+        _alert_role = await _get_user_role(request, _chk)
+    if not _is_admin(request) and _alert_role not in ("ao", "issm", "ciso"):
         raise HTTPException(status_code=403)
 
     today = date.today()
@@ -7242,71 +12303,86 @@ async def api_feeds(request: Request):
 
 @app.get("/api/ticker")
 async def api_ticker(request: Request):
-    """Security advisory ticker feed — 60-minute cached, combines internal alerts + CISA KEV."""
+    """Security advisory ticker — hourly per-user cache, alerts scoped to user's systems."""
     user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
 
     now = time.time()
-    if now - _ticker_cache["ts"] < 3600:
-        return JSONResponse(_ticker_cache)
+    cached = _ticker_cache.get(user)
+    if cached and now - cached["ts"] < 3600:
+        return JSONResponse(cached)
 
     items = []
-
-    # Internal GRC alerts (reuse alert query logic)
     today_str = date.today().isoformat()
     in_90     = (date.today() + timedelta(days=90)).isoformat()
 
     async with SessionLocal() as session:
-        overdue_ct = (await session.execute(
-            select(func.count(PoamItem.id))
-            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
-            .where(PoamItem.scheduled_completion.isnot(None))
-            .where(PoamItem.scheduled_completion < today_str)
-        )).scalar() or 0
-        if overdue_ct:
-            items.append({"text": f"{overdue_ct} POA&M item{'s' if overdue_ct!=1 else ''} overdue — remediation milestones past due", "level": "critical"})
+        # Scope all GRC alerts to systems this user can access
+        sys_ids = list(await _user_system_ids(request, session))
+        has_systems = bool(sys_ids)
 
-        crit_ct = (await session.execute(
-            select(func.count(PoamItem.id))
-            .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
-            .where(PoamItem.severity.in_(_CRIT_HIGH_SEVS))
-        )).scalar() or 0
-        if crit_ct:
-            items.append({"text": f"{crit_ct} Critical/High severity weakness{'es' if crit_ct!=1 else ''} open — priority remediation required", "level": "high"})
+        if has_systems:
+            overdue_ct = (await session.execute(
+                select(func.count(PoamItem.id))
+                .where(PoamItem.system_id.in_(sys_ids))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
+                .where(PoamItem.scheduled_completion.isnot(None))
+                .where(PoamItem.scheduled_completion < today_str)
+            )).scalar() or 0
+            if overdue_ct:
+                items.append({"text": f"{overdue_ct} POA&M item{'s' if overdue_ct!=1 else ''} overdue — remediation milestones past due", "level": "critical"})
 
-        expired_ct = (await session.execute(
-            select(func.count(System.id)).where(System.auth_status == "expired")
-        )).scalar() or 0
-        if expired_ct:
-            items.append({"text": f"{expired_ct} system ATO{'s' if expired_ct!=1 else ''} expired — reauthorization required", "level": "critical"})
+            crit_ct = (await session.execute(
+                select(func.count(PoamItem.id))
+                .where(PoamItem.system_id.in_(sys_ids))
+                .where(PoamItem.status.in_(POAM_OPEN_STATUSES))
+                .where(PoamItem.severity.in_(_CRIT_HIGH_SEVS))
+            )).scalar() or 0
+            if crit_ct:
+                items.append({"text": f"{crit_ct} Critical/High severity weakness{'es' if crit_ct!=1 else ''} open — priority remediation required", "level": "high"})
 
-        expiring_ct = (await session.execute(
-            select(func.count(System.id))
-            .where(System.auth_status == "authorized")
-            .where(System.auth_expiry.isnot(None))
-            .where(System.auth_expiry <= in_90)
-            .where(System.auth_expiry >= today_str)
-        )).scalar() or 0
-        if expiring_ct:
-            items.append({"text": f"{expiring_ct} ATO{'s' if expiring_ct!=1 else ''} expiring within 90 days — begin reauthorization package", "level": "warn"})
+            expired_ct = (await session.execute(
+                select(func.count(System.id))
+                .where(System.id.in_(sys_ids))
+                .where(System.auth_status == "expired")
+            )).scalar() or 0
+            if expired_ct:
+                items.append({"text": f"{expired_ct} system ATO{'s' if expired_ct!=1 else ''} expired — reauthorization required", "level": "critical"})
 
-        # System counts for static banner
-        sys_total  = (await session.execute(select(func.count(System.id)))).scalar() or 0
-        ato_active = (await session.execute(
-            select(func.count(System.id)).where(System.auth_status == "authorized")
-        )).scalar() or 0
+            expiring_ct = (await session.execute(
+                select(func.count(System.id))
+                .where(System.id.in_(sys_ids))
+                .where(System.auth_status == "authorized")
+                .where(System.auth_expiry.isnot(None))
+                .where(System.auth_expiry <= in_90)
+                .where(System.auth_expiry >= today_str)
+            )).scalar() or 0
+            if expiring_ct:
+                items.append({"text": f"{expiring_ct} ATO{'s' if expiring_ct!=1 else ''} expiring within 90 days — begin reauthorization package", "level": "warn"})
+
+        # Totals scoped to user's systems for static banner
+        if has_systems:
+            sys_total  = len(sys_ids)
+            ato_active = (await session.execute(
+                select(func.count(System.id))
+                .where(System.id.in_(sys_ids))
+                .where(System.auth_status == "authorized")
+            )).scalar() or 0
+        else:
+            sys_total  = 0
+            ato_active = 0
 
     # Static platform context items — always shown
     static_items = [
-        {"text": f"BLACKSITE GRC Platform  ·  NIST SP 800-53 Rev 5  ·  1,196 controls indexed  ·  {sys_total} system{'s' if sys_total!=1 else ''} registered", "level": "info"},
+        {"text": f"BLACKSITE GRC Platform  ·  NIST SP 800-53 Rev 5  ·  1,196 controls indexed  ·  {sys_total} system{'s' if sys_total!=1 else ''} in your portfolio", "level": "info"},
         {"text": "RMF 7-Step Lifecycle  ·  Prepare  →  Categorize  →  Select  →  Implement  →  Assess  →  Authorize  →  Monitor", "level": "info"},
-        {"text": f"FIPS 199 Security Categorization  ·  Confidentiality · Integrity · Availability  ·  {ato_active} ATO{'s' if ato_active!=1 else ''} active", "level": "info"},
+        {"text": f"FIPS 199 Security Categorization  ·  Confidentiality · Integrity · Availability  ·  {ato_active} ATO{'s' if ato_active!=1 else ''} active in your portfolio", "level": "info"},
         {"text": "OMB Circular A-130  ·  FISMA 2014  ·  NIST SP 800-37r2  ·  NIST SP 800-171  ·  FedRAMP-aligned", "level": "info"},
     ]
     items = static_items + items
 
-    # CISA KEV — latest 8 entries
+    # CISA KEV — latest 8 entries (global, external feed)
     try:
         import httpx
         async with httpx.AsyncClient(timeout=8.0) as client:
@@ -7328,8 +12404,21 @@ async def api_ticker(request: Request):
     except Exception:
         pass  # graceful degradation — CISA feed optional
 
-    _ticker_cache.update({"ts": now, "items": items, "count": len(items)})
-    return JSONResponse(_ticker_cache)
+    result = {"ts": now, "items": items, "count": len(items)}
+    _ticker_cache[user] = result
+    return JSONResponse(result)
+
+
+def _streak_tier(streak: int) -> dict:
+    """Return display tier metadata for a quiz streak count."""
+    if streak >= 365: return {"tier": "legend",   "label": "Legend",   "color": "#ffd700", "icon": "👑"}
+    if streak >= 180: return {"tier": "diamond",  "label": "Diamond",  "color": "#b030ff", "icon": "⭐"}
+    if streak >=  90: return {"tier": "platinum", "label": "Platinum", "color": "#00e5ff", "icon": "💎"}
+    if streak >=  30: return {"tier": "gold",     "label": "Gold",     "color": "#ffd700", "icon": "🥇"}
+    if streak >=  10: return {"tier": "silver",   "label": "Silver",   "color": "#a8a9ad", "icon": "🥈"}
+    if streak >=   3: return {"tier": "bronze",   "label": "Bronze",   "color": "#cd7f32", "icon": "🥉"}
+    if streak >=   1: return {"tier": "active",   "label": "Active",   "color": "#ff6d00", "icon": "🔥"}
+    return {"tier": "none", "label": "", "color": "", "icon": ""}
 
 
 @app.get("/api/quiz/status")
@@ -7337,7 +12426,7 @@ async def api_quiz_status(request: Request):
     """Daily quiz status for the sidebar widget — streak, done, score."""
     user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
-        return JSONResponse({"done": False, "score": 0, "passed": False, "streak": 0, "question_count": 15})
+        return JSONResponse({"done": False, "score": 0, "passed": False, "streak": 0, "question_count": 10})
 
     today   = date.today().isoformat()
     past_30 = [(date.today() - timedelta(days=i)).isoformat() for i in range(30)]
@@ -7360,15 +12449,67 @@ async def api_quiz_status(request: Request):
             break
 
     quiz_cfg       = CONFIG.get("quiz", {})
-    question_count = quiz_cfg.get("question_count", 15)
+    question_count = quiz_cfg.get("question_count", 10)
 
     return JSONResponse({
         "done":           today_activity is not None,
         "score":          today_activity.score  if today_activity else 0,
         "passed":         today_activity.passed if today_activity else False,
         "streak":         streak,
+        "streak_tier":    _streak_tier(streak),
         "question_count": question_count,
     })
+
+
+# ── Skill Builder — external training resource tracking ─────────────────────
+
+_TRAINING_RESOURCES: dict[str, str] = {
+    "niccs":     "https://niccs.cisa.gov/training",
+    "dod_cyber": "https://public.cyber.mil/training/",
+    "sans_aces": "https://www.sans.org/cyberaces/",
+}
+
+
+@app.post("/api/training/click")
+async def api_training_click(request: Request):
+    """Log an employee click on an external training resource. Returns the target URL."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    body        = await request.json()
+    resource_id = body.get("resource", "")
+    url         = _TRAINING_RESOURCES.get(resource_id)
+    if not url:
+        raise HTTPException(status_code=400, detail="Unknown training resource")
+    async with SessionLocal() as session:
+        session.add(TrainingClick(remote_user=user, resource_id=resource_id))
+        await session.commit()
+    return JSONResponse({"url": url})
+
+
+@app.get("/api/admin/training-stats")
+async def api_training_stats(request: Request):
+    """Manager/admin view — training resource engagement per user (last 90 days)."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    tpl = _tpl_ctx(request)
+    if tpl.get("user_role") not in ("admin", "ciso", "issm", "isso"):
+        raise HTTPException(status_code=403)
+    cutoff = datetime.utcnow() - timedelta(days=90)
+    async with SessionLocal() as session:
+        rows = await session.execute(
+            select(TrainingClick)
+            .where(TrainingClick.clicked_at >= cutoff)
+            .order_by(TrainingClick.clicked_at.desc())
+        )
+        clicks = rows.scalars().all()
+    # Aggregate: user → resource → count
+    stats: dict = {}
+    for c in clicks:
+        stats.setdefault(c.remote_user, {})
+        stats[c.remote_user][c.resource_id] = stats[c.remote_user].get(c.resource_id, 0) + 1
+    return JSONResponse({"stats": stats, "total_clicks": len(clicks)})
 
 
 # ── RMF Lifecycle Tracker ───────────────────────────────────────────────────────
@@ -7512,7 +12653,117 @@ async def rmf_update_step(request: Request, system_id: str, step: str,
         await _log_audit(session, user, "UPDATE", "rmf_record", rid, details)
         await session.commit()
 
-    return RedirectResponse(url=f"/rmf/{system_id}", status_code=303)
+    return RedirectResponse(url=f"/systems/{system_id}/auth-status", status_code=303)
+
+
+@app.get("/systems/{system_id}/auth-status", response_class=HTMLResponse)
+async def system_auth_status(request: Request, system_id: str):
+    """System-specific authorization lifecycle status page (replaces /rmf/{id})."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+
+        sys_obj = await session.get(System, system_id)
+        if not sys_obj:
+            raise HTTPException(status_code=404)
+
+        rr = await session.execute(
+            select(RmfRecord).where(RmfRecord.system_id == system_id)
+        )
+        records = {rec.step: rec for rec in rr.scalars().all()}
+
+        audit_rows = await session.execute(
+            select(AuditLog)
+            .where(AuditLog.resource_type == "rmf_record")
+            .where(AuditLog.resource_id.like(f"{system_id}%"))
+            .order_by(AuditLog.timestamp.desc())
+            .limit(21)
+        )
+        all_audit = list(audit_rows.scalars().all())
+
+        # Applicable roles for this system (passed to template for team display)
+        applicable_roles = _applicable_roles_for_system(sys_obj)
+
+        # Current team assignments
+        team_rows = await session.execute(
+            select(ProgramRoleAssignment)
+            .where(ProgramRoleAssignment.system_id == system_id)
+            .where(ProgramRoleAssignment.status == "approved")
+            .order_by(ProgramRoleAssignment.program_role)
+        )
+        team_assignments = list(team_rows.scalars().all())
+
+        complete_ct = sum(1 for s in _RMF_STEP_KEYS if records.get(s) and records[s].status == "complete")
+        ctx = await _full_ctx(
+            request, session,
+            system=sys_obj,
+            records=records,
+            rmf_steps=RMF_STEPS,
+            step_keys=_RMF_STEP_KEYS,
+            complete_ct=complete_ct,
+            all_audit=all_audit,
+            applicable_roles=applicable_roles,
+            team_assignments=team_assignments,
+        )
+
+    return templates.TemplateResponse("auth_status.html", {"request": request, **ctx})
+
+
+@app.post("/systems/{system_id}/auth-status/step/{step}")
+async def system_auth_status_update_step(
+    request: Request, system_id: str, step: str,
+    status: str = Form("not_started"),
+    owner: str = Form(""),
+    target_date: str = Form(""),
+    actual_date: str = Form(""),
+    evidence: str = Form(""),
+):
+    """Update an authorization lifecycle step for a system."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    if step not in _RMF_STEP_KEYS:
+        raise HTTPException(status_code=400, detail="Invalid step")
+    if status not in {"not_started", "in_progress", "complete", "waived"}:
+        raise HTTPException(status_code=400, detail="Invalid status")
+
+    async with SessionLocal() as session:
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403)
+        role = await _get_user_role(request, session)
+        _require_role(role, ["admin", "ao", "ciso", "issm", "isso", "sca", "system_owner", "risk_manager"])
+
+        existing = (await session.execute(
+            select(RmfRecord)
+            .where(RmfRecord.system_id == system_id)
+            .where(RmfRecord.step == step)
+        )).scalar_one_or_none()
+
+        if existing:
+            existing.status      = status
+            existing.owner       = owner or None
+            existing.target_date = target_date or None
+            existing.actual_date = actual_date or None
+            existing.evidence    = evidence or None
+            rid = f"{system_id}:{step}"
+        else:
+            rec = RmfRecord(
+                id=_new_id(), system_id=system_id, step=step, status=status,
+                owner=owner or None, target_date=target_date or None,
+                actual_date=actual_date or None, evidence=evidence or None,
+                created_by=user,
+            )
+            session.add(rec)
+            rid = f"{system_id}:{step}"
+
+        await _log_audit(session, user, "UPDATE", "rmf_record", rid, {"step": step, "status": status})
+        await session.commit()
+
+    return RedirectResponse(url=f"/systems/{system_id}/auth-status", status_code=303)
 
 
 # ── Admin: User Management ──────────────────────────────────────────────────────
@@ -7633,7 +12884,7 @@ async def admin_add_user(request: Request,
                     detail=f"Email '{email}' is reserved until "
                            f"{_resv_email.hold_until.strftime('%Y-%m-%d')} after removal. "
                            f"Request an override at /admin/users/reservations.")
-        _dname = display_name.strip() or username.replace(".", " ").replace("_", " ").title()
+        _dname = display_name.strip().title() or username.replace(".", " ").replace("_", " ").title()
         existing = await session.get(UserProfile, username)
         if existing:
             existing.display_name = _dname or existing.display_name
@@ -7727,9 +12978,21 @@ async def admin_provision_user(
 
     admin      = request.headers.get(_REMOTE_USER_HDR, "")
     username   = username.strip().lower()
-    role       = role if role in {"employee","auditor","bcdr","system_owner","isso","issm","sca","ao"} else "employee"
+    # Admin-only roles: executive tier accounts must be created by a config-level admin.
+    # AO/CISO provisioners are restricted to non-executive roles.
+    _EXEC_TIER_ROLES  = {"ao", "ciso", "issm"}
+    _ALL_PROV_ROLES   = {
+        "employee", "auditor", "bcdr", "system_owner", "isso", "sca",
+        "pen_tester", "data_owner", "pmo", "incident_responder",
+        "privacy_officer", "risk_manager", "developer", "contracting_officer", "vendor",
+    }
+    if _effective_is_admin(request):
+        role = role if role in (_ALL_PROV_ROLES | _EXEC_TIER_ROLES) else "employee"
+    else:
+        # Non-admin provisioners (AO, CISO) cannot create executive-tier accounts
+        role = role if role in _ALL_PROV_ROLES else "employee"
     email      = email.strip()
-    dname      = display_name.strip() or username.replace(".", " ").replace("_", " ").title()
+    dname      = display_name.strip().title() or username.replace(".", " ").replace("_", " ").title()
 
     if not username:
         raise HTTPException(status_code=400, detail="Username required")
@@ -7958,6 +13221,437 @@ async def admin_bulk_role(request: Request):
     return JSONResponse({"status": "ok", "count": len(usernames)})
 
 
+@app.post("/admin/external-engagements/grant")
+async def admin_grant_engagement(request: Request):
+    """Grant a vendor or contracting_officer user scoped access to a system."""
+    if not _effective_is_admin(request):
+        raise HTTPException(status_code=403)
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
+    form = await request.form()
+    remote_user  = str(form.get("remote_user", "")).strip()
+    system_id    = str(form.get("system_id", "")).strip()
+    role_type    = str(form.get("role_type", "vendor")).strip()
+    internal_role = str(form.get("internal_role", "")).strip() or None
+    scope_note   = str(form.get("scope_note", "")).strip() or None
+    expires_at   = str(form.get("expires_at", "")).strip() or None
+    if not remote_user or not system_id or role_type not in ("vendor", "contracting_officer"):
+        raise HTTPException(status_code=400, detail="remote_user, system_id, and valid role_type required")
+    from datetime import datetime as dt
+    exp_dt = dt.fromisoformat(expires_at) if expires_at else None
+    async with SessionLocal() as session:
+        existing = (await session.execute(
+            select(ExternalEngagement).where(
+                ExternalEngagement.remote_user == remote_user,
+                ExternalEngagement.system_id == system_id,
+            )
+        )).scalar_one_or_none()
+        if existing:
+            existing.status       = "active"
+            existing.role_type    = role_type
+            existing.internal_role = internal_role
+            existing.scope_note   = scope_note
+            existing.expires_at   = exp_dt
+            existing.granted_by   = admin
+        else:
+            session.add(ExternalEngagement(
+                system_id=system_id, remote_user=remote_user,
+                role_type=role_type, internal_role=internal_role,
+                scope_note=scope_note, expires_at=exp_dt, granted_by=admin,
+            ))
+        await _log_audit(session, admin, "CREATE", "external_engagement", system_id,
+                         {"remote_user": remote_user, "role_type": role_type})
+        await session.commit()
+    return RedirectResponse(f"/admin/users/{remote_user}", status_code=303)
+
+
+@app.post("/admin/external-engagements/revoke")
+async def admin_revoke_engagement(request: Request):
+    """Revoke a vendor or contracting_officer user's system access."""
+    if not _effective_is_admin(request):
+        raise HTTPException(status_code=403)
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
+    form = await request.form()
+    eng_id = str(form.get("engagement_id", "")).strip()
+    if not eng_id:
+        raise HTTPException(status_code=400, detail="engagement_id required")
+    async with SessionLocal() as session:
+        eng = await session.get(ExternalEngagement, int(eng_id))
+        if not eng:
+            raise HTTPException(status_code=404)
+        redirect_user = eng.remote_user
+        eng.status = "revoked"
+        await _log_audit(session, admin, "UPDATE", "external_engagement", eng.system_id,
+                         {"remote_user": eng.remote_user, "action": "revoked"})
+        await session.commit()
+    return RedirectResponse(f"/admin/users/{redirect_user}", status_code=303)
+
+
+# ── Phase 34: Deployment Profiles ─────────────────────────────────────────────
+
+_BUILTIN_PROFILES = [
+    {
+        "slug":            "federal_nist",
+        "name":            "Federal / NIST RMF",
+        "description":     "US federal and FISMA-covered systems. Enables NIST SP 800-53, FedRAMP, NIST Privacy, DoD SRG, and SP 800-171. Default POA&M workflow with ATO lifecycle.",
+        "primary_catalog": "nist80053r5",
+        "framework_sns":   ["nist80053r5","nist_low","nist_mod","nist_high","nist_all","nist_privacy","fedramp","dod_srg","sp800171"],
+        "terminology":     {"poam":"POA&M","poam_full":"Plan of Action & Milestones","weakness":"Weakness","finding":"Finding"},
+        "suggested_roles": ["admin","ao","ciso","issm","isso","sca","auditor","system_owner"],
+    },
+    {
+        "slug":            "iso_27001",
+        "name":            "ISO/IEC 27001 — ISMS",
+        "description":     "ISO 27001 Information Security Management System. Enables ISO 27001 Annex A controls, ISO 27701 (Privacy), ISO 27017/27018 (Cloud). Uses Corrective Action workflow.",
+        "primary_catalog": "iso27001",
+        "framework_sns":   ["iso27001","iso27001_annex_a","iso27001_core","iso27701","iso27017","iso27018"],
+        "terminology":     {"poam":"Corrective Action","poam_full":"Corrective Action Record","weakness":"Nonconformity","finding":"Observation"},
+        "suggested_roles": ["admin","ciso","issm","isso","auditor","system_owner"],
+    },
+    {
+        "slug":            "healthcare_hipaa",
+        "name":            "Healthcare — HIPAA / HITECH",
+        "description":     "Healthcare organizations handling PHI/ePHI. Enables HIPAA Security Rule controls. Uses Corrective Action Plan (CAP) workflow per HHS guidance.",
+        "primary_catalog": "hipaa",
+        "framework_sns":   ["hipaa","nist80053r5","nist_mod"],
+        "terminology":     {"poam":"Corrective Action Plan","poam_full":"Corrective Action Plan (CAP)","weakness":"Deficiency","finding":"Finding"},
+        "suggested_roles": ["admin","ciso","issm","isso","auditor","system_owner"],
+    },
+    {
+        "slug":            "defense_cmmc",
+        "name":            "Defense Industrial Base — CMMC",
+        "description":     "Defense contractors handling CUI. Enables CMMC 2.0 (L1/L2/L3), NIST SP 800-171, and NIST SP 800-53. POA&M workflow required for CMMC Level 2+.",
+        "primary_catalog": "cmmc2",
+        "framework_sns":   ["cmmc2","cmmc_l1","cmmc_l2","cmmc_l3","sp800171","nist80053r5","nist_mod"],
+        "terminology":     {"poam":"POA&M","poam_full":"Plan of Action & Milestones","weakness":"Weakness","finding":"Finding"},
+        "suggested_roles": ["admin","ao","ciso","issm","isso","sca","system_owner"],
+    },
+    {
+        "slug":            "pci_dss",
+        "name":            "PCI DSS — Payment Card Industry",
+        "description":     "Organizations processing, storing, or transmitting cardholder data. Enables PCI DSS controls with Remediation Plan workflow.",
+        "primary_catalog": "pci_dss",
+        "framework_sns":   ["pci_dss","cis8","cis_ig1","cis_ig2","cis_ig3"],
+        "terminology":     {"poam":"Remediation Plan","poam_full":"Remediation Plan","weakness":"Finding","finding":"Finding"},
+        "suggested_roles": ["admin","ciso","issm","isso","auditor","system_owner"],
+    },
+]
+
+async def _seed_deployment_profiles(session: AsyncSession) -> None:
+    """Seed built-in deployment profiles (INSERT OR IGNORE)."""
+    import json as _json
+    for p in _BUILTIN_PROFILES:
+        existing = (await session.execute(
+            select(DeploymentProfile).where(DeploymentProfile.slug == p["slug"])
+        )).scalar_one_or_none()
+        if not existing:
+            session.add(DeploymentProfile(
+                slug            = p["slug"],
+                name            = p["name"],
+                description     = p["description"],
+                is_builtin      = True,
+                is_active       = False,
+                primary_catalog = p["primary_catalog"],
+                framework_sns   = _json.dumps(p["framework_sns"]),
+                terminology     = _json.dumps(p["terminology"]),
+                suggested_roles = _json.dumps(p["suggested_roles"]),
+            ))
+    await session.commit()
+
+
+@app.get("/admin/programs", response_class=HTMLResponse)
+async def admin_programs(request: Request):
+    """Admin deployment profiles — activate/deactivate compliance program bundles."""
+    if not _effective_is_admin(request):
+        raise HTTPException(status_code=403)
+    async with SessionLocal() as session:
+        profiles = (await session.execute(
+            select(DeploymentProfile).order_by(DeploymentProfile.id)
+        )).scalars().all()
+        # Framework counts per profile (for display)
+        import json as _json
+        profile_data = []
+        for p in profiles:
+            sns = _json.loads(p.framework_sns or "[]")
+            terms = _json.loads(p.terminology or "{}")
+            roles = _json.loads(p.suggested_roles or "[]")
+            # Count org-enabled frameworks that belong to this profile
+            enabled_count = 0
+            if sns:
+                rows = (await session.execute(
+                    select(func.count(OrgEnabledFramework.id))
+                    .join(ComplianceFramework, ComplianceFramework.id == OrgEnabledFramework.framework_id)
+                    .where(ComplianceFramework.short_name.in_(sns))
+                    .where(OrgEnabledFramework.is_enabled == True)
+                )).scalar() or 0
+                enabled_count = rows
+            profile_data.append({
+                "profile":       p,
+                "framework_sns": sns,
+                "terms":         terms,
+                "roles":         roles,
+                "enabled_count": enabled_count,
+                "total_sns":     len(sns),
+            })
+        ctx = await _full_ctx(request, session,
+            page_title="Deployment Profiles",
+            profile_data=profile_data,
+        )
+    return templates.TemplateResponse("admin_programs.html", ctx)
+
+
+@app.post("/admin/programs/{profile_id}/activate")
+async def admin_program_activate(request: Request, profile_id: int):
+    """Activate a deployment profile — enables all its frameworks in org_enabled_frameworks."""
+    if not _effective_is_admin(request):
+        raise HTTPException(status_code=403)
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    import json as _json
+
+    async with SessionLocal() as session:
+        profile = await session.get(DeploymentProfile, profile_id)
+        if not profile:
+            raise HTTPException(status_code=404)
+
+        sns = _json.loads(profile.framework_sns or "[]")
+
+        # Enable each framework in org_enabled_frameworks
+        if sns:
+            fw_rows = (await session.execute(
+                select(ComplianceFramework).where(ComplianceFramework.short_name.in_(sns))
+            )).scalars().all()
+            now = datetime.now(timezone.utc)
+            for fw in fw_rows:
+                oef = (await session.execute(
+                    select(OrgEnabledFramework).where(OrgEnabledFramework.framework_id == fw.id)
+                )).scalar_one_or_none()
+                if oef:
+                    oef.is_enabled   = True
+                    oef.enabled_by   = user
+                    oef.enabled_at   = now
+                    oef.disabled_at  = None
+                    oef.disabled_by  = None
+                    oef.disable_note = None
+                else:
+                    session.add(OrgEnabledFramework(
+                        framework_id = fw.id,
+                        is_enabled   = True,
+                        enabled_by   = user,
+                        enabled_at   = now,
+                    ))
+                # Remove from disabled dirs
+                _disabled_fw_dirs.discard(fw.short_name)
+
+        profile.is_active    = True
+        profile.activated_by = user
+        profile.activated_at = datetime.now(timezone.utc)
+        await session.commit()
+
+        await _log_audit(session, user, "program_activate",
+                         "deployment_profile", str(profile_id),
+                         {"name": profile.name})
+
+    return RedirectResponse("/admin/programs", status_code=303)
+
+
+@app.post("/admin/programs/{profile_id}/deactivate")
+async def admin_program_deactivate(request: Request, profile_id: int):
+    """Deactivate a deployment profile — marks it inactive (does NOT disable frameworks)."""
+    if not _effective_is_admin(request):
+        raise HTTPException(status_code=403)
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+
+    async with SessionLocal() as session:
+        profile = await session.get(DeploymentProfile, profile_id)
+        if not profile:
+            raise HTTPException(status_code=404)
+        profile.is_active    = False
+        profile.activated_by = None
+        profile.activated_at = None
+        await session.commit()
+        await _log_audit(session, user, "program_deactivate",
+                         "deployment_profile", str(profile_id),
+                         {"name": profile.name})
+
+    return RedirectResponse("/admin/programs", status_code=303)
+
+
+# ── Phase 33: Org Framework Management ────────────────────────────────────────
+
+@app.get("/admin/frameworks", response_class=HTMLResponse)
+async def admin_frameworks(request: Request):
+    """Org-level framework ceiling — admin enables/disables frameworks here."""
+    if not _effective_is_admin(request):
+        raise HTTPException(status_code=403)
+    async with SessionLocal() as session:
+        rows = await session.execute(
+            select(ComplianceFramework, OrgEnabledFramework)
+            .outerjoin(OrgEnabledFramework,
+                       OrgEnabledFramework.framework_id == ComplianceFramework.id)
+            .where(ComplianceFramework.is_active == True)
+            .order_by(ComplianceFramework.category, ComplianceFramework.kind,
+                      ComplianceFramework.name)
+        )
+        frameworks = []
+        for fw, oef in rows.all():
+            frameworks.append({
+                "fw": fw,
+                "enabled": oef.is_enabled if oef else True,
+                "disabled_at": oef.disabled_at if oef else None,
+                "disabled_by": oef.disabled_by if oef else None,
+                "disable_note": oef.disable_note if oef else None,
+            })
+        # Data attribute definitions for the second panel
+        attr_defs = (await session.execute(
+            select(DataAttributeDefinition)
+            .order_by(DataAttributeDefinition.sort_order)
+        )).scalars().all()
+        ctx = await _full_ctx(request, session,
+            page_title="Framework Management",
+            frameworks=frameworks,
+            attr_defs=attr_defs,
+        )
+    return templates.TemplateResponse("admin_frameworks.html", ctx)
+
+
+@app.post("/admin/frameworks/{framework_id}/toggle")
+async def admin_framework_toggle(request: Request, framework_id: str):
+    """Enable or disable a framework at org level. Disable immediately suppresses controls."""
+    if not _effective_is_admin(request):
+        raise HTTPException(status_code=403)
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
+    form = await request.form()
+    action = str(form.get("action", "")).strip()   # enable | disable
+    note   = str(form.get("note", "")).strip() or None
+    if action not in ("enable", "disable"):
+        raise HTTPException(status_code=400, detail="action must be 'enable' or 'disable'")
+    now = datetime.now(timezone.utc)
+    async with SessionLocal() as session:
+        fw = await session.get(ComplianceFramework, framework_id)
+        if not fw:
+            raise HTTPException(status_code=404)
+        oef = (await session.execute(
+            select(OrgEnabledFramework)
+            .where(OrgEnabledFramework.framework_id == framework_id)
+        )).scalar_one_or_none()
+        if not oef:
+            oef = OrgEnabledFramework(framework_id=framework_id, enabled_by=admin)
+            session.add(oef)
+        if action == "disable":
+            oef.is_enabled = False
+            oef.disabled_at = now
+            oef.disabled_by = admin
+            oef.disable_note = note
+            await _suppress_framework(session, framework_id, admin, note or "")
+        else:
+            oef.is_enabled = True
+            oef.disabled_at = None
+            oef.disabled_by = None
+            oef.disable_note = None
+            oef.enabled_by = admin
+            oef.enabled_at = now
+            await _restore_framework(session, framework_id, admin)
+        await _log_audit(session, admin, "UPDATE", "org_enabled_framework", framework_id,
+                         {"action": action, "framework": fw.short_name, "note": note})
+        await session.commit()
+    return RedirectResponse("/admin/frameworks", status_code=303)
+
+
+@app.post("/admin/data-attributes")
+async def admin_data_attribute_create(request: Request):
+    """Create a new org data attribute definition."""
+    if not _effective_is_admin(request):
+        raise HTTPException(status_code=403)
+    admin = request.headers.get(_REMOTE_USER_HDR, "")
+    form = await request.form()
+    key = str(form.get("key", "")).strip().lower().replace(" ", "_")
+    if not key:
+        raise HTTPException(status_code=400, detail="key required")
+    async with SessionLocal() as session:
+        session.add(DataAttributeDefinition(
+            key=key,
+            label=str(form.get("label", key)).strip(),
+            short_label=str(form.get("short_label", key.upper()[:8])).strip(),
+            description=str(form.get("description", "")).strip() or None,
+            jurisdiction=str(form.get("jurisdiction", "")).strip() or None,
+            regulation=str(form.get("regulation", "")).strip() or None,
+            triggers_privacy_review=bool(form.get("triggers_privacy_review")),
+            triggers_co_review=bool(form.get("triggers_co_review")),
+            triggers_notification=bool(form.get("triggers_notification")),
+        ))
+        await _log_audit(session, admin, "CREATE", "data_attribute_definition", key, {"key": key})
+        await session.commit()
+    return RedirectResponse("/admin/frameworks", status_code=303)
+
+
+# ── Phase 33: System Data Attribute Management ────────────────────────────────
+
+@app.post("/systems/{system_id}/data-attributes/add")
+async def system_data_attribute_add(request: Request, system_id: str):
+    """Add a data attribute to a system."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as session:
+        role = await _get_user_role(request, session)
+        _require_role(role, ["admin", "ao", "ciso", "issm", "isso"])
+        form = await request.form()
+        attr_key = str(form.get("attribute_key", "")).strip()
+        notes    = str(form.get("notes", "")).strip() or None
+        if not attr_key:
+            raise HTTPException(status_code=400, detail="attribute_key required")
+        existing = (await session.execute(
+            select(SystemDataAttribute)
+            .where(SystemDataAttribute.system_id == system_id,
+                   SystemDataAttribute.attribute_key == attr_key)
+        )).scalar_one_or_none()
+        if not existing:
+            session.add(SystemDataAttribute(
+                system_id=system_id, attribute_key=attr_key,
+                notes=notes, added_by=user,
+            ))
+            # Fire notification triggers
+            attr_def = await session.get(DataAttributeDefinition, attr_key)
+            if attr_def and attr_def.triggers_notification:
+                sys_row = await session.get(System, system_id)
+                sys_name = sys_row.name if sys_row else system_id
+                inv = sys_row.inventory_number if sys_row else ""
+                await _notify_role(
+                    session, "privacy_officer", "data_attribute_added",
+                    title=f"Data Attribute Added: {sys_name}",
+                    body=f"{sys_name} ({inv}) flagged with '{attr_def.short_label}'. Privacy review required.",
+                    action_url=f"/systems/{system_id}",
+                    exclude_user=user,
+                )
+            await _log_audit(session, user, "CREATE", "system_data_attribute", system_id,
+                             {"attribute_key": attr_key})
+            await session.commit()
+    return RedirectResponse(f"/systems/{system_id}", status_code=303)
+
+
+@app.post("/systems/{system_id}/data-attributes/remove")
+async def system_data_attribute_remove(request: Request, system_id: str):
+    """Remove a data attribute from a system."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as session:
+        role = await _get_user_role(request, session)
+        _require_role(role, ["admin", "ao", "ciso"])
+        form = await request.form()
+        attr_key = str(form.get("attribute_key", "")).strip()
+        rec = (await session.execute(
+            select(SystemDataAttribute)
+            .where(SystemDataAttribute.system_id == system_id,
+                   SystemDataAttribute.attribute_key == attr_key)
+        )).scalar_one_or_none()
+        if rec:
+            await session.delete(rec)
+            await _log_audit(session, user, "DELETE", "system_data_attribute", system_id,
+                             {"attribute_key": attr_key})
+            await session.commit()
+    return RedirectResponse(f"/systems/{system_id}", status_code=303)
+
+
 @app.post("/admin/users/bulk-freeze")
 async def admin_bulk_freeze(request: Request):
     if not _effective_is_admin(request):
@@ -8012,6 +13706,42 @@ async def admin_unfreeze_user(request: Request, username: str):
                           "_effective_role": effective_role, "_real_role": "admin"})
         await session.commit()
     return RedirectResponse(url="/admin/users", status_code=303)
+
+
+@app.get("/admin/users/{username}", response_class=HTMLResponse)
+async def admin_user_detail(request: Request, username: str):
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+    async with SessionLocal() as session:
+        profile = await session.get(UserProfile, username)
+        if not profile:
+            raise HTTPException(status_code=404, detail="User not found")
+        # Systems assigned to this user
+        assign_rows = (await session.execute(
+            select(SystemAssignment, System)
+            .join(System, System.id == SystemAssignment.system_id, isouter=True)
+            .where(SystemAssignment.remote_user == username)
+        )).all()
+        assignments = [(sa, sys) for sa, sys in assign_rows]
+        # Audit log entries for this user (last 20)
+        audit_rows = (await session.execute(
+            select(AuditLog)
+            .where(AuditLog.remote_user == username)
+            .order_by(AuditLog.timestamp.desc())
+            .limit(20)
+        )).scalars().all()
+    admin_users_cfg = set(CONFIG.get("app", {}).get("admin_users", ["dan"]))
+    is_config_admin = username in admin_users_cfg
+    eff_role = "admin" if is_config_admin else (profile.role or "employee")
+    return templates.TemplateResponse("admin_user_detail.html", {
+        "request":        request,
+        "profile":        profile,
+        "assignments":    assignments,
+        "audit_rows":     audit_rows,
+        "eff_role":       eff_role,
+        "is_config_admin": is_config_admin,
+        **_tpl_ctx(request),
+    })
 
 
 @app.get("/admin/users/{username}/remove", response_class=HTMLResponse)
@@ -8303,6 +14033,10 @@ async def admin_system_settings(request: Request):
         "chat_visible_count":  await _get_setting("chat_visible_count", "5"),
         "chat_show_away_msg":  await _get_setting("chat_show_away_msg", "true"),
         "session_timeout_min": await _get_setting("session_timeout_min", "15"),
+        "iso_licensed":        await _get_setting("iso_licensed", "false"),
+        "iso_license_ref":     await _get_setting("iso_license_ref", ""),
+        "cis_licensed":        await _get_setting("cis_licensed", "false"),
+        "cis_license_ref":     await _get_setting("cis_license_ref", ""),
     }
     # M2: Pass config-managed admin users (moved from user management page)
     _admin_users_cfg = list(CONFIG.get("app", {}).get("admin_users", ["dan"]))
@@ -8321,16 +14055,29 @@ async def admin_system_settings_save(
     chat_visible_count:  str = Form("5"),
     chat_show_away_msg:  str = Form("true"),
     session_timeout_min: str = Form("15"),
+    iso_licensed:        str = Form("false"),
+    iso_license_ref:     str = Form(""),
+    cis_licensed:        str = Form("false"),
+    cis_license_ref:     str = Form(""),
 ):
     if not _effective_is_admin(request):
         raise HTTPException(status_code=403)
     admin = request.headers.get(_REMOTE_USER_HDR, "dan")
-    for key, val in [
+    settings_to_save = [
         ("chat_enabled",       chat_enabled),
         ("chat_visible_count", chat_visible_count),
         ("chat_show_away_msg", chat_show_away_msg),
         ("session_timeout_min", session_timeout_min),
-    ]:
+    ]
+    # Licensed content settings — not writable in demo mode
+    if not _cfg("demo_mode", False):
+        settings_to_save += [
+            ("iso_licensed",    iso_licensed),
+            ("iso_license_ref", iso_license_ref.strip()[:200]),
+            ("cis_licensed",    cis_licensed),
+            ("cis_license_ref", cis_license_ref.strip()[:200]),
+        ]
+    for key, val in settings_to_save:
         await _set_setting(key, val, updated_by=admin)
     # Update in-memory session timeout if changed
     global _SESSION_TIMEOUT
@@ -9084,6 +14831,7 @@ def _ato_user_role(request: Request, profile_role: str) -> str:
         if shell in _VALID_SHELL_ROLES:
             return shell   # admin in shell → shell role permissions only
         return "admin"
+    # Pass through roles that now have explicit reviewer_roles entries
     return profile_role
 
 
@@ -9109,8 +14857,14 @@ def _ato_next_version(current: str) -> str:
 
 
 @app.get("/ato", response_class=HTMLResponse)
+async def ato_redirect(request: Request):
+    """Redirect /ato → /packages (backward-compatible)."""
+    return RedirectResponse("/packages", status_code=301)
+
+
+@app.get("/packages", response_class=HTMLResponse)
 async def ato_dashboard(request: Request, show_all: bool = False):
-    """ATO Package dashboard — matrix of all systems x all doc types."""
+    """Auth Package dashboard — per-system, per-program document status."""
     user = request.headers.get(_REMOTE_USER_HDR, "")
     if not user:
         raise HTTPException(status_code=401)
@@ -9137,14 +14891,51 @@ async def ato_dashboard(request: Request, show_all: bool = False):
             for doc in ato_rows.scalars().all():
                 ato_map[(doc.system_id, doc.doc_type)] = doc
 
-        # Summary counts per system
+        # Bulk-query auth packages registered for all systems
+        sys_pkgs: dict[str, list] = {}  # sys_id -> [{sn, name}]
+        if sys_ids:
+            _ph = ", ".join(f":sid{i}" for i in range(len(sys_ids)))
+            pkg_q = await session.execute(
+                text(
+                    f"SELECT sap.system_id, apt.short_name, apt.name "
+                    f"FROM system_auth_packages sap "
+                    f"JOIN auth_package_types apt ON apt.id = sap.package_type_id "
+                    f"WHERE sap.system_id IN ({_ph}) "
+                    f"ORDER BY sap.created_at"
+                ),
+                {f"sid{i}": sid for i, sid in enumerate(sys_ids)},
+            )
+            for _r in pkg_q.all():
+                sys_pkgs.setdefault(_r[0], []).append({"sn": _r[1], "name": _r[2]})
+
+        # Per-system: resolve which doc keys apply and group by program
+        sys_doc_keys: dict[str, list] = {}
+        sys_prog_groups: dict[str, list] = {}  # sys_id -> [{sn, name, doc_keys}]
+        for sys in all_systems:
+            pkgs = sys_pkgs.get(sys.id, [])
+            if pkgs:
+                relevant: set = set()
+                groups = []
+                for pkg in pkgs:
+                    pkg_keys = [k for k in _ATO_DOC_KEYS if k in _PKG_DOC_TYPES.get(pkg["sn"], frozenset())]
+                    relevant.update(pkg_keys)
+                    groups.append({"sn": pkg["sn"], "name": pkg["name"], "doc_keys": pkg_keys})
+                sys_doc_keys[sys.id] = [k for k in _ATO_DOC_KEYS if k in relevant]
+                sys_prog_groups[sys.id] = groups
+            else:
+                # Backward compat: no packages registered → show all docs by category
+                sys_doc_keys[sys.id] = _ATO_DOC_KEYS
+                sys_prog_groups[sys.id] = []
+
+        # Summary counts per system (scoped to that system's relevant docs)
         sys_summary: dict = {}
         for sys in systems:
-            total     = len(_ATO_DOC_KEYS)
-            finalized = sum(1 for k in _ATO_DOC_KEYS if ato_map.get((sys.id, k)) and ato_map[(sys.id, k)].status == "finalized")
-            approved  = sum(1 for k in _ATO_DOC_KEYS if ato_map.get((sys.id, k)) and ato_map[(sys.id, k)].status == "approved")
-            in_review = sum(1 for k in _ATO_DOC_KEYS if ato_map.get((sys.id, k)) and ato_map[(sys.id, k)].status == "in_review")
-            draft     = sum(1 for k in _ATO_DOC_KEYS if ato_map.get((sys.id, k)) and ato_map[(sys.id, k)].status == "draft")
+            doc_keys  = sys_doc_keys[sys.id]
+            total     = len(doc_keys)
+            finalized = sum(1 for k in doc_keys if ato_map.get((sys.id, k)) and ato_map[(sys.id, k)].status == "finalized")
+            approved  = sum(1 for k in doc_keys if ato_map.get((sys.id, k)) and ato_map[(sys.id, k)].status == "approved")
+            in_review = sum(1 for k in doc_keys if ato_map.get((sys.id, k)) and ato_map[(sys.id, k)].status == "in_review")
+            draft     = sum(1 for k in doc_keys if ato_map.get((sys.id, k)) and ato_map[(sys.id, k)].status == "draft")
             missing   = total - finalized - approved - in_review - draft
             pct       = round((finalized / total) * 100) if total else 0
             sys_summary[sys.id] = {
@@ -9154,7 +14945,7 @@ async def ato_dashboard(request: Request, show_all: bool = False):
 
         # Overall totals for the dashboard summary strip
         ato_overall = {
-            "total":     len(systems) * len(_ATO_DOC_KEYS),
+            "total":     sum(s["total"]     for s in sys_summary.values()),
             "finalized": sum(s["finalized"] for s in sys_summary.values()),
             "approved":  sum(s["approved"]  for s in sys_summary.values()),
             "in_review": sum(s["in_review"] for s in sys_summary.values()),
@@ -9176,6 +14967,8 @@ async def ato_dashboard(request: Request, show_all: bool = False):
                               ato_doc_keys=_ATO_DOC_KEYS,
                               generatable_docs=_GENERATABLE_DOCS,
                               sys_summary=sys_summary,
+                              sys_prog_groups=sys_prog_groups,
+                              sys_doc_keys=sys_doc_keys,
                               ato_overall=ato_overall,
                               status_color=_ato_status_color)
 
@@ -9205,8 +14998,15 @@ async def ato_system(request: Request, system_id: str):
         role = await _get_user_role(request, session)
         ato_role = _ato_user_role(request, role)
 
-        finalized_ct = sum(1 for k in _ATO_DOC_KEYS if docs.get(k) and docs[k].status == "finalized")
-        ato_pct = round(finalized_ct / len(_ATO_DOC_KEYS) * 100)
+        # Compute the relevant doc keys based on this system's registered auth packages
+        relevant_doc_keys = await _pkg_relevant_doc_keys(session, system_id)
+        pkg_sns = await _pkg_short_names(session, system_id)
+
+        # Workflow docs only (non guidance_only) for completion percentage
+        workflow_keys = [k for k in relevant_doc_keys
+                         if not ATO_DOC_TYPES.get(k, {}).get("guidance_only", False)]
+        finalized_ct = sum(1 for k in workflow_keys if docs.get(k) and docs[k].status == "finalized")
+        ato_pct = round(finalized_ct / max(len(workflow_keys), 1) * 100)
 
         today_str = date.today().isoformat()
 
@@ -9214,7 +15014,8 @@ async def ato_system(request: Request, system_id: str):
                               system=sys_obj,
                               docs=docs,
                               ato_doc_types=ATO_DOC_TYPES,
-                              ato_doc_keys=_ATO_DOC_KEYS,
+                              ato_doc_keys=relevant_doc_keys,
+                              active_pkg_sns=pkg_sns,
                               ato_role=ato_role,
                               finalized_ct=finalized_ct,
                               ato_pct=ato_pct,
@@ -9274,12 +15075,33 @@ async def ato_document(request: Request, system_id: str, doc_type: str):
         can_submit = _ato_can_edit(ato_role, doc_type) and doc and doc.status == "draft"
         can_approve = _ato_can_review(ato_role, doc_type) and doc and doc.status == "in_review"
         can_reject  = _ato_can_review(ato_role, doc_type) and doc and doc.status == "in_review"
-        can_finalize = _is_admin(request) and doc and doc.status == "approved"
-        can_revise   = (_is_admin(request) or _ato_can_edit(ato_role, doc_type)) and doc and doc.status == "finalized"
+        can_finalize = _effective_is_admin(request) and doc and doc.status == "approved"
+        can_revise   = (_effective_is_admin(request) or _ato_can_edit(ato_role, doc_type)) and doc and doc.status == "finalized"
 
         doc_meta = ATO_DOC_TYPES[doc_type]
 
         today_str = date.today().isoformat()
+
+        # Auth types for this system — load from registered auth packages (all programs)
+        # plus legacy submissions table (RMF types submitted before Phase 31)
+        _pkg_type_rows = await session.execute(
+            text("SELECT apt.short_name FROM system_auth_packages sap "
+                 "JOIN auth_package_types apt ON apt.id = sap.package_type_id "
+                 "WHERE sap.system_id = :sid"),
+            {"sid": system_id}
+        )
+        _sub_type_rows = await session.execute(
+            text("SELECT DISTINCT authorization_type FROM submissions WHERE system_id = :sid"),
+            {"sid": system_id}
+        )
+        _doc_auth_types = list({r[0] for r in _pkg_type_rows.all() if r[0]}
+                               | {r[0] for r in _sub_type_rows.all() if r[0]})
+
+        # Compute prereq blocks for submit and finalize so the UI can surface them
+        submit_prereq_blocks   = await _check_ato_prereqs(session, system_id, doc_type, "submit",   _doc_auth_types) if can_submit   else []
+        finalize_prereq_blocks = await _check_ato_prereqs(session, system_id, doc_type, "finalize", _doc_auth_types) if can_finalize else []
+
+        error_msg = request.query_params.get("error", "")
 
         ctx = await _full_ctx(request, session,
                               system=sys_obj,
@@ -9296,7 +15118,10 @@ async def ato_document(request: Request, system_id: str, doc_type: str):
                               can_finalize=can_finalize,
                               can_revise=can_revise,
                               today_str=today_str,
-                              status_color=_ato_status_color)
+                              status_color=_ato_status_color,
+                              submit_prereq_blocks=submit_prereq_blocks,
+                              finalize_prereq_blocks=finalize_prereq_blocks,
+                              error_msg=error_msg)
 
     return templates.TemplateResponse("ato_document.html", {"request": request, **ctx})
 
@@ -9394,8 +15219,8 @@ async def ato_workflow_action(request: Request, system_id: str, doc_type: str,
             "submit":   ("draft",      "in_review",  _ato_can_edit(ato_role, doc_type)),
             "approve":  ("in_review",  "approved",   _ato_can_review(ato_role, doc_type)),
             "reject":   ("in_review",  "draft",      _ato_can_review(ato_role, doc_type)),
-            "finalize": ("approved",   "finalized",  _is_admin(request)),
-            "revise":   ("finalized",  "draft",      _is_admin(request) or _ato_can_edit(ato_role, doc_type)),
+            "finalize": ("approved",   "finalized",  _effective_is_admin(request)),
+            "revise":   ("finalized",  "draft",      _effective_is_admin(request) or _ato_can_edit(ato_role, doc_type)),
         }
         expected_status, new_status, authorized = transitions[action]
 
@@ -9403,6 +15228,29 @@ async def ato_workflow_action(request: Request, system_id: str, doc_type: str,
             raise HTTPException(status_code=400, detail=f"Cannot {action}: document is in '{doc.status}' status")
         if not authorized:
             raise HTTPException(status_code=403, detail=f"Not authorized to {action} this document type")
+
+        # Prerequisite enforcement — only for submit and finalize
+        if action in ("submit", "finalize"):
+            _wf_type_rows = await session.execute(
+                text("SELECT DISTINCT authorization_type FROM submissions WHERE system_id = :sid"),
+                {"sid": system_id}
+            )
+            _wf_raw = [r[0] for r in _wf_type_rows.all() if r[0]]
+            _wf_auth_types = [t for t in ("ATO", "ATP", "IATO", "EIS") if t in _wf_raw]
+
+            prereq_failures = await _check_ato_prereqs(session, system_id, doc_type, action, _wf_auth_types)
+            if prereq_failures:
+                from urllib.parse import quote
+                parts = []
+                for f in prereq_failures:
+                    note = f" ({f['note']})" if f.get("note") else ""
+                    actual = f["actual_status"] or "not started"
+                    parts.append(f"{f['prereq_doc']} must be {f['needed_status']} (currently: {actual}){note}")
+                err = "Cannot " + action + " — prerequisite(s) not met: " + "; ".join(parts)
+                return RedirectResponse(
+                    url=f"/ato/{system_id}/{doc_type}?error={quote(err)}",
+                    status_code=303,
+                )
 
         from_status = doc.status
 
@@ -9553,6 +15401,7 @@ async def ato_generate(request: Request, system_id: str, doc_type: str):
                 "has_cui":           sys_obj.has_cui,
                 "is_public_facing":  sys_obj.is_public_facing,
                 "connects_to_federal":sys_obj.connects_to_federal,
+                "has_gdpr_data":     sys_obj.has_gdpr_data,
                 "status":            sys_obj.categorization_status,
                 "approved_by":       sys_obj.categorization_approved_by,
             }
@@ -9650,6 +15499,741 @@ async def ato_generate(request: Request, system_id: str, doc_type: str):
                 "signed_by":      sys_obj.ato_signed_by,
                 "signed_at":      sys_obj.ato_signed_at.isoformat() if sys_obj.ato_signed_at else None,
                 "notes":          sys_obj.ato_notes,
+            }
+
+        # ── HIPAA ──────────────────────────────────────────────────────────────
+        elif doc_type == "HIPAA_RA":
+            ctrl_rows = (await session.execute(
+                select(SystemControl).where(SystemControl.system_id == system_id)
+                .order_by(SystemControl.control_family, SystemControl.control_id)
+            )).scalars().all()
+            poam_rows = (await session.execute(
+                select(PoamItem).where(PoamItem.system_id == system_id)
+                .order_by(PoamItem.severity, PoamItem.created_at)
+            )).scalars().all()
+            generated["risk_analysis"] = {
+                "system_name":     sys_obj.name,
+                "system_boundary": sys_obj.boundary,
+                "data_scope": {
+                    "ephi": sys_obj.has_ephi,
+                    "phi":  sys_obj.has_phi,
+                    "pii":  sys_obj.has_pii,
+                },
+                "control_summary": {
+                    "total":          len(ctrl_rows),
+                    "implemented":    sum(1 for c in ctrl_rows if c.status == "implemented"),
+                    "in_progress":    sum(1 for c in ctrl_rows if c.status == "in_progress"),
+                    "not_started":    sum(1 for c in ctrl_rows if c.status == "not_started"),
+                    "not_applicable": sum(1 for c in ctrl_rows if c.status == "not_applicable"),
+                },
+                "identified_risks": [
+                    {"id": p.poam_id, "description": p.weakness_name, "severity": p.severity,
+                     "status": p.status, "remediation_date": p.scheduled_completion,
+                     "responsible_party": p.responsible_party}
+                    for p in poam_rows
+                ],
+                "safeguard_gaps": [
+                    {"control": c.control_id, "title": c.control_title,
+                     "status": c.status, "narrative": c.narrative or ""}
+                    for c in ctrl_rows if c.status not in ("implemented", "not_applicable")
+                ],
+            }
+
+        elif doc_type == "HIPAA_RMP":
+            poam_rows = (await session.execute(
+                select(PoamItem).where(PoamItem.system_id == system_id)
+                .order_by(PoamItem.severity, PoamItem.scheduled_completion)
+            )).scalars().all()
+            generated["risk_management_plan"] = {
+                "system_name":   sys_obj.name,
+                "owner":         sys_obj.owner_name,
+                "isso":          sys_obj.isso_name,
+                "review_date":   date.today().isoformat(),
+                "remediation_actions": [
+                    {"id": p.poam_id, "risk": p.weakness_name, "severity": p.severity,
+                     "status": p.status, "target_date": p.scheduled_completion,
+                     "responsible_party": p.responsible_party,
+                     "remediation_description": p.remediation or ""}
+                    for p in poam_rows
+                ],
+            }
+
+        elif doc_type == "HIPAA_WTP":
+            generated["workforce_training_plan"] = {
+                "system_name":  sys_obj.name,
+                "organization": sys_obj.owner_name or "Organization",
+                "prepared_by":  sys_obj.isso_name or sys_obj.issm_name or "",
+                "training_requirements": [
+                    {"topic": "HIPAA Security Rule Overview", "frequency": "Annual", "audience": "All staff"},
+                    {"topic": "ePHI Handling & Minimum Necessary", "frequency": "Annual", "audience": "All staff with ePHI access"},
+                    {"topic": "Incident Reporting Procedures", "frequency": "Annual", "audience": "All staff"},
+                    {"topic": "Password & Access Management", "frequency": "Annual", "audience": "All staff"},
+                    {"topic": "Phishing & Social Engineering Awareness", "frequency": "Annual", "audience": "All staff"},
+                    {"topic": "Role-Specific ePHI Workflows", "frequency": "On-hire + Annual", "audience": "Clinical/operational staff"},
+                ],
+                "notes": f"Training plan for {sys_obj.name}. ePHI={sys_obj.has_ephi}, PHI={sys_obj.has_phi}.",
+            }
+
+        elif doc_type == "HIPAA_BAA":
+            generated["baa_inventory"] = {
+                "system_name":    sys_obj.name,
+                "prepared_by":    sys_obj.isso_name or "",
+                "review_date":    date.today().isoformat(),
+                "note": "Review all third-party service providers and contractors with ePHI access. "
+                        "Each must have a signed BAA on file before system go-live.",
+                "business_associates": [],  # Populated manually — list vendors/contractors with ePHI access
+            }
+
+        # ── HITRUST ────────────────────────────────────────────────────────────
+        elif doc_type == "HITRUST_GAP":
+            ctrl_rows = (await session.execute(
+                select(SystemControl).where(SystemControl.system_id == system_id)
+                .order_by(SystemControl.control_family, SystemControl.control_id)
+            )).scalars().all()
+            by_family: dict = {}
+            for c in ctrl_rows:
+                by_family.setdefault(c.control_family or "UNKNOWN", []).append(c)
+            generated["gap_assessment"] = {
+                "system_name":   sys_obj.name,
+                "assessment_date": date.today().isoformat(),
+                "overall_score": (
+                    round(sum(1 for c in ctrl_rows if c.status == "implemented") /
+                          max(len(ctrl_rows), 1) * 100)
+                ),
+                "domain_summary": [
+                    {
+                        "domain": fam,
+                        "total":  len(ctrls),
+                        "implemented":  sum(1 for c in ctrls if c.status == "implemented"),
+                        "in_progress":  sum(1 for c in ctrls if c.status == "in_progress"),
+                        "not_started":  sum(1 for c in ctrls if c.status == "not_started"),
+                        "gaps": [
+                            {"control": c.control_id, "title": c.control_title, "status": c.status}
+                            for c in ctrls if c.status not in ("implemented", "not_applicable")
+                        ],
+                    }
+                    for fam, ctrls in by_family.items()
+                ],
+            }
+
+        elif doc_type == "HITRUST_CAP":
+            poam_rows = (await session.execute(
+                select(PoamItem).where(PoamItem.system_id == system_id)
+                .order_by(PoamItem.severity, PoamItem.scheduled_completion)
+            )).scalars().all()
+            generated["corrective_action_plans"] = {
+                "system_name":   sys_obj.name,
+                "review_date":   date.today().isoformat(),
+                "cap_items": [
+                    {"id": p.poam_id, "finding": p.weakness_name, "severity": p.severity,
+                     "control": p.control_id, "action": p.remediation or "",
+                     "target_date": p.scheduled_completion, "status": p.status,
+                     "responsible_party": p.responsible_party}
+                    for p in poam_rows
+                ],
+            }
+
+        elif doc_type == "HITRUST_EVD":
+            ctrl_rows = (await session.execute(
+                select(SystemControl).where(SystemControl.system_id == system_id)
+                .where(SystemControl.status == "implemented")
+                .order_by(SystemControl.control_family, SystemControl.control_id)
+            )).scalars().all()
+            generated["evidence_summary"] = {
+                "system_name":  sys_obj.name,
+                "prepared_date": date.today().isoformat(),
+                "evidence_items": [
+                    {"control": c.control_id, "title": c.control_title,
+                     "implementation_type": c.implementation_type or "",
+                     "evidence_summary": c.narrative or "",
+                     "responsible_role": c.responsible_role or ""}
+                    for c in ctrl_rows
+                ],
+            }
+
+        # ── PCI-DSS ────────────────────────────────────────────────────────────
+        elif doc_type == "PCI_SCOPE":
+            inv_rows = (await session.execute(
+                select(InventoryItem).where(InventoryItem.system_id == system_id)
+                .order_by(InventoryItem.item_type, InventoryItem.name)
+            )).scalars().all()
+            generated["cde_scope"] = {
+                "system_name":      sys_obj.name,
+                "description":      sys_obj.description or sys_obj.purpose,
+                "environment":      sys_obj.environment,
+                "boundary":         sys_obj.boundary,
+                "processes_cardholder_data": sys_obj.has_financial_data,
+                "is_public_facing": sys_obj.is_public_facing,
+                "in_scope_assets": [
+                    {"type": i.item_type, "name": i.name, "ip": i.ip_address or "",
+                     "vendor": i.vendor or "", "version": i.version or ""}
+                    for i in inv_rows
+                ],
+                "note": "Review and confirm which assets are in-scope for PCI DSS. "
+                        "Segment out-of-scope systems via network segmentation controls.",
+            }
+
+        elif doc_type == "PCI_SAQ":
+            ctrl_rows = (await session.execute(
+                select(SystemControl).where(SystemControl.system_id == system_id)
+                .order_by(SystemControl.control_family, SystemControl.control_id)
+            )).scalars().all()
+            # Map PCI DSS requirement areas to corresponding control families
+            _PCI_MAP = {
+                "Req 1 — Network Security":          ["SC", "CM"],
+                "Req 2 — Secure Configurations":     ["CM", "SA"],
+                "Req 3 — Protect Account Data":      ["SC", "MP"],
+                "Req 4 — Encryption in Transit":     ["SC"],
+                "Req 5 — Malware Protection":        ["SI"],
+                "Req 6 — Secure Systems & Software": ["SA", "SI"],
+                "Req 7 — Restrict Access":           ["AC"],
+                "Req 8 — User Identity & Auth":      ["IA"],
+                "Req 9 — Physical Access":           ["PE"],
+                "Req 10 — Logging & Monitoring":     ["AU"],
+                "Req 11 — Security Testing":         ["CA", "RA"],
+                "Req 12 — Information Security Policy": ["PL", "AT", "PS"],
+            }
+            saq_responses = []
+            for req_label, families in _PCI_MAP.items():
+                relevant = [c for c in ctrl_rows if (c.control_family or "").upper() in families]
+                saq_responses.append({
+                    "requirement": req_label,
+                    "mapped_controls": len(relevant),
+                    "implemented":  sum(1 for c in relevant if c.status == "implemented"),
+                    "gaps": [{"control": c.control_id, "status": c.status} for c in relevant
+                             if c.status not in ("implemented", "not_applicable")],
+                })
+            generated["saq"] = {
+                "system_name":  sys_obj.name,
+                "prepared_date": date.today().isoformat(),
+                "financial_data": sys_obj.has_financial_data,
+                "responses":    saq_responses,
+            }
+
+        elif doc_type == "PCI_RISK":
+            poam_rows = (await session.execute(
+                select(PoamItem).where(PoamItem.system_id == system_id)
+                .order_by(PoamItem.severity)
+            )).scalars().all()
+            ctrl_gaps = (await session.execute(
+                select(SystemControl)
+                .where(SystemControl.system_id == system_id)
+                .where(SystemControl.status.in_(["not_started", "in_progress"]))
+                .order_by(SystemControl.control_family, SystemControl.control_id)
+            )).scalars().all()
+            generated["risk_assessment"] = {
+                "system_name":   sys_obj.name,
+                "prepared_date": date.today().isoformat(),
+                "cardholder_data": sys_obj.has_financial_data,
+                "vulnerabilities": [
+                    {"id": p.poam_id, "description": p.weakness_name, "severity": p.severity,
+                     "status": p.status, "target_date": p.scheduled_completion}
+                    for p in poam_rows
+                ],
+                "control_deficiencies": [
+                    {"control": c.control_id, "title": c.control_title, "status": c.status}
+                    for c in ctrl_gaps
+                ],
+            }
+
+        # ── SOC ────────────────────────────────────────────────────────────────
+        elif doc_type == "SOC1_SCOPE":
+            generated["scope_definition"] = {
+                "system_name":       sys_obj.name,
+                "service_description": sys_obj.purpose or sys_obj.description,
+                "system_boundary":   sys_obj.boundary,
+                "environment":       sys_obj.environment,
+                "system_type":       sys_obj.system_type,
+                "owner":             sys_obj.owner_name,
+                "audit_period_note": "Define the 12-month observation period for Type II or "
+                                     "point-in-time date for Type I.",
+                "controls_relevant_to_financial_reporting": True,
+            }
+
+        elif doc_type == "SOC1_CTRLS":
+            ctrl_rows = (await session.execute(
+                select(SystemControl).where(SystemControl.system_id == system_id)
+                .order_by(SystemControl.control_family, SystemControl.control_id)
+            )).scalars().all()
+            generated["control_inventory"] = {
+                "system_name":   sys_obj.name,
+                "prepared_date": date.today().isoformat(),
+                "controls": [
+                    {"control_id": c.control_id, "title": c.control_title,
+                     "family": c.control_family, "status": c.status,
+                     "implementation_type": c.implementation_type or "",
+                     "narrative": c.narrative or ""}
+                    for c in ctrl_rows
+                ],
+                "total":       len(ctrl_rows),
+                "implemented": sum(1 for c in ctrl_rows if c.status == "implemented"),
+            }
+
+        elif doc_type == "SOC2_SCOPE":
+            generated["scope_definition"] = {
+                "system_name":       sys_obj.name,
+                "service_description": sys_obj.purpose or sys_obj.description,
+                "system_boundary":   sys_obj.boundary,
+                "environment":       sys_obj.environment,
+                "trust_service_categories": {
+                    "security":             True,   # Always required
+                    "availability":         bool(sys_obj.is_public_facing),
+                    "confidentiality":      bool(sys_obj.has_pii or sys_obj.has_financial_data),
+                    "processing_integrity": bool(sys_obj.has_financial_data),
+                    "privacy":              bool(sys_obj.has_pii or sys_obj.has_gdpr_data),
+                },
+                "owner":           sys_obj.owner_name,
+                "isso":            sys_obj.isso_name,
+                "audit_period_note": "Define 12-month observation window for Type II.",
+            }
+
+        elif doc_type == "SOC2_TSC":
+            ctrl_rows = (await session.execute(
+                select(SystemControl).where(SystemControl.system_id == system_id)
+                .order_by(SystemControl.control_family, SystemControl.control_id)
+            )).scalars().all()
+            # Map trust service criteria domains to control families
+            _TSC_MAP = {
+                "CC — Common Criteria (Security)":   ["AC", "IA", "AU", "SC", "SI", "IR"],
+                "A  — Availability":                 ["CP", "IR", "SC"],
+                "C  — Confidentiality":              ["AC", "MP", "SC"],
+                "PI — Processing Integrity":         ["SA", "SI", "CM"],
+                "P  — Privacy":                      ["AR", "AP", "IP", "SE", "TR", "UL"],
+            }
+            tsc_sections = []
+            for tsc_label, families in _TSC_MAP.items():
+                relevant = [c for c in ctrl_rows if (c.control_family or "").upper() in families]
+                tsc_sections.append({
+                    "criteria": tsc_label,
+                    "total_controls": len(relevant),
+                    "implemented": sum(1 for c in relevant if c.status == "implemented"),
+                    "controls": [
+                        {"control_id": c.control_id, "title": c.control_title,
+                         "status": c.status, "narrative": c.narrative or ""}
+                        for c in relevant
+                    ],
+                })
+            generated["trust_services_criteria"] = {
+                "system_name":   sys_obj.name,
+                "prepared_date": date.today().isoformat(),
+                "sections":      tsc_sections,
+            }
+
+        elif doc_type == "SOC2_GAP":
+            ctrl_rows = (await session.execute(
+                select(SystemControl)
+                .where(SystemControl.system_id == system_id)
+                .where(SystemControl.status.in_(["not_started", "in_progress"]))
+                .order_by(SystemControl.control_family, SystemControl.control_id)
+            )).scalars().all()
+            generated["gap_assessment"] = {
+                "system_name":   sys_obj.name,
+                "prepared_date": date.today().isoformat(),
+                "gaps": [
+                    {"control_id": c.control_id, "title": c.control_title,
+                     "family": c.control_family, "status": c.status,
+                     "narrative": c.narrative or ""}
+                    for c in ctrl_rows
+                ],
+                "total_gaps": len(ctrl_rows),
+            }
+
+        # ── GDPR ───────────────────────────────────────────────────────────────
+        elif doc_type == "GDPR_ART30":
+            generated["article_30_records"] = {
+                "controller":         sys_obj.owner_name or "",
+                "controller_contact": sys_obj.owner_email or "",
+                "system_name":        sys_obj.name,
+                "processing_purpose": sys_obj.purpose or "",
+                "data_subjects":      "Identify categories of data subjects (e.g. employees, customers, EU residents)",
+                "personal_data_categories": {
+                    "pii":       sys_obj.has_pii,
+                    "sensitive": sys_obj.has_phi or sys_obj.has_ephi,
+                    "financial": sys_obj.has_financial_data,
+                    "gdpr_eu":   sys_obj.has_gdpr_data,
+                },
+                "recipients":         "List internal teams and third-party recipients of personal data",
+                "third_countries":    "Identify any transfers to countries outside the EEA",
+                "retention_period":   "Define data retention schedule per category",
+                "security_measures":  sys_obj.boundary or "",
+                "environment":        sys_obj.environment,
+                "isso":               sys_obj.isso_name or "",
+                "prepared_date":      date.today().isoformat(),
+            }
+
+        elif doc_type == "GDPR_DPIA":
+            poam_rows = (await session.execute(
+                select(PoamItem).where(PoamItem.system_id == system_id)
+                .order_by(PoamItem.severity)
+            )).scalars().all()
+            generated["dpia"] = {
+                "system_name":    sys_obj.name,
+                "description":    sys_obj.description or sys_obj.purpose,
+                "necessity":      "Assess necessity and proportionality of the processing",
+                "prepared_date":  date.today().isoformat(),
+                "high_risk_indicators": {
+                    "large_scale_processing": bool(sys_obj.has_pii or sys_obj.has_gdpr_data),
+                    "sensitive_categories":   bool(sys_obj.has_phi or sys_obj.has_ephi),
+                    "public_facing":          bool(sys_obj.is_public_facing),
+                    "automated_decision_making": False,  # Confirm manually
+                    "systematic_monitoring":  False,     # Confirm manually
+                },
+                "identified_risks": [
+                    {"risk": p.weakness_name, "severity": p.severity,
+                     "mitigation": p.remediation or "", "status": p.status}
+                    for p in poam_rows
+                ],
+                "dpo_consultation_required": bool(sys_obj.has_pii or sys_obj.has_gdpr_data),
+                "dpo_contact": "Identify Data Protection Officer contact",
+            }
+
+        elif doc_type == "GDPR_MAP":
+            generated["data_map"] = {
+                "system_name":   sys_obj.name,
+                "prepared_date": date.today().isoformat(),
+                "data_flows": [
+                    {
+                        "system": sys_obj.name,
+                        "purpose": sys_obj.purpose or "",
+                        "data_types": {
+                            "pii":       sys_obj.has_pii,
+                            "phi":       sys_obj.has_phi,
+                            "ephi":      sys_obj.has_ephi,
+                            "financial": sys_obj.has_financial_data,
+                            "gdpr_eu":   sys_obj.has_gdpr_data,
+                            "cui":       sys_obj.has_cui,
+                        },
+                        "environment":    sys_obj.environment or "",
+                        "connects_federal": sys_obj.connects_to_federal,
+                        "public_facing":   sys_obj.is_public_facing,
+                        "owner":           sys_obj.owner_name or "",
+                    }
+                ],
+                "note": "Expand with upstream/downstream system connections and vendor data sharing.",
+            }
+
+        # ── ISO 27701 ──────────────────────────────────────────────────────────
+        elif doc_type == "ISO27701_PIMS":
+            ctrl_rows = (await session.execute(
+                select(SystemControl).where(SystemControl.system_id == system_id)
+                .order_by(SystemControl.control_family, SystemControl.control_id)
+            )).scalars().all()
+            privacy_ctrls = [c for c in ctrl_rows
+                             if (c.control_family or "").upper() in ("AR","AP","IP","SE","TR","UL","PT")]
+            generated["pims_assessment"] = {
+                "system_name":   sys_obj.name,
+                "prepared_date": date.today().isoformat(),
+                "pii_principal_rights": {
+                    "access":      True,
+                    "rectification": True,
+                    "erasure":     True,
+                    "portability": True,
+                    "objection":   True,
+                },
+                "data_attributes": {
+                    "pii":    sys_obj.has_pii,
+                    "gdpr":   sys_obj.has_gdpr_data,
+                },
+                "privacy_controls": [
+                    {"control": c.control_id, "title": c.control_title,
+                     "status": c.status, "narrative": c.narrative or ""}
+                    for c in (privacy_ctrls if privacy_ctrls else ctrl_rows[:20])
+                ],
+                "total_privacy_controls": len(privacy_ctrls),
+                "implemented": sum(1 for c in privacy_ctrls if c.status == "implemented"),
+            }
+
+        # ── CCPA ───────────────────────────────────────────────────────────────
+        elif doc_type == "CCPA_ASSESS":
+            generated["ccpa_assessment"] = {
+                "system_name":   sys_obj.name,
+                "prepared_date": date.today().isoformat(),
+                "processes_california_data": bool(sys_obj.has_pii),
+                "data_types": {
+                    "personal_information": sys_obj.has_pii,
+                    "sensitive_personal_information": bool(sys_obj.has_phi or sys_obj.has_ephi or sys_obj.has_financial_data),
+                },
+                "consumer_rights_readiness": {
+                    "right_to_know":    "Assess — can you respond to consumer data requests?",
+                    "right_to_delete":  "Assess — can you delete consumer data on request?",
+                    "right_to_opt_out": "Assess — do you sell/share personal information?",
+                    "right_to_correct": "Assess — can consumers correct inaccurate data?",
+                    "right_to_portability": "Assess — can you provide data in portable format?",
+                },
+                "privacy_notice_published": False,  # Confirm manually
+                "opt_out_mechanism":         False,  # Confirm manually
+            }
+
+        elif doc_type == "CCPA_INV":
+            generated["pi_inventory"] = {
+                "system_name":   sys_obj.name,
+                "prepared_date": date.today().isoformat(),
+                "personal_information_categories": [
+                    {"category": "Identifiers (name, address, email, IP)", "collected": sys_obj.has_pii,
+                     "source": "Identify data sources", "purpose": sys_obj.purpose or ""},
+                    {"category": "Financial information (bank, payment cards)", "collected": sys_obj.has_financial_data,
+                     "source": "Identify data sources", "purpose": ""},
+                    {"category": "Health/medical information", "collected": bool(sys_obj.has_phi or sys_obj.has_ephi),
+                     "source": "Identify data sources", "purpose": ""},
+                    {"category": "Internet/network activity", "collected": sys_obj.is_public_facing,
+                     "source": "Web/app logs", "purpose": ""},
+                    {"category": "Geolocation data", "collected": False, "source": "", "purpose": ""},
+                ],
+                "third_party_sharing": "Identify third parties that receive personal information",
+                "retention_schedule":  "Define per-category retention periods",
+            }
+
+        # ── CMMC ───────────────────────────────────────────────────────────────
+        elif doc_type == "CMMC_SSP":
+            # SP 800-171 families: AC, AT, AU, CA, CM, IA, IR, MA, MP, PE, PS, RA, SA, SC, SI
+            _CUI_FAMILIES = {"AC","AT","AU","CA","CM","IA","IR","MA","MP","PE","PS","RA","SA","SC","SI"}
+            ctrl_rows = (await session.execute(
+                select(SystemControl).where(SystemControl.system_id == system_id)
+                .order_by(SystemControl.control_family, SystemControl.control_id)
+            )).scalars().all()
+            cui_ctrls = [c for c in ctrl_rows if (c.control_family or "").upper() in _CUI_FAMILIES]
+            generated["cmmc_ssp"] = {
+                "system_name":   sys_obj.name,
+                "abbreviation":  sys_obj.abbreviation,
+                "description":   sys_obj.description or sys_obj.purpose,
+                "boundary":      sys_obj.boundary,
+                "environment":   sys_obj.environment,
+                "owner":         sys_obj.owner_name,
+                "issm":          sys_obj.issm_name,
+                "isso":          sys_obj.isso_name,
+                "prepared_date": date.today().isoformat(),
+                "cui_present":   sys_obj.has_cui,
+                "practices": [
+                    {"practice_id": c.control_id, "title": c.control_title,
+                     "family": c.control_family, "status": c.status,
+                     "implementation": c.narrative or "",
+                     "responsible_role": c.responsible_role or ""}
+                    for c in (cui_ctrls if cui_ctrls else ctrl_rows)
+                ],
+                "total_practices": len(cui_ctrls or ctrl_rows),
+                "implemented":     sum(1 for c in (cui_ctrls or ctrl_rows) if c.status == "implemented"),
+            }
+
+        elif doc_type == "CMMC_SPRS":
+            # Simplified SPRS: score starts at 110, deduct for each unimplemented SP 800-171 practice
+            _CUI_FAMILIES = {"AC","AT","AU","CA","CM","IA","IR","MA","MP","PE","PS","RA","SA","SC","SI"}
+            ctrl_rows = (await session.execute(
+                select(SystemControl).where(SystemControl.system_id == system_id)
+            )).scalars().all()
+            cui_ctrls = [c for c in ctrl_rows if (c.control_family or "").upper() in _CUI_FAMILIES]
+            total = len(cui_ctrls) or 1
+            implemented = sum(1 for c in cui_ctrls if c.status == "implemented")
+            not_implemented = total - implemented
+            # Simplified scoring: linear deduction from 110; see NIST 800-171A for exact weights
+            sprs_score = max(0, round(110 * (implemented / total)))
+            generated["sprs_score"] = {
+                "system_name":     sys_obj.name,
+                "prepared_date":   date.today().isoformat(),
+                "total_practices": total,
+                "implemented":     implemented,
+                "not_implemented": not_implemented,
+                "sprs_score":      sprs_score,
+                "score_note":      (
+                    "This is a simplified score based on practice completion ratio. "
+                    "For a DIBCAC-accepted score, use the official NIST SP 800-171A "
+                    "weighted assessment methodology and submit via SPRS portal."
+                ),
+                "practices": [
+                    {"id": c.control_id, "title": c.control_title,
+                     "status": c.status, "met": c.status == "implemented"}
+                    for c in cui_ctrls
+                ],
+            }
+
+        elif doc_type == "CMMC_PLAN":
+            poam_rows = (await session.execute(
+                select(PoamItem).where(PoamItem.system_id == system_id)
+                .order_by(PoamItem.severity, PoamItem.scheduled_completion)
+            )).scalars().all()
+            generated["cmmc_poam"] = {
+                "system_name":   sys_obj.name,
+                "prepared_date": date.today().isoformat(),
+                "cui_present":   sys_obj.has_cui,
+                "items": [
+                    {"id": p.poam_id, "weakness": p.weakness_name, "severity": p.severity,
+                     "practice": p.control_id, "status": p.status,
+                     "target_date": p.scheduled_completion,
+                     "responsible_party": p.responsible_party,
+                     "remediation": p.remediation or ""}
+                    for p in poam_rows
+                ],
+            }
+
+        # ── ISO 27001 ──────────────────────────────────────────────────────────
+        elif doc_type == "ISO_SOA":
+            ctrl_rows = (await session.execute(
+                select(SystemControl).where(SystemControl.system_id == system_id)
+                .order_by(SystemControl.control_family, SystemControl.control_id)
+            )).scalars().all()
+            generated["statement_of_applicability"] = {
+                "system_name":   sys_obj.name,
+                "isms_scope":    sys_obj.boundary or sys_obj.description,
+                "prepared_date": date.today().isoformat(),
+                "controls": [
+                    {
+                        "control_id":    c.control_id,
+                        "title":         c.control_title,
+                        "applicable":    c.status != "not_applicable",
+                        "inclusion_justification": (
+                            c.narrative if c.status == "implemented"
+                            else ("Not applicable — " + (c.narrative or "see risk assessment"))
+                            if c.status == "not_applicable" else ""
+                        ),
+                        "implementation_status": c.status,
+                        "responsible_role": c.responsible_role or "",
+                    }
+                    for c in ctrl_rows
+                ],
+                "total":          len(ctrl_rows),
+                "applicable":     sum(1 for c in ctrl_rows if c.status != "not_applicable"),
+                "implemented":    sum(1 for c in ctrl_rows if c.status == "implemented"),
+                "not_applicable": sum(1 for c in ctrl_rows if c.status == "not_applicable"),
+            }
+
+        elif doc_type == "ISO_SCOPE":
+            generated["isms_scope"] = {
+                "organization":  sys_obj.owner_name or "Organization",
+                "system_name":   sys_obj.name,
+                "description":   sys_obj.description or sys_obj.purpose,
+                "boundary":      sys_obj.boundary,
+                "environment":   sys_obj.environment,
+                "system_type":   sys_obj.system_type,
+                "in_scope_assets": "Define asset types in scope (hardware, software, data, people, facilities)",
+                "exclusions":    "Document any exclusions and justification",
+                "interfaces":    "List interfaces/connections to out-of-scope systems",
+                "prepared_date": date.today().isoformat(),
+                "owner":         sys_obj.owner_name,
+                "issm":          sys_obj.issm_name,
+            }
+
+        elif doc_type == "ISO_RISK":
+            poam_rows = (await session.execute(
+                select(PoamItem).where(PoamItem.system_id == system_id)
+                .order_by(PoamItem.severity)
+            )).scalars().all()
+            ctrl_rows = (await session.execute(
+                select(SystemControl)
+                .where(SystemControl.system_id == system_id)
+                .where(SystemControl.status.in_(["not_started", "in_progress"]))
+                .order_by(SystemControl.control_family, SystemControl.control_id)
+            )).scalars().all()
+            generated["risk_assessment_treatment"] = {
+                "system_name":   sys_obj.name,
+                "prepared_date": date.today().isoformat(),
+                "risk_criteria": "Define likelihood and impact scales (e.g. 1-5)",
+                "risks": [
+                    {"id": p.poam_id, "description": p.weakness_name, "severity": p.severity,
+                     "control": p.control_id, "treatment": p.remediation or "mitigate",
+                     "target_date": p.scheduled_completion, "status": p.status,
+                     "risk_owner": p.responsible_party}
+                    for p in poam_rows
+                ],
+                "treatment_options": {
+                    "mitigate": sum(1 for p in poam_rows if p.status not in ("accepted_risk","deferred_waiver")),
+                    "accept":   sum(1 for p in poam_rows if p.status in ("accepted_risk",)),
+                    "defer":    sum(1 for p in poam_rows if p.status in ("deferred_waiver",)),
+                },
+                "open_control_gaps": [
+                    {"control": c.control_id, "title": c.control_title, "status": c.status}
+                    for c in ctrl_rows
+                ],
+            }
+
+        # ── CSA STAR ───────────────────────────────────────────────────────────
+        elif doc_type == "CSA_CCM":
+            ctrl_rows = (await session.execute(
+                select(SystemControl).where(SystemControl.system_id == system_id)
+                .order_by(SystemControl.control_family, SystemControl.control_id)
+            )).scalars().all()
+            # Map CCM v4.0 domains to NIST control families
+            _CCM_MAP = {
+                "AIS — Application & Interface Security":    ["SA", "SI"],
+                "BCR — Business Continuity Management":      ["CP"],
+                "CCC — Change Control & Configuration":      ["CM", "SA"],
+                "CEK — Cryptography & Key Management":       ["SC"],
+                "DCS — Datacenter Security":                 ["PE", "CP"],
+                "DSP — Data Security & Privacy":             ["MP", "SC", "AR"],
+                "GRC — Governance, Risk & Compliance":       ["CA", "PL", "RA"],
+                "HRS — Human Resources Security":            ["PS", "AT"],
+                "IAM — Identity & Access Management":        ["AC", "IA"],
+                "IPY — Interoperability & Portability":      ["SC"],
+                "IVS — Infrastructure & Virtualization":     ["SC", "CM", "SI"],
+                "LOG — Logging & Monitoring":                ["AU"],
+                "SEF — Security Incident Management":        ["IR"],
+                "STA — Supply Chain Management":             ["SA", "PS"],
+                "TVM — Threat & Vulnerability Management":   ["RA", "SI", "CA"],
+                "UEM — Universal Endpoint Management":       ["MA", "CM", "SI"],
+            }
+            ccm_domains = []
+            for domain_label, families in _CCM_MAP.items():
+                relevant = [c for c in ctrl_rows if (c.control_family or "").upper() in families]
+                ccm_domains.append({
+                    "domain": domain_label,
+                    "total":  len(relevant),
+                    "implemented":  sum(1 for c in relevant if c.status == "implemented"),
+                    "gaps": [{"control": c.control_id, "status": c.status} for c in relevant
+                             if c.status not in ("implemented", "not_applicable")],
+                })
+            generated["ccm_assessment"] = {
+                "system_name":   sys_obj.name,
+                "prepared_date": date.today().isoformat(),
+                "cloud_environment": sys_obj.environment,
+                "is_public_facing":  sys_obj.is_public_facing,
+                "domains":       ccm_domains,
+                "overall_score": round(
+                    sum(d["implemented"] for d in ccm_domains) /
+                    max(sum(d["total"] for d in ccm_domains), 1) * 100
+                ),
+            }
+
+        elif doc_type == "CSA_CAIQ":
+            ctrl_rows = (await session.execute(
+                select(SystemControl).where(SystemControl.system_id == system_id)
+                .order_by(SystemControl.control_family, SystemControl.control_id)
+            )).scalars().all()
+            ctrl_map = {c.control_id.upper(): c for c in ctrl_rows}
+            generated["caiq"] = {
+                "system_name":   sys_obj.name,
+                "prepared_date": date.today().isoformat(),
+                "cloud_environment": sys_obj.environment or "",
+                "is_public":     sys_obj.is_public_facing,
+                "summary": {
+                    "total_controls":  len(ctrl_rows),
+                    "implemented":     sum(1 for c in ctrl_rows if c.status == "implemented"),
+                    "in_progress":     sum(1 for c in ctrl_rows if c.status == "in_progress"),
+                    "not_started":     sum(1 for c in ctrl_rows if c.status == "not_started"),
+                    "not_applicable":  sum(1 for c in ctrl_rows if c.status == "not_applicable"),
+                },
+                "responses": [
+                    {"question_ref": c.control_id, "control_title": c.control_title,
+                     "response": "Yes" if c.status == "implemented" else
+                                 "Partial" if c.status == "in_progress" else
+                                 "No" if c.status == "not_started" else "N/A",
+                     "narrative": c.narrative or ""}
+                    for c in ctrl_rows
+                ],
+            }
+
+        # ── Generic authorization decision (all non-RMF programs) ─────────────
+        elif doc_type == "AUTH_DECISION":
+            pkg_sns = await _pkg_short_names(session, system_id)
+            generated["authorization_decision"] = {
+                "system_name":       sys_obj.name,
+                "system_id":         sys_obj.id,
+                "authorization_programs": pkg_sns,
+                "decision":          sys_obj.ato_decision or "pending",
+                "authorization_status": sys_obj.auth_status,
+                "effective_date":    sys_obj.auth_date,
+                "expiry_date":       sys_obj.auth_expiry,
+                "authorized_by":     sys_obj.ato_signed_by,
+                "authorized_at":     sys_obj.ato_signed_at.isoformat() if sys_obj.ato_signed_at else None,
+                "conditions":        sys_obj.ato_notes,
+                "prepared_date":     date.today().isoformat(),
             }
 
         # ── Store generated file ──
@@ -10009,17 +16593,18 @@ async def system_frameworks(request: Request, system_id: str):
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(status_code=403)
 
-        # All frameworks
+        # All frameworks, ordered by kind then category then name
         fw_rows = (await session.execute(
-            select(ComplianceFramework).where(ComplianceFramework.is_active == True)
-            .order_by(ComplianceFramework.category, ComplianceFramework.name)
+            select(ComplianceFramework).where(ComplianceFramework.is_active == True, ComplianceFramework.id.in_(_org_enabled_fw_subq()))
+            .order_by(ComplianceFramework.kind, ComplianceFramework.category, ComplianceFramework.name)
         )).scalars().all()
 
-        # Which frameworks are already applied to this system
+        # Which are already applied to this system
         sf_rows = (await session.execute(
             select(SystemFramework).where(SystemFramework.system_id == system_id)
         )).scalars().all()
-        applied_ids = {sf.framework_id for sf in sf_rows}
+        applied_ids  = {sf.framework_id for sf in sf_rows}
+        applied_subcats = {sf.framework_id: sf.sub_category for sf in sf_rows}
 
         # System controls lookup {control_id: status}
         sc_rows = (await session.execute(
@@ -10028,9 +16613,11 @@ async def system_frameworks(request: Request, system_id: str):
         )).all()
         controls_by_id = {r[0].lower(): r[1] for r in sc_rows}
 
-        # Coverage per framework
+        # Coverage per framework (only frameworks and overlays with crosswalk data)
         coverage = {}
         for fw in fw_rows:
+            if fw.kind in ("catalog", "baseline", "regulation"):
+                continue   # no crosswalk for these; they don't need coverage %
             cx = (await session.execute(
                 select(ControlCrosswalk.framework_control_id, ControlCrosswalk.nist_control_id)
                 .join(FrameworkControl, FrameworkControl.id == ControlCrosswalk.framework_control_id)
@@ -10045,12 +16632,29 @@ async def system_frameworks(request: Request, system_id: str):
             coverage[fw.id] = {"total": total, "satisfied": satisfied,
                                 "gap": gap, "partial": partial, "pct": pct}
 
+        # Separate into kind buckets for the UI
+        KIND_ORDER = ["baseline", "overlay", "framework", "regulation"]
+        KIND_LABELS = {
+            "baseline":   "Baselines",
+            "overlay":    "Overlays",
+            "framework":  "Frameworks",
+            "regulation": "Regulations & Standards",
+        }
+        by_kind: dict = {}
+        for fw in fw_rows:
+            k = fw.kind if fw.kind in KIND_ORDER else "framework"
+            by_kind.setdefault(k, []).append(fw)
+
     return templates.TemplateResponse("system_frameworks.html", {
-        "request":     request,
-        "system":      sys_obj,
-        "frameworks":  fw_rows,
-        "applied_ids": applied_ids,
-        "coverage":    coverage,
+        "request":        request,
+        "system":         sys_obj,
+        "frameworks":     fw_rows,
+        "by_kind":        by_kind,
+        "kind_order":     KIND_ORDER,
+        "kind_labels":    KIND_LABELS,
+        "applied_ids":    applied_ids,
+        "applied_subcats":applied_subcats,
+        "coverage":       coverage,
         **_tpl_ctx(request),
     })
 
@@ -10067,6 +16671,13 @@ async def system_framework_toggle(request: Request, system_id: str, fw_id: str):
             raise HTTPException(status_code=404)
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(status_code=403)
+        # Look up kind so we know if this is a baseline
+        fw_kind_row = (await session.execute(
+            text("SELECT kind FROM compliance_frameworks WHERE id = :fid"),
+            {"fid": fw_id},
+        )).fetchone()
+        fw_kind = fw_kind_row[0] if fw_kind_row else "framework"
+
         existing = (await session.execute(
             select(SystemFramework)
             .where(SystemFramework.system_id == system_id)
@@ -10079,9 +16690,13 @@ async def system_framework_toggle(request: Request, system_id: str, fw_id: str):
             session.add(SystemFramework(
                 system_id=system_id, framework_id=fw_id, added_by=user
             ))
+            await session.flush()
             action = "added"
+            # Auto-populate controls when a baseline is applied
+            if fw_kind == "baseline":
+                await _populate_controls_from_baseline(session, system_id, fw_id, user)
         await _log_audit(session, user, "UPDATE", "system_framework", system_id,
-                         {"framework_id": fw_id, "action": action})
+                         {"framework_id": fw_id, "action": action, "kind": fw_kind})
         await session.commit()
     return RedirectResponse(url=f"/systems/{system_id}/frameworks", status_code=303)
 
@@ -10107,26 +16722,62 @@ async def system_framework_detail(request: Request, system_id: str, fw_short_nam
         if not fw:
             raise HTTPException(status_code=404, detail="Framework not found")
 
-        # Framework controls
-        fc_q = select(FrameworkControl).where(FrameworkControl.framework_id == fw.id)
-        if domain:
-            fc_q = fc_q.where(FrameworkControl.domain == domain)
-        fc_q = fc_q.order_by(FrameworkControl.domain, FrameworkControl.control_id)
-        fc_rows = (await session.execute(fc_q)).scalars().all()
-        fc_ids  = [r.id for r in fc_rows]
+        # ── Paywall gate for licensed framework content ────────────────────────
+        if _is_paywalled_fw(fw.short_name):
+            return templates.TemplateResponse("controls_paywalled.html", {
+                "request":     request,
+                "fw":          fw,
+                "fw_controls": [],
+                **_tpl_ctx(request),
+            })
 
-        # Crosswalk: fc_id → [nist_control_id]
-        if fc_ids:
-            cx_rows = (await session.execute(
-                select(ControlCrosswalk.framework_control_id, ControlCrosswalk.nist_control_id)
-                .where(ControlCrosswalk.framework_control_id.in_(fc_ids))
-            )).all()
-        else:
-            cx_rows = []
+        # Framework controls via catalog_controls
+        cc_q = (await session.execute(
+            text("""
+                SELECT cc.id, cc.control_id, cc.title, cc.domain, cc.level
+                FROM catalog_controls cc
+                WHERE cc.framework_id = :fwid
+                  AND (:dom = '' OR cc.domain = :dom)
+                ORDER BY cc.domain
+            """), {"fwid": fw.id, "dom": domain or ""}
+        )).fetchall()
+        cc_q = sorted(cc_q, key=lambda r: (r[3] or "", _ctrl_sort_key(r[1])))
+
+        # Build simple objects so template can use .id, .control_id, .title, .domain, .level
+        from types import SimpleNamespace
+        fc_rows = [
+            SimpleNamespace(id=r[0], control_id=r[1], title=r[2], domain=r[3], level=r[4])
+            for r in cc_q
+        ]
+        fc_ids = [r.id for r in fc_rows]
+
+        # Crosswalk via control_relationships: cc_id → [nist_control_id strings]
         from collections import defaultdict
         cx_by_fc: dict = defaultdict(list)
-        for fc_id, nist_id in cx_rows:
-            cx_by_fc[fc_id].append(nist_id)
+        if fc_ids:
+            cx_rows = (await session.execute(
+                text("""
+                    SELECT
+                        CASE WHEN cr.control_a_id IN :ccids
+                             THEN cr.control_a_id ELSE cr.control_b_id END AS cc_id,
+                        CASE WHEN cr.control_a_id IN :ccids
+                             THEN cc_nist.control_id ELSE cc_nist.control_id END AS nist_ctrl_id
+                    FROM control_relationships cr
+                    JOIN compliance_frameworks cf_nist ON cf_nist.short_name = 'nist80053r5'
+                    JOIN catalog_controls cc_nist ON (
+                        (cr.control_a_id IN :ccids
+                         AND cc_nist.id = cr.control_b_id
+                         AND cc_nist.framework_id = cf_nist.id)
+                        OR
+                        (cr.control_b_id IN :ccids
+                         AND cc_nist.id = cr.control_a_id
+                         AND cc_nist.framework_id = cf_nist.id)
+                    )
+                """).bindparams(bindparam("ccids", expanding=True)),
+                {"ccids": fc_ids}
+            )).fetchall()
+            for cc_id, nist_ctrl_id in cx_rows:
+                cx_by_fc[cc_id].append(nist_ctrl_id)
 
         # System controls lookup
         sc_rows = (await session.execute(
@@ -10139,7 +16790,7 @@ async def system_framework_detail(request: Request, system_id: str, fw_short_nam
         fc_coverage = {}
         for fc in fc_rows:
             nist_ids = cx_by_fc.get(fc.id, [])
-            statuses = [sc_by_id.get(n, None) for n in nist_ids]
+            statuses = [sc_by_id.get(n.lower(), None) for n in nist_ids]
             real = [s.status for s in statuses if s is not None]
             if not real:
                 cov = "unmapped"
@@ -10159,26 +16810,40 @@ async def system_framework_detail(request: Request, system_id: str, fw_short_nam
 
         # Domain list for filter pills
         dom_rows = (await session.execute(
-            select(FrameworkControl.domain)
-            .where(FrameworkControl.framework_id == fw.id)
-            .group_by(FrameworkControl.domain)
-            .order_by(FrameworkControl.domain)
-        )).all()
-        domains = [r[0] for r in dom_rows if r[0]]
+            text("""
+                SELECT DISTINCT domain FROM catalog_controls
+                WHERE framework_id = :fwid AND domain IS NOT NULL
+                ORDER BY domain
+            """), {"fwid": fw.id}
+        )).fetchall()
+        domains = [r[0] for r in dom_rows]
 
-        # Summary counts
-        all_fc = (await session.execute(
-            select(FrameworkControl.id)
-            .where(FrameworkControl.framework_id == fw.id)
-        )).scalars().all()
-        all_cx = (await session.execute(
-            select(ControlCrosswalk.framework_control_id, ControlCrosswalk.nist_control_id)
-            .join(FrameworkControl, FrameworkControl.id == ControlCrosswalk.framework_control_id)
-            .where(FrameworkControl.framework_id == fw.id)
-        )).all()
+        # Summary counts — use full set (without domain filter)
+        all_cc_rows = (await session.execute(
+            text("SELECT id FROM catalog_controls WHERE framework_id = :fwid"),
+            {"fwid": fw.id}
+        )).fetchall()
+        all_fc_ids = [r[0] for r in all_cc_rows]
+        all_cx: list = []
+        if all_fc_ids:
+            all_cx_rows = (await session.execute(
+                text("""
+                    SELECT
+                        CASE WHEN cr.control_a_id IN :ccids THEN cr.control_a_id ELSE cr.control_b_id END AS cc_id,
+                        cc_nist.control_id AS nist_ctrl_id
+                    FROM control_relationships cr
+                    JOIN compliance_frameworks cf_nist ON cf_nist.short_name = 'nist80053r5'
+                    JOIN catalog_controls cc_nist ON (
+                        (cr.control_a_id IN :ccids AND cc_nist.id = cr.control_b_id AND cc_nist.framework_id = cf_nist.id) OR
+                        (cr.control_b_id IN :ccids AND cc_nist.id = cr.control_a_id AND cc_nist.framework_id = cf_nist.id)
+                    )
+                """).bindparams(bindparam("ccids", expanding=True)),
+                {"ccids": all_fc_ids}
+            )).fetchall()
+            all_cx = [(r[0], r[1]) for r in all_cx_rows]
         all_cov = _fw_coverage({k: v.status for k, v in sc_by_id.items()}, all_cx)
         summary = {
-            "total":     len(all_fc),
+            "total":     len(all_cc_rows),
             "satisfied": sum(1 for v in all_cov.values() if v == "satisfied"),
             "partial":   sum(1 for v in all_cov.values() if v == "partial"),
             "gap":       sum(1 for v in all_cov.values() if v == "gap"),
@@ -10234,10 +16899,36 @@ async def issm_dashboard(request: Request):
         role = await _get_user_role(request, session)
         _require_role(role, ["admin", "ao", "ciso", "issm"])
 
-        # All ISSOs
-        isso_profiles = list((await session.execute(
-            select(UserProfile).where(UserProfile.role == "isso").order_by(UserProfile.remote_user)
-        )).scalars().all())
+        # ISSOs in scope:
+        #   - admin / ao / ciso → all ISSOs org-wide
+        #   - issm              → only ISSOs co-assigned to the ISSM's own systems
+        if role in ("admin", "ao", "ciso"):
+            isso_profiles = list((await session.execute(
+                select(UserProfile).where(UserProfile.role == "isso").order_by(UserProfile.remote_user)
+            )).scalars().all())
+        else:
+            # ISSM: find systems they manage
+            issm_sys_rows = (await session.execute(
+                select(SystemAssignment.system_id)
+                .where(SystemAssignment.remote_user == user)
+            )).scalars().all()
+            issm_sys_ids = list(issm_sys_rows)
+
+            if issm_sys_ids:
+                # ISSOs assigned to any of those systems
+                scoped_users = (await session.execute(
+                    select(SystemAssignment.remote_user).distinct()
+                    .where(SystemAssignment.system_id.in_(issm_sys_ids))
+                    .where(SystemAssignment.remote_user != user)
+                )).scalars().all()
+                isso_profiles = list((await session.execute(
+                    select(UserProfile)
+                    .where(UserProfile.role == "isso")
+                    .where(UserProfile.remote_user.in_(scoped_users))
+                    .order_by(UserProfile.remote_user)
+                )).scalars().all())
+            else:
+                isso_profiles = []
 
         today_str       = date.today().isoformat()
         thirty_days_ago = [(date.today() - timedelta(days=i)).isoformat() for i in range(30)]
@@ -10294,6 +16985,19 @@ async def issm_dashboard(request: Request):
         for _qr in _quiz_all:
             quiz_by_user.setdefault(_qr.remote_user, []).append(_qr)
 
+        # Bulk-fetch training resource clicks (last 30 days) for all ISSOs in scope
+        train_cutoff = datetime.utcnow() - timedelta(days=30)
+        train_result = await session.execute(
+            select(TrainingClick)
+            .where(TrainingClick.remote_user.in_(isso_usernames))
+            .where(TrainingClick.clicked_at >= train_cutoff)
+        )
+        train_clicks_raw = train_result.scalars().all()
+        # Map: remote_user → list of clicks
+        train_clicks_by_user: dict = {}
+        for tc in train_clicks_raw:
+            train_clicks_by_user.setdefault(tc.remote_user, []).append(tc)
+
         # ── Build isso_data from pre-fetched data (no per-ISSO queries) ──────────
         isso_data = []
         for isso in isso_profiles:
@@ -10344,6 +17048,7 @@ async def issm_dashboard(request: Request):
                 "quiz_attempts": quiz_attempts,
                 "quiz_accuracy": quiz_accuracy,
                 "quiz_streak":   quiz_streak,
+                "training_clicks": len(train_clicks_by_user.get(isso.remote_user, [])),
             })
 
         ctx = await _full_ctx(request, session, isso_data=isso_data)
@@ -10427,6 +17132,16 @@ async def ciso_dashboard(request: Request):
             )).all()
             _ciso_overdue = dict(_cod)
 
+        _today = date.today()
+        def _days_to_expiry(expiry_str: str) -> int | None:
+            if not expiry_str:
+                return None
+            try:
+                exp = date.fromisoformat(expiry_str)
+                return (exp - _today).days
+            except ValueError:
+                return None
+
         sys_summaries = [
             {
                 "id":            s.id,
@@ -10437,6 +17152,8 @@ async def ciso_dashboard(request: Request):
                 "overall_impact": s.overall_impact or "Low",
                 "open_poams":    _ciso_open.get(s.id, 0),
                 "overdue_poams": _ciso_overdue.get(s.id, 0),
+                "issm_name":     s.issm_name or "",
+                "days_to_expiry": _days_to_expiry(s.auth_expiry or ""),
             }
             for s in systems
         ]
@@ -10449,6 +17166,42 @@ async def ciso_dashboard(request: Request):
                               total_overdue_poams=total_overdue_poams,
                               total_open_risks=total_open_risks,
                               system_count=len(systems))
+
+    # ── Training engagement summary for CISO ────────────────────────────
+    today_str_ciso = date.today().isoformat()
+    week_cutoff = datetime.utcnow() - timedelta(days=7)
+
+    async with SessionLocal() as session:
+        # Org-wide quiz activity today
+        today_quiz_result = await session.execute(
+            select(DailyQuizActivity)
+            .where(DailyQuizActivity.quiz_date == today_str_ciso)
+        )
+        today_quiz_rows = today_quiz_result.scalars().all()
+        quiz_completions_today = len(today_quiz_rows)
+        quiz_passing_today     = sum(1 for r in today_quiz_rows if r.passed)
+
+        # 30-day average score
+        score_result = await session.execute(
+            select(DailyQuizActivity)
+            .where(DailyQuizActivity.quiz_date >= (date.today() - timedelta(days=30)).isoformat())
+        )
+        score_rows = score_result.scalars().all()
+        avg_score_30d = round(sum(r.score for r in score_rows) / len(score_rows), 1) if score_rows else 0
+
+        # External training clicks this week
+        clicks_result = await session.execute(
+            select(TrainingClick).where(TrainingClick.clicked_at >= week_cutoff)
+        )
+        training_clicks_week = len(clicks_result.scalars().all())
+
+    training_summary = {
+        "completions_today": quiz_completions_today,
+        "passing_today":     quiz_passing_today,
+        "avg_score_30d":     avg_score_30d,
+        "clicks_week":       training_clicks_week,
+    }
+    ctx["training_summary"] = training_summary
 
     return templates.TemplateResponse("ciso_dashboard.html", ctx)
 
@@ -10481,6 +17234,9 @@ async def set_max_packages(username: str, request: Request):
 
 @app.get("/sca/workspace", response_class=HTMLResponse)
 async def sca_workspace(request: Request):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
     async with SessionLocal() as session:
         role = await _get_user_role(request, session)
         if not _is_admin(request) and role not in ("sca", "isso"):
@@ -10525,6 +17281,9 @@ async def sca_workspace(request: Request):
 
 @app.get("/ao/decisions", response_class=HTMLResponse)
 async def ao_decisions(request: Request):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
     async with SessionLocal() as session:
         role = await _get_user_role(request, session)
         if not _is_admin(request) and role != "ao":
@@ -10602,6 +17361,9 @@ async def ao_decisions(request: Request):
 
 @app.post("/ao/decisions/{system_id}")
 async def ao_record_decision(request: Request, system_id: str):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
     async with SessionLocal() as session:
         role = await _get_user_role(request, session)
         if not _is_admin(request) and role != "ao":
@@ -11029,6 +17791,11 @@ async def remove_team_member(request: Request, system_id: str, team_id: int, mem
 _OBS_WRITE_ROLES = {"issm", "isso", "sca", "auditor", "system_owner", "admin",
                     "ao", "ciso", "pen_tester"}  # ao/ciso/pen_tester can file observations
 _OBS_READ_ROLES  = _OBS_WRITE_ROLES | {"pmo", "bcdr_coordinator"}  # read-only viewers
+
+# Roles that may write SSP/operational data (vendors, interconnections, inventory,
+# daily ops, evidence, dataflows, privacy assessments, restore tests, reports).
+# Excludes read-only roles: pen_tester, data_owner, pmo, incident_responder, auditor.
+_SSP_WRITE_ROLES = {"admin", "ao", "ciso", "issm", "isso", "sca", "system_owner"}
 
 
 def _obs_scope_filter(is_admin: bool, role: str, sys_ids: list):
@@ -11460,6 +18227,8 @@ async def inventory_delete(request: Request, system_id: str, item_id: int):
     async with SessionLocal() as session:
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(status_code=403)
+        if not _is_admin(request) and await _get_user_role(request, session) not in _SSP_WRITE_ROLES:
+            raise HTTPException(status_code=403, detail="Insufficient role to delete inventory")
 
         item = (await session.execute(
             select(InventoryItem)
@@ -11559,6 +18328,8 @@ async def connection_delete(request: Request, system_id: str, conn_id: int):
     async with SessionLocal() as session:
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(status_code=403)
+        if not _is_admin(request) and await _get_user_role(request, session) not in _SSP_WRITE_ROLES:
+            raise HTTPException(status_code=403, detail="Insufficient role to delete connections")
 
         conn = (await session.execute(
             select(SystemConnection)
@@ -12154,14 +18925,30 @@ async def sca_role_dashboard(request: Request):
                     .where(SystemControl.system_id == s.id)
                 )
                 total = total_q.scalar() or 0
-                impl_q = await session.execute(
+                # Count controls with an SCA-recorded assessment result (actual test completion)
+                assessed_q = await session.execute(
                     select(func.count(SystemControl.id))
                     .where(SystemControl.system_id == s.id)
-                    .where(SystemControl.status.in_(
-                        ["implemented", "in_progress", "planned"]))
+                    .where(SystemControl.assessment_result.isnot(None))
                 )
-                tested = impl_q.scalar() or 0
-                ctrl_stats[s.id] = {"total": total, "tested": tested}
+                assessed = assessed_q.scalar() or 0
+                # Breakdown by result for the system card
+                sat_q = await session.execute(
+                    select(func.count(SystemControl.id))
+                    .where(SystemControl.system_id == s.id)
+                    .where(SystemControl.assessment_result == "satisfied")
+                )
+                ots_q = await session.execute(
+                    select(func.count(SystemControl.id))
+                    .where(SystemControl.system_id == s.id)
+                    .where(SystemControl.assessment_result == "other_than_satisfied")
+                )
+                ctrl_stats[s.id] = {
+                    "total":    total,
+                    "assessed": assessed,
+                    "sat":      sat_q.scalar() or 0,
+                    "ots":      ots_q.scalar() or 0,
+                }
 
         recent_assessments = []
         if sys_ids:
@@ -12190,6 +18977,91 @@ async def sca_role_dashboard(request: Request):
                               recent_assessments=recent_assessments,
                               open_poams=open_poams)
     return templates.TemplateResponse("sca_dashboard.html", ctx)
+
+
+@app.get("/isso/dashboard", response_class=HTMLResponse)
+async def isso_role_dashboard(request: Request):
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as session:
+        role = await _get_user_role(request, session)
+        if not (_is_admin(request) or role in ("isso", "issm", "ciso", "ao")):
+            raise HTTPException(status_code=403)
+
+        sys_ids = await _user_system_ids(request, session)
+        assigned_systems = []
+        ctrl_stats: dict = {}
+        if sys_ids:
+            res = await session.execute(
+                select(System).where(System.id.in_(sys_ids)).order_by(System.name)
+            )
+            assigned_systems = list(res.scalars().all())
+            for s in assigned_systems:
+                total_q = await session.execute(
+                    select(func.count(SystemControl.id))
+                    .where(SystemControl.system_id == s.id)
+                )
+                total = total_q.scalar() or 0
+                impl_q = await session.execute(
+                    select(func.count(SystemControl.id))
+                    .where(SystemControl.system_id == s.id)
+                    .where(SystemControl.status.in_(["implemented", "inherited", "not_applicable"]))
+                )
+                inprog_q = await session.execute(
+                    select(func.count(SystemControl.id))
+                    .where(SystemControl.system_id == s.id)
+                    .where(SystemControl.status == "in_progress")
+                )
+                gap_q = await session.execute(
+                    select(func.count(SystemControl.id))
+                    .where(SystemControl.system_id == s.id)
+                    .where(SystemControl.status == "not_started")
+                )
+                ctrl_stats[s.id] = {
+                    "total":    total,
+                    "complete": impl_q.scalar() or 0,
+                    "inprog":   inprog_q.scalar() or 0,
+                    "gap":      gap_q.scalar() or 0,
+                }
+
+        open_poams = []
+        poam_counts: dict = {}
+        if sys_ids:
+            poam_res = await session.execute(
+                select(PoamItem)
+                .where(PoamItem.system_id.in_(sys_ids))
+                .where(PoamItem.status.in_(["open", "in_progress", "ready_for_review"]))
+                .order_by(PoamItem.severity, PoamItem.scheduled_completion)
+                .limit(20)
+            )
+            open_poams = poam_res.scalars().all()
+            for sev in ("Critical", "High", "Moderate", "Low"):
+                cnt_q = await session.execute(
+                    select(func.count(PoamItem.id))
+                    .where(PoamItem.system_id.in_(sys_ids))
+                    .where(PoamItem.status.in_(["open", "in_progress", "ready_for_review"]))
+                    .where(PoamItem.severity == sev)
+                )
+                poam_counts[sev] = cnt_q.scalar() or 0
+
+        recent_assessments = []
+        if sys_ids:
+            asmt_res = await session.execute(
+                select(Assessment)
+                .where(Assessment.system_id.in_(sys_ids))
+                .order_by(Assessment.uploaded_at.desc())
+                .limit(8)
+            )
+            recent_assessments = asmt_res.scalars().all()
+
+        ctx = await _full_ctx(request, session,
+                              assigned_systems=assigned_systems,
+                              ctrl_stats=ctrl_stats,
+                              open_poams=open_poams,
+                              poam_counts=poam_counts,
+                              recent_assessments=recent_assessments)
+    return templates.TemplateResponse("isso_dashboard.html", ctx)
 
 
 @app.get("/auditor/dashboard", response_class=HTMLResponse)
@@ -12332,10 +19204,11 @@ async def pmo_dashboard(request: Request):
 
         today_str = date.today().isoformat()
 
-        sys_res = await session.execute(
-            select(System).order_by(System.auth_expiry.asc().nullslast())
+        sys_res = await session.execute(select(System))
+        all_systems = sorted(
+            sys_res.scalars().all(),
+            key=lambda s: (s.auth_expiry is None, s.auth_expiry or "")
         )
-        all_systems = list(sys_res.scalars().all())
 
         ato_breakdown: dict = {"authorized": 0, "in_progress": 0,
                                "expired": 0, "not_authorized": 0}
@@ -12405,6 +19278,7 @@ _SYS_KNOWN: set[str] = {
     "confidentiality_impact", "integrity_impact", "availability_impact",
     "inventory_number", "has_pii", "has_phi", "has_ephi",
     "has_financial_data", "is_public_facing", "has_cui", "connects_to_federal",
+    "has_gdpr_data",
 }
 
 _VALID_ROLES       = {"employee","isso","issm","sca","ao","aodr","ciso","system_owner",
@@ -12689,6 +19563,7 @@ async def admin_ingest_commit(request: Request, job_id: str):
                     is_public_facing=_bool_val(_fld("is_public_facing", default="")),
                     has_cui=_bool_val(_fld("has_cui", default="")),
                     connects_to_federal=_bool_val(_fld("connects_to_federal", default="")),
+                    has_gdpr_data=_bool_val(_fld("has_gdpr_data", default="")),
                     boundary=_fld("boundary", "boundary_description") or None,
                     overall_impact=_fld("overall_impact", "impact") or None,
                     auth_date=_auth_date,
@@ -12727,7 +19602,8 @@ async def admin_ingest_template_download(request: Request, ingest_type: str):
                    "owner_name", "owner_email", "description", "purpose",
                    "confidentiality_impact", "integrity_impact", "availability_impact",
                    "inventory_number", "has_pii", "has_phi", "has_ephi",
-                   "has_financial_data", "is_public_facing", "has_cui", "connects_to_federal"]
+                   "has_financial_data", "is_public_facing", "has_cui", "connects_to_federal",
+                   "has_gdpr_data"]
     else:
         raise HTTPException(status_code=400)
 
@@ -12981,7 +19857,7 @@ async def system_parameters(request: Request, system_id: str):
         raise HTTPException(status_code=401)
 
     async with SessionLocal() as session:
-        if not await _can_access_system(request, system_id, session):
+        if not await _can_access_system(system_id, request, session):
             raise HTTPException(status_code=403)
         system = (await session.execute(
             select(System).where(System.id == system_id)
@@ -13024,6 +19900,9 @@ async def system_parameter_upsert(
     async with SessionLocal() as session:
         role = await _get_user_role(request, session)
         _require_role(role, ["admin", "ao", "ciso", "issm", "isso", "sca", "system_owner"])
+
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403, detail="Not assigned to this system")
 
         existing = (await session.execute(
             select(ControlParameter).where(
@@ -13411,10 +20290,12 @@ ROLE_TASK_CONFIGS: dict = {
     "bcdr_coordinator":   [4, 8],
     "bcdr":               [4, 8],          # alias — matches _VALID_SHELL_ROLES key
     "data_owner":         [5, 7, 8],
-    # Executive / oversight roles — read metrics + daily notes
-    "ao":                 [6, 8],
-    "aodr":               [6, 8],
-    "ciso":               [1, 6, 8],
+    # Executive / oversight roles
+    "ao":                 [1, 2, 3, 4, 5, 6, 7, 8],
+    "aodr":               [1, 2, 3, 4, 5, 6, 7, 8],
+    "ciso":               [1, 2, 3, 4, 5, 6, 7, 8],
+    "privacy_officer":    [1, 2, 3, 4, 5, 6, 7, 8],
+    "risk_manager":       [1, 2, 3, 4, 5, 6, 7, 8],
 }
 
 FEDERAL_HOLIDAYS_2026: set = {
@@ -13854,10 +20735,123 @@ _ROTATION_CONTENT: dict = {
     },
 }
 
+_ROTATION_CONTENT["ao"] = {
+    1:  {"title": "Authorization package review", "duration_min": 60, "instructions": "Review the current system authorization package for completeness and currency. Identify any expired artifacts or approaching reauthorization deadlines.", "evidence_label": "ATO status notes", "report_type": None},
+    2:  {"title": "Risk acceptance posture review", "duration_min": 60, "instructions": "Review all risks currently accepted under your authority. Confirm acceptance conditions remain valid. Escalate any that have changed materially.", "evidence_label": "Risk acceptance review notes", "report_type": None},
+    3:  {"title": "POA&M executive summary review", "duration_min": 60, "instructions": "Review the executive POA&M summary. Identify overdue items and systemic weaknesses requiring escalation or resource allocation.", "evidence_label": "POA&M executive summary", "report_type": None},
+    4:  {"title": "Continuous monitoring status brief", "duration_min": 60, "instructions": "Review the monthly CONMON summary. Assess overall security posture trend. Document questions or concerns for ISSM follow-up.", "evidence_label": "CONMON review notes", "report_type": None},
+    5:  {"title": "Incident escalation review", "duration_min": 60, "instructions": "Review any significant incidents escalated to AO level in the past cycle. Confirm incident response adequacy and corrective actions.", "evidence_label": "Incident escalation notes", "report_type": None},
+    6:  {"title": "Supply chain risk review", "duration_min": 60, "instructions": "Review key vendor and supply chain risk posture. Assess whether current SCRM controls are adequate for the mission context.", "evidence_label": "SCRM review notes", "report_type": None},
+    7:  {"title": "Mission impact assessment", "duration_min": 60, "instructions": "Assess current security posture against mission requirements. Identify any gaps that affect mission readiness or acceptable risk thresholds.", "evidence_label": "Mission impact assessment notes", "report_type": None},
+    8:  {"title": "Authorization decision log review", "duration_min": 60, "instructions": "Review prior authorization decisions and conditions. Confirm all conditions of approval remain in effect and are being met.", "evidence_label": "Authorization decision log notes", "report_type": None},
+    9:  {"title": "Security investment review", "duration_min": 60, "instructions": "Review security program resource allocation. Identify under-resourced areas and priorities for the next planning cycle.", "evidence_label": "Security investment notes", "report_type": None},
+    10: {"title": "Cross-system risk correlation", "duration_min": 60, "instructions": "Review risks across all authorized systems. Identify correlated risks and systemic patterns that require portfolio-level action.", "evidence_label": "Cross-system risk correlation notes", "report_type": None},
+    11: {"title": "Regulatory requirement review", "duration_min": 60, "instructions": "Review applicable regulatory requirements for systems under your authority. Assess compliance status and gap closure timelines.", "evidence_label": "Regulatory review notes", "report_type": None},
+    12: {"title": "Security performance metrics review", "duration_min": 60, "instructions": "Review key security performance metrics. Assess trends and identify metrics indicating degradation in security posture.", "evidence_label": "Metrics review notes", "report_type": None},
+    13: {"title": "System boundary change review", "duration_min": 60, "instructions": "Review any proposed or recent system boundary changes. Assess whether changes require authorization amendment or full reauthorization.", "evidence_label": "Boundary change review notes", "report_type": None},
+    14: {"title": "Significant change review", "duration_min": 60, "instructions": "Review significant changes to systems under your authority since last review. Assess impact on authorization basis.", "evidence_label": "Significant change review notes", "report_type": None},
+    15: {"title": "Privacy posture review", "duration_min": 60, "instructions": "Review privacy-related risk posture for systems handling PII or sensitive data. Assess adequacy of privacy controls and PIA currency.", "evidence_label": "Privacy posture review notes", "report_type": None},
+    16: {"title": "Insider threat posture review", "duration_min": 60, "instructions": "Review insider threat indicators and current detection capability. Assess whether insider threat controls are proportionate to mission sensitivity.", "evidence_label": "Insider threat review notes", "report_type": None},
+    17: {"title": "Security training and awareness posture", "duration_min": 60, "instructions": "Review training completion rates and awareness program effectiveness. Identify personnel or teams with training gaps.", "evidence_label": "Training posture review notes", "report_type": None},
+    18: {"title": "Reauthorization planning review", "duration_min": 60, "instructions": "Review systems approaching ATO expiration. Confirm reauthorization plans are in place and adequately resourced.", "evidence_label": "Reauth planning notes", "report_type": None},
+    19: {"title": "Cloud and external service risk review", "duration_min": 60, "instructions": "Review cloud services and external dependencies. Assess whether risk from external services is acceptable and documented.", "evidence_label": "Cloud/external risk review notes", "report_type": None},
+    20: {"title": "Contingency plan effectiveness review", "duration_min": 60, "instructions": "Review continuity and contingency plans for authorized systems. Assess adequacy for mission continuity under adverse conditions.", "evidence_label": "Contingency plan review notes", "report_type": None},
+    21: {"title": "Interconnection and data flow review", "duration_min": 60, "instructions": "Review system interconnections and data flows. Assess whether ISAs and MOUs are current and authorized.", "evidence_label": "Interconnection review notes", "report_type": None},
+    22: {"title": "Security policy compliance review", "duration_min": 60, "instructions": "Review compliance with organizational security policies across authorized systems. Document exceptions and remediation timelines.", "evidence_label": "Policy compliance review notes", "report_type": None},
+    23: {"title": "Stakeholder security briefing prep", "duration_min": 60, "instructions": "Prepare security status briefing for senior stakeholders. Summarize posture, open risks, and recommended decisions.", "evidence_label": "Briefing prep notes", "report_type": None},
+    24: {"title": "Annual security program assessment", "duration_min": 90, "instructions": "Conduct annual review of overall security program health across authorized systems. Assess maturity, resource adequacy, and strategic alignment.", "evidence_label": "Annual security program assessment", "report_type": "annual_security_assessment"},
+    25: {"title": "Authorization renewal decision", "duration_min": 90, "instructions": "Review authorization renewal package for the highest-priority system. Assess risk posture and issue or defer authorization decision with documented rationale.", "evidence_label": "Authorization renewal decision memo", "report_type": None},
+}
+
+_ROTATION_CONTENT["ciso"] = {
+    1:  {"title": "Enterprise security posture dashboard review", "duration_min": 60, "instructions": "Review enterprise security dashboard. Assess KPIs, trend lines, and outlier systems requiring executive attention.", "evidence_label": "Posture dashboard review notes", "report_type": None},
+    2:  {"title": "Threat landscape brief", "duration_min": 60, "instructions": "Review current threat intelligence from ISAC feeds, CISA advisories, and internal telemetry. Assess applicability to enterprise and update threat model.", "evidence_label": "Threat landscape briefing notes", "report_type": None},
+    3:  {"title": "Security program gap analysis", "duration_min": 60, "instructions": "Identify gaps between current security program maturity and target state. Prioritize gaps by mission risk and document improvement roadmap.", "evidence_label": "Gap analysis notes", "report_type": None},
+    4:  {"title": "Security budget and resource review", "duration_min": 60, "instructions": "Review security program resource allocation against risk priorities. Identify over- and under-funded areas.", "evidence_label": "Resource review notes", "report_type": None},
+    5:  {"title": "Security architecture review", "duration_min": 60, "instructions": "Review enterprise security architecture decisions. Assess emerging technology risks and alignment with zero-trust roadmap.", "evidence_label": "Architecture review notes", "report_type": None},
+    6:  {"title": "Vendor security risk review", "duration_min": 60, "instructions": "Review top vendor and third-party security risks. Assess SCRM program effectiveness and identify high-priority vendor issues.", "evidence_label": "Vendor risk review notes", "report_type": None},
+    7:  {"title": "Security awareness program review", "duration_min": 60, "instructions": "Assess security awareness and training program effectiveness. Review completion rates, phishing simulation results, and training quality.", "evidence_label": "Awareness program review notes", "report_type": None},
+    8:  {"title": "Red team / assessment findings review", "duration_min": 60, "instructions": "Review findings from recent red team exercises, penetration tests, or third-party assessments. Track remediation progress.", "evidence_label": "Assessment findings review notes", "report_type": None},
+    9:  {"title": "Incident response program review", "duration_min": 60, "instructions": "Review incident response program effectiveness. Assess recent incidents, lessons learned integration, and IR capability maturity.", "evidence_label": "IR program review notes", "report_type": None},
+    10: {"title": "Zero trust initiative status", "duration_min": 60, "instructions": "Review zero trust implementation progress. Assess identity, network, and data pillar maturity. Update initiative roadmap.", "evidence_label": "Zero trust status notes", "report_type": None},
+    11: {"title": "Board / executive security brief prep", "duration_min": 60, "instructions": "Prepare security update for board or executive leadership. Summarize posture, significant risks, and resource asks.", "evidence_label": "Executive brief prep notes", "report_type": None},
+    12: {"title": "Privacy and data governance review", "duration_min": 60, "instructions": "Review enterprise privacy and data governance posture. Assess PIA coverage, data inventory currency, and privacy risk escalations.", "evidence_label": "Privacy governance review notes", "report_type": None},
+    13: {"title": "Security policy review", "duration_min": 60, "instructions": "Review enterprise security policies for currency and completeness. Identify policies requiring update or new policies needed.", "evidence_label": "Policy review notes", "report_type": None},
+    14: {"title": "Cloud security posture review", "duration_min": 60, "instructions": "Review cloud security posture across enterprise cloud environments. Assess CSPM alerts, misconfigurations, and compliance coverage.", "evidence_label": "Cloud security review notes", "report_type": None},
+    15: {"title": "Identity and access governance review", "duration_min": 60, "instructions": "Review enterprise identity and access governance. Assess privileged access management, access certification coverage, and IAM program health.", "evidence_label": "IAM governance review notes", "report_type": None},
+    16: {"title": "Security operations center review", "duration_min": 60, "instructions": "Review SOC performance metrics: alert volume, MTTD, MTTR, escalation quality. Identify detection coverage gaps.", "evidence_label": "SOC performance review notes", "report_type": None},
+    17: {"title": "Regulatory and compliance review", "duration_min": 60, "instructions": "Review enterprise regulatory compliance posture. Assess open audit findings, upcoming examinations, and compliance risk.", "evidence_label": "Regulatory compliance review notes", "report_type": None},
+    18: {"title": "Security talent and workforce review", "duration_min": 60, "instructions": "Review security team capacity, skill gaps, and attrition risk. Assess hiring pipeline and training investment.", "evidence_label": "Workforce review notes", "report_type": None},
+    19: {"title": "Resilience and continuity review", "duration_min": 60, "instructions": "Review business continuity and disaster recovery posture. Assess test results, recovery objectives, and single points of failure.", "evidence_label": "Resilience review notes", "report_type": None},
+    20: {"title": "Merger / acquisition security review", "duration_min": 60, "instructions": "Review security integration status for any active M&A activities. Assess newly acquired systems and legacy risk inherited.", "evidence_label": "M&A security review notes", "report_type": None},
+    21: {"title": "Security metrics and KPI calibration", "duration_min": 60, "instructions": "Review and calibrate enterprise security KPIs. Assess whether current metrics reflect actual risk reduction and program effectiveness.", "evidence_label": "KPI calibration notes", "report_type": None},
+    22: {"title": "Insider threat program review", "duration_min": 60, "instructions": "Review insider threat program health: detection capability, active cases, and program maturity against NITTF standards.", "evidence_label": "Insider threat program review notes", "report_type": None},
+    23: {"title": "Security innovation and tooling review", "duration_min": 60, "instructions": "Review emerging security technologies and tooling roadmap. Assess tool rationalization opportunities and new capability investments.", "evidence_label": "Innovation review notes", "report_type": None},
+    24: {"title": "Annual security strategy review", "duration_min": 90, "instructions": "Conduct annual security strategy review. Assess alignment to organizational mission, adjust 3-year roadmap, and document strategic priorities.", "evidence_label": "Annual strategy review document", "report_type": "annual_ciso_strategy"},
+    25: {"title": "Cyber risk board presentation", "duration_min": 90, "instructions": "Prepare and deliver (or document) cyber risk presentation for risk management board. Cover residual risk, major investments, and program health.", "evidence_label": "Risk board presentation notes", "report_type": None},
+}
+
+_ROTATION_CONTENT["privacy_officer"] = {
+    1:  {"title": "PII inventory review", "duration_min": 90, "instructions": "Review enterprise PII inventory. Identify new data elements collected since last review. Update inventory records.", "evidence_label": "PII inventory review notes", "report_type": None},
+    2:  {"title": "Privacy impact assessment review", "duration_min": 90, "instructions": "Review open and pending PIAs. Assess coverage of all systems handling PII. Identify systems requiring new or updated PIAs.", "evidence_label": "PIA status review notes", "report_type": None},
+    3:  {"title": "Privacy threshold analysis review", "duration_min": 90, "instructions": "Review PTAs for systems approaching review cycle. Confirm PTA triggers are assessed accurately. Update records.", "evidence_label": "PTA review notes", "report_type": None},
+    4:  {"title": "Data subject rights request review", "duration_min": 90, "instructions": "Review all open data subject rights requests (access, correction, deletion). Verify requests are being handled within required timeframes.", "evidence_label": "DSR review notes", "report_type": None},
+    5:  {"title": "Privacy policy review", "duration_min": 90, "instructions": "Review public and internal privacy policies. Assess currency, accuracy, and alignment with actual data practices.", "evidence_label": "Privacy policy review notes", "report_type": None},
+    6:  {"title": "Consent management review", "duration_min": 90, "instructions": "Review consent records for data collection activities. Verify consent is documented, scope-appropriate, and current.", "evidence_label": "Consent management review notes", "report_type": None},
+    7:  {"title": "Privacy breach response review", "duration_min": 90, "instructions": "Review any privacy breaches or incidents in the past cycle. Assess notification compliance, corrective actions, and reporting accuracy.", "evidence_label": "Privacy breach review notes", "report_type": None},
+    8:  {"title": "Vendor privacy compliance review", "duration_min": 90, "instructions": "Review data processing agreements and privacy terms with key vendors. Assess whether vendors are meeting contractual privacy obligations.", "evidence_label": "Vendor privacy review notes", "report_type": None},
+    9:  {"title": "Privacy training compliance check", "duration_min": 90, "instructions": "Review privacy training completion rates. Follow up with personnel who handle PII and are overdue for privacy training.", "evidence_label": "Training compliance notes", "report_type": None},
+    10: {"title": "Cross-border data transfer review", "duration_min": 90, "instructions": "Review data transfers to international locations. Verify adequate safeguards are in place for cross-border transfers.", "evidence_label": "Cross-border transfer review notes", "report_type": None},
+    11: {"title": "Data minimization review", "duration_min": 90, "instructions": "Review data collection practices for data minimization compliance. Identify instances of unnecessary data collection or retention.", "evidence_label": "Data minimization review notes", "report_type": None},
+    12: {"title": "Privacy risk register review", "duration_min": 90, "instructions": "Review open privacy risks. Update likelihood/impact assessments. Confirm each risk has an owner and mitigation plan.", "evidence_label": "Privacy risk register review notes", "report_type": None},
+    13: {"title": "System of records notice review", "duration_min": 90, "instructions": "Review SORNs for systems under your jurisdiction. Identify SORNs requiring update due to changed data practices.", "evidence_label": "SORN review notes", "report_type": None},
+    14: {"title": "Children's privacy review", "duration_min": 90, "instructions": "Review systems that may interact with minors. Assess COPPA/FERPA compliance posture and parental consent mechanisms.", "evidence_label": "Children's privacy review notes", "report_type": None},
+    15: {"title": "Privacy-by-design review", "duration_min": 90, "instructions": "Review new system development or significant changes for privacy-by-design compliance. Assess early-stage privacy integration.", "evidence_label": "Privacy-by-design review notes", "report_type": None},
+    16: {"title": "Regulatory change monitoring", "duration_min": 90, "instructions": "Review recent regulatory developments affecting privacy compliance. Assess impact of new or amended privacy laws.", "evidence_label": "Regulatory monitoring notes", "report_type": None},
+    17: {"title": "Data retention and disposal review", "duration_min": 90, "instructions": "Review data retention practices and disposal records. Verify retention schedules are current and disposal procedures comply with policy.", "evidence_label": "Retention/disposal review notes", "report_type": None},
+    18: {"title": "Privacy awareness program review", "duration_min": 90, "instructions": "Review privacy awareness program effectiveness. Assess training content currency and employee understanding of privacy obligations.", "evidence_label": "Awareness program review notes", "report_type": None},
+    19: {"title": "Sensitive data handling review", "duration_min": 90, "instructions": "Review handling procedures for sensitive categories of personal data (health, financial, biometric). Assess protection adequacy.", "evidence_label": "Sensitive data handling review notes", "report_type": None},
+    20: {"title": "Privacy control effectiveness assessment", "duration_min": 90, "instructions": "Assess the effectiveness of implemented privacy controls across key systems. Identify control weaknesses and remediation priorities.", "evidence_label": "Privacy control assessment notes", "report_type": None},
+    21: {"title": "Third-party privacy assessment review", "duration_min": 90, "instructions": "Review third-party privacy assessment results and certifications. Assess adequacy of third-party privacy due diligence.", "evidence_label": "Third-party assessment review notes", "report_type": None},
+    22: {"title": "Privacy metrics review", "duration_min": 90, "instructions": "Review privacy program metrics: PIA completion rate, DSR response time, breach notification compliance. Assess program health.", "evidence_label": "Privacy metrics review notes", "report_type": None},
+    23: {"title": "Privacy program governance review", "duration_min": 90, "instructions": "Review privacy governance structure and decision-making processes. Assess committee effectiveness and escalation pathways.", "evidence_label": "Governance review notes", "report_type": None},
+    24: {"title": "Annual privacy program report", "duration_min": 90, "instructions": "Compile annual privacy program report: PIA coverage, breach statistics, regulatory changes, and program improvements.", "evidence_label": "Annual privacy program report", "report_type": "annual_privacy_report"},
+    25: {"title": "Privacy compliance certification", "duration_min": 90, "instructions": "Complete annual privacy compliance certification. Attest to compliance status and document any open exceptions with remediation plans.", "evidence_label": "Privacy compliance certification", "report_type": None},
+}
+
+_ROTATION_CONTENT["risk_manager"] = {
+    1:  {"title": "Risk register review", "duration_min": 90, "instructions": "Review all open risks across the risk register. Update likelihood, impact, and risk scores. Identify risks requiring escalation.", "evidence_label": "Risk register review notes", "report_type": None},
+    2:  {"title": "Risk treatment plan review", "duration_min": 90, "instructions": "Review risk treatment plans for top-priority risks. Assess treatment effectiveness and milestone compliance.", "evidence_label": "Risk treatment plan review notes", "report_type": None},
+    3:  {"title": "Emerging risk identification", "duration_min": 90, "instructions": "Review threat intelligence, industry reports, and internal signals for emerging risks not yet in the risk register. Add and score as appropriate.", "evidence_label": "Emerging risk identification notes", "report_type": None},
+    4:  {"title": "Risk appetite calibration", "duration_min": 90, "instructions": "Review current risk appetite and tolerance thresholds. Assess whether organizational risk posture aligns with documented appetite.", "evidence_label": "Risk appetite calibration notes", "report_type": None},
+    5:  {"title": "Control effectiveness review", "duration_min": 90, "instructions": "Review effectiveness of key risk controls. Assess whether controls are reducing residual risk as intended.", "evidence_label": "Control effectiveness review notes", "report_type": None},
+    6:  {"title": "Quantitative risk analysis", "duration_min": 90, "instructions": "Perform quantitative risk analysis on top-priority risks. Calculate ALE or EF/SLE where applicable. Update risk scoring.", "evidence_label": "Quantitative risk analysis notes", "report_type": None},
+    7:  {"title": "Risk exception review", "duration_min": 90, "instructions": "Review all open risk exceptions and waivers. Assess whether exception conditions still hold and exceptions should be renewed or closed.", "evidence_label": "Risk exception review notes", "report_type": None},
+    8:  {"title": "Third-party risk review", "duration_min": 90, "instructions": "Review third-party risk assessments. Assess vendor security posture changes, contract compliance, and SCRM effectiveness.", "evidence_label": "Third-party risk review notes", "report_type": None},
+    9:  {"title": "Operational risk review", "duration_min": 90, "instructions": "Review operational risk indicators: availability, error rates, process failures. Assess operational risk posture trend.", "evidence_label": "Operational risk review notes", "report_type": None},
+    10: {"title": "Technology risk review", "duration_min": 90, "instructions": "Review technology risk posture: legacy systems, unsupported software, single points of failure. Prioritize remediation.", "evidence_label": "Technology risk review notes", "report_type": None},
+    11: {"title": "Regulatory risk review", "duration_min": 90, "instructions": "Review regulatory risk: compliance gaps, upcoming requirements, enforcement trends. Assess regulatory risk exposure.", "evidence_label": "Regulatory risk review notes", "report_type": None},
+    12: {"title": "Financial risk review", "duration_min": 90, "instructions": "Review financial risk from security incidents: potential fines, breach costs, lost business, and reputational damage estimates.", "evidence_label": "Financial risk review notes", "report_type": None},
+    13: {"title": "Risk correlation analysis", "duration_min": 90, "instructions": "Analyze correlations between risk register items. Identify cascading risk scenarios and systemic vulnerabilities.", "evidence_label": "Risk correlation analysis notes", "report_type": None},
+    14: {"title": "Risk scenario modeling", "duration_min": 90, "instructions": "Model impact of 2-3 top risk scenarios. Document assumptions, estimated impact ranges, and response options.", "evidence_label": "Risk scenario modeling notes", "report_type": None},
+    15: {"title": "Risk communication review", "duration_min": 90, "instructions": "Review how risk information is communicated to stakeholders. Assess report quality, frequency, and stakeholder comprehension.", "evidence_label": "Risk communication review notes", "report_type": None},
+    16: {"title": "Risk framework compliance review", "duration_min": 90, "instructions": "Review compliance with the organization's risk management framework (RMF, ISO 31000, COSO). Assess process adherence.", "evidence_label": "Framework compliance review notes", "report_type": None},
+    17: {"title": "Risk owner engagement review", "duration_min": 90, "instructions": "Engage risk owners to confirm risk accuracy and treatment status. Document owner responses and any needed escalations.", "evidence_label": "Risk owner engagement notes", "report_type": None},
+    18: {"title": "Risk data quality review", "duration_min": 90, "instructions": "Review quality of risk data in the risk register: completeness, accuracy, and recency. Identify data quality issues.", "evidence_label": "Risk data quality review notes", "report_type": None},
+    19: {"title": "Strategic risk alignment review", "duration_min": 90, "instructions": "Review alignment of risk register with organizational strategic objectives. Assess whether key strategic risks are captured.", "evidence_label": "Strategic alignment review notes", "report_type": None},
+    20: {"title": "Risk committee preparation", "duration_min": 90, "instructions": "Prepare materials for risk management committee meeting: top risks, treatment updates, decisions required.", "evidence_label": "Risk committee prep notes", "report_type": None},
+    21: {"title": "Crisis scenario risk review", "duration_min": 90, "instructions": "Review crisis-level risk scenarios. Assess organizational readiness and pre-positioned response options.", "evidence_label": "Crisis scenario review notes", "report_type": None},
+    22: {"title": "Risk program maturity assessment", "duration_min": 90, "instructions": "Assess maturity of the risk management program against a capability model. Identify areas for process improvement.", "evidence_label": "Maturity assessment notes", "report_type": None},
+    23: {"title": "Risk key indicator review", "duration_min": 90, "instructions": "Review key risk indicators (KRIs). Assess whether current KRIs provide early warning of risk threshold breaches.", "evidence_label": "KRI review notes", "report_type": None},
+    24: {"title": "Annual risk report", "duration_min": 90, "instructions": "Compile annual risk report: risk register summary, treatment effectiveness, emerging risks, and risk posture trend.", "evidence_label": "Annual risk report", "report_type": "annual_risk_report"},
+    25: {"title": "Risk management program strategic review", "duration_min": 90, "instructions": "Conduct strategic review of the risk management program. Assess mission alignment, resource adequacy, and 3-year roadmap.", "evidence_label": "Strategic program review document", "report_type": None},
+}
+
 _REPORT_DIR = Path("data/reports")
 
 # Shell role aliases → canonical rotation content keys
 _ROTATION_CONTENT["bcdr"] = _ROTATION_CONTENT["bcdr_coordinator"]
+_ROTATION_CONTENT["aodr"] = _ROTATION_CONTENT["ao"]
 
 
 def _p25_task_config(role: str) -> list:
@@ -14148,7 +21142,9 @@ async def system_daily_save(request: Request, system_id: str):
     async with SessionLocal() as session:
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(403)
-        role      = await _get_user_role(request, session)
+        role = await _get_user_role(request, session)
+        if not _is_admin(request) and role not in _SSP_WRITE_ROLES:
+            raise HTTPException(status_code=403, detail="Insufficient role for daily ops")
         task_nums = _p25_task_config(role)
         today     = date.today().isoformat()
         flags     = {str(t): (form.get(f"task_{t}") == "on") for t in task_nums}
@@ -14271,6 +21267,8 @@ async def system_change_review_post(request: Request, system_id: str):
     async with SessionLocal() as session:
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(403)
+        if not _is_admin(request) and await _get_user_role(request, session) not in _SSP_WRITE_ROLES:
+            raise HTTPException(status_code=403, detail="Insufficient role for daily ops")
         today = date.today().isoformat()
         rec = ChangeReviewRecord(
             remote_user     = user,
@@ -14322,6 +21320,8 @@ async def system_backup_check_post(request: Request, system_id: str):
     async with SessionLocal() as session:
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(403)
+        if not _is_admin(request) and await _get_user_role(request, session) not in _SSP_WRITE_ROLES:
+            raise HTTPException(status_code=403, detail="Insufficient role for daily ops")
         today = date.today().isoformat()
         # Upsert — one record per user/system/day
         existing = (await session.execute(
@@ -14386,6 +21386,8 @@ async def system_access_spotcheck_post(request: Request, system_id: str):
     async with SessionLocal() as session:
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(403)
+        if not _is_admin(request) and await _get_user_role(request, session) not in _SSP_WRITE_ROLES:
+            raise HTTPException(status_code=403, detail="Insufficient role for daily ops")
         today = date.today().isoformat()
         existing = (await session.execute(
             select(AccessSpotCheck)
@@ -14621,6 +21623,8 @@ async def system_vendors_post(request: Request, system_id: str):
     async with SessionLocal() as session:
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(403)
+        if not _is_admin(request) and await _get_user_role(request, session) not in _SSP_WRITE_ROLES:
+            raise HTTPException(status_code=403, detail="Insufficient role to manage vendors")
         v = Vendor(
             system_id     = system_id,
             name          = form.get("name", "").strip(),
@@ -14696,6 +21700,8 @@ async def system_interconnections_post(request: Request, system_id: str):
     async with SessionLocal() as session:
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(403)
+        if not _is_admin(request) and await _get_user_role(request, session) not in _SSP_WRITE_ROLES:
+            raise HTTPException(status_code=403, detail="Insufficient role to manage interconnections")
         rec = InterconnectionRecord(
             system_id            = system_id,
             partner_name         = form.get("partner_name", "").strip(),
@@ -14745,6 +21751,8 @@ async def system_dataflows_post(request: Request, system_id: str):
     async with SessionLocal() as session:
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(403)
+        if not _is_admin(request) and await _get_user_role(request, session) not in _SSP_WRITE_ROLES:
+            raise HTTPException(status_code=403, detail="Insufficient role to manage data flows")
         rec = DataFlowRecord(
             system_id            = system_id,
             integration_name     = form.get("integration_name", "").strip(),
@@ -14794,6 +21802,8 @@ async def system_privacy_assessments_post(request: Request, system_id: str):
     async with SessionLocal() as session:
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(403)
+        if not _is_admin(request) and await _get_user_role(request, session) not in _SSP_WRITE_ROLES:
+            raise HTTPException(status_code=403, detail="Insufficient role to manage privacy assessments")
         rec = PrivacyAssessment(
             system_id        = system_id,
             assess_type      = form.get("assess_type", "pta"),
@@ -14843,6 +21853,8 @@ async def system_restore_tests_post(request: Request, system_id: str):
     async with SessionLocal() as session:
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(403)
+        if not _is_admin(request) and await _get_user_role(request, session) not in _SSP_WRITE_ROLES:
+            raise HTTPException(status_code=403, detail="Insufficient role to log restore tests")
         rto = form.get("time_to_restore_min")
         rec = RestoreTestRecord(
             system_id           = system_id,
@@ -14896,6 +21908,8 @@ async def system_reports_generate(request: Request, system_id: str,
     async with SessionLocal() as session:
         if not await _can_access_system(system_id, request, session):
             raise HTTPException(403)
+        if not _is_admin(request) and await _get_user_role(request, session) not in _SSP_WRITE_ROLES:
+            raise HTTPException(status_code=403, detail="Insufficient role to generate reports")
         rpt = GeneratedReport(
             system_id   = system_id,
             remote_user = user,
@@ -15030,6 +22044,208 @@ async def issm_daily_portfolio(request: Request):
     return templates.TemplateResponse("issm_daily_portfolio.html", ctx)
 
 
+# ── Role-scoped landing / queue stubs ─────────────────────────────────────────
+# These routes serve the approver/attestor roles.  Full implementations (filtered
+# content, sign-off forms) are tracked as future work.  For now they render a
+# placeholder that is role-gated so navigation doesn't 404.
+
+@app.get("/role/privacy/queue", response_class=HTMLResponse)
+async def privacy_officer_queue(request: Request):
+    if not request.headers.get(_REMOTE_USER_HDR, ""):
+        return RedirectResponse("/", status_code=303)
+    async with SessionLocal() as _rs:
+        role = await _get_user_role(request, _rs)
+    if role != "privacy_officer" and not _is_admin(request):
+        raise HTTPException(status_code=403)
+    async with SessionLocal() as session:
+        # Systems with any privacy-review-triggering data attribute
+        privacy_attr_keys = [
+            r[0] for r in (await session.execute(
+                select(DataAttributeDefinition.key)
+                .where(DataAttributeDefinition.triggers_privacy_review == True,
+                       DataAttributeDefinition.is_active.isnot(False))
+            )).all()
+        ]
+        if privacy_attr_keys:
+            pii_system_ids = {
+                r[0] for r in (await session.execute(
+                    select(SystemDataAttribute.system_id)
+                    .where(SystemDataAttribute.attribute_key.in_(privacy_attr_keys))
+                )).all()
+            }
+        else:
+            pii_system_ids = set()
+        # Fall back to legacy boolean flags for systems not yet migrated
+        legacy_pii = (await session.execute(
+            select(System.id).where(
+                System.deleted_at.is_(None),
+                or_(System.has_pii == True, System.has_gdpr_data == True),
+            )
+        )).scalars().all()
+        all_pii_ids = pii_system_ids | set(legacy_pii)
+
+        pii_systems = (await session.execute(
+            select(System).where(
+                System.id.in_(all_pii_ids),
+                System.deleted_at.is_(None),
+            ).order_by(System.name)
+        )).scalars().all() if all_pii_ids else []
+
+        # Load data attributes per system for display
+        sda_rows = (await session.execute(
+            select(SystemDataAttribute.system_id, SystemDataAttribute.attribute_key)
+            .where(SystemDataAttribute.system_id.in_([s.id for s in pii_systems]))
+        )).all()
+        attrs_by_system: dict = {}
+        for sid, key in sda_rows:
+            attrs_by_system.setdefault(sid, []).append(key)
+
+        completed_assessments = {
+            r[0] for r in (await session.execute(
+                select(PrivacyAssessment.system_id)
+                .where(PrivacyAssessment.status == "completed")
+            )).all()
+        }
+        queue_items = [
+            {"system": s, "has_assessment": s.id in completed_assessments,
+             "data_attrs": attrs_by_system.get(s.id, [])}
+            for s in pii_systems
+        ]
+        ctx = await _full_ctx(request, session,
+            page_title="Privacy Officer — Review Queue",
+            page_desc="Systems handling PII or GDPR-scoped data. Systems without a completed privacy assessment are flagged for review.",
+            queue_items=queue_items,
+        )
+    return templates.TemplateResponse("role_queue.html", ctx)
+
+
+@app.get("/role/executive/observations", response_class=HTMLResponse)
+async def executive_observations(request: Request):
+    if not request.headers.get(_REMOTE_USER_HDR, ""):
+        return RedirectResponse("/", status_code=303)
+    async with SessionLocal() as _rs:
+        role = await _get_user_role(request, _rs)
+    if role not in ("executive", "ciso") and not _is_admin(request):
+        raise HTTPException(status_code=403)
+    async with SessionLocal() as session:
+        systems = (await session.execute(
+            select(System).where(System.deleted_at.is_(None)).order_by(System.name)
+        )).scalars().all()
+        observations = (await session.execute(
+            select(ExecutiveObservation).order_by(ExecutiveObservation.created_at.desc())
+        )).scalars().all()
+        ctx = await _full_ctx(request, session,
+            page_title="Executive Observations",
+            page_desc="Add advisory observations on system authorization posture. Observations are non-binding — AO authority is not affected.",
+            systems=systems,
+            observations=observations,
+            queue_items=[],
+        )
+    return templates.TemplateResponse("role_queue.html", ctx)
+
+
+@app.post("/role/executive/observations")
+async def executive_observation_post(request: Request):
+    if not request.headers.get(_REMOTE_USER_HDR, ""):
+        raise HTTPException(status_code=401)
+    async with SessionLocal() as _rs:
+        role = await _get_user_role(request, _rs)
+    if role not in ("executive", "ciso") and not _is_admin(request):
+        raise HTTPException(status_code=403)
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    form = await request.form()
+    system_id = str(form.get("system_id", "")).strip()
+    body = str(form.get("body", "")).strip()
+    if not system_id or not body:
+        raise HTTPException(status_code=400, detail="system_id and body required")
+    async with SessionLocal() as session:
+        session.add(ExecutiveObservation(system_id=system_id, remote_user=user, body=body))
+        await session.commit()
+    return RedirectResponse("/role/executive/observations", status_code=303)
+
+
+@app.get("/role/vendor/assignment", response_class=HTMLResponse)
+async def vendor_assignment(request: Request):
+    if not request.headers.get(_REMOTE_USER_HDR, ""):
+        return RedirectResponse("/", status_code=303)
+    async with SessionLocal() as _rs:
+        role = await _get_user_role(request, _rs)
+    if role != "vendor" and not _is_admin(request):
+        raise HTTPException(status_code=403)
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    async with SessionLocal() as session:
+        engagements = (await session.execute(
+            select(ExternalEngagement, System)
+            .join(System, ExternalEngagement.system_id == System.id)
+            .where(
+                ExternalEngagement.remote_user == user,
+                ExternalEngagement.status == "active",
+                System.deleted_at.is_(None),
+            )
+        )).all()
+        queue_items = [{"engagement": eng, "system": sys} for eng, sys in engagements]
+        ctx = await _full_ctx(request, session,
+            page_title="My Engagement",
+            page_desc="Your assigned system(s) and the scope of your external engagement.",
+            queue_items=queue_items,
+        )
+    return templates.TemplateResponse("role_queue.html", ctx)
+
+
+@app.get("/role/co/queue", response_class=HTMLResponse)
+async def co_queue(request: Request):
+    if not request.headers.get(_REMOTE_USER_HDR, ""):
+        return RedirectResponse("/", status_code=303)
+    async with SessionLocal() as _rs:
+        role = await _get_user_role(request, _rs)
+    if role != "contracting_officer" and not _is_admin(request):
+        raise HTTPException(status_code=403)
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    async with SessionLocal() as session:
+        # Function-mapped systems (regulatory triggers)
+        mapped_ids = set(await _co_review_system_ids(session))
+
+        # Manually granted engagements
+        eng_rows = (await session.execute(
+            select(ExternalEngagement)
+            .where(ExternalEngagement.remote_user == user, ExternalEngagement.status == "active")
+        )).scalars().all()
+        manual_ids = {e.system_id for e in eng_rows}
+        eng_by_system = {e.system_id: e for e in eng_rows}
+
+        all_ids = mapped_ids | manual_ids
+        if all_ids:
+            systems = (await session.execute(
+                select(System).where(System.id.in_(all_ids), System.deleted_at.is_(None))
+                .order_by(System.name)
+            )).scalars().all()
+        else:
+            systems = []
+
+        # Build trigger explanation per system
+        queue_items = []
+        for s in systems:
+            triggers = []
+            for flag in _CO_REVIEW_SYSTEM_FLAGS:
+                if getattr(s, flag, False):
+                    triggers.append(flag.replace("_", " ").title())
+            eng = eng_by_system.get(s.id)
+            queue_items.append({
+                "engagement": eng,
+                "system": s,
+                "triggers": triggers,
+                "is_manual": s.id in manual_ids and s.id not in mapped_ids,
+            })
+
+        ctx = await _full_ctx(request, session,
+            page_title="Contracting Officer — Review Queue",
+            page_desc="Systems under your contractual oversight scope. Scope is determined by system attributes and enabled frameworks.",
+            queue_items=queue_items,
+            co_view=True,
+        )
+    return templates.TemplateResponse("role_queue.html", ctx)
+
+
 # ── Phase 26: AI Assistant ─────────────────────────────────────────────────────
 
 @app.get("/ai/chat", response_class=HTMLResponse)
@@ -15097,9 +22313,11 @@ async def ai_ask(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     body = await request.json()
-    query     = (body.get("query") or "").strip()
-    history   = body.get("history") or []
-    system_id = body.get("system_id") or None
+    query                  = (body.get("query") or "").strip()
+    history                = body.get("history") or []
+    system_id              = body.get("system_id") or None
+    page_context           = (body.get("page_context") or "").strip()[:300]
+    system_prompt_override = (body.get("system_prompt_prefix") or "").strip() or None
 
     if not query:
         return JSONResponse({"error": "Empty query"}, status_code=400)
@@ -15139,22 +22357,26 @@ async def ai_ask(request: Request):
     try:
         user_context = {
             "role":            role,
-            "system_name":     template_vars.get("SYSTEM_NAME", ""),
+            "system_id":       system_id or "",   # scoping reference — not sent to LLM directly
+            "system_name":     template_vars.get("SYSTEM_NAME", "Not specified"),
             "system_abbr":     template_vars.get("SYSTEM_ABBR", ""),
             "impact_level":    template_vars.get("IMPACT_LEVEL", "moderate"),
-            "open_poam_count": template_vars.get("OPEN_POAM_COUNT", ""),
-            "ato_expiry":      template_vars.get("ATO_EXPIRY", ""),
+            "open_poam_count": template_vars.get("OPEN_POAM_COUNT", "N/A"),
+            "ato_expiry":      template_vars.get("ATO_EXPIRY", "N/A"),
+            "page_context":    page_context,
         }
         result = await engine.ask(
             query=query,
             user_context=user_context,
             history=history,
+            system_prompt_override=system_prompt_override,
         )
-        await _log_audit(
-            user, "ai_query", "llm", system_id or "global",
-            outcome="ok" if not result.get("error") else "error",
-            detail=f"query_len={len(query)} sources={len(result.get('sources',[]))} elapsed={result.get('elapsed_ms')}ms"
-        )
+        async with SessionLocal() as audit_session:
+            await _log_audit(
+                audit_session, user, "ai_query", "llm", system_id or "global",
+                details={"query_len": len(query), "sources": len(result.get("sources", [])), "elapsed_ms": result.get("elapsed_ms")},
+                outcome="ok" if not result.get("error") else "error",
+            )
         # Return `response` key for template compatibility
         return JSONResponse({
             "response": result.get("answer", ""),
@@ -15196,3 +22418,969 @@ async def ai_reload_knowledge(request: Request):
     except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)})
 
+
+
+# ── Phase 35: OpenSCAP / SCAP Security Guide ───────────────────────────────────
+
+@app.get("/api/scap/datastreams")
+async def api_scap_datastreams(request: Request):
+    """List available SCAP datastream files on this server."""
+    _require_user(request)
+    return JSONResponse({"datastreams": _oscap.list_datastreams()})
+
+
+@app.get("/api/scap/profiles")
+async def api_scap_profiles(request: Request, datastream: str = Query(...)):
+    """List XCCDF profiles available in a datastream file."""
+    import html as _h_scap
+    _require_user(request)
+    ds_path = _oscap.SCAP_CONTENT_DIR / _h_scap.unescape(datastream)
+    if not str(ds_path.resolve()).startswith(str(_oscap.SCAP_CONTENT_DIR.resolve())):
+        raise HTTPException(400, "Invalid datastream path")
+    if not ds_path.exists():
+        raise HTTPException(404, "Datastream not found")
+    profiles = _oscap.list_profiles(str(ds_path))
+    return JSONResponse({"profiles": profiles})
+
+
+@app.get("/api/systems/{sid}/scans")
+async def api_list_scans(request: Request, sid: str):
+    """List all SCAP scans for a system."""
+    _require_user(request)
+    async with SessionLocal() as db:
+        sys_obj = await db.get(System, sid)
+        if not sys_obj or sys_obj.deleted_at:
+            raise HTTPException(404, "System not found")
+        if not await _can_access_system(sid, request, db):
+            raise HTTPException(403)
+        await _require_scan_enabled(sid, request, db)
+        rows = (await db.execute(
+            select(SystemScan).where(SystemScan.system_id == sid)
+            .order_by(SystemScan.created_at.desc())
+        )).scalars().all()
+        return JSONResponse({"scans": [
+            {
+                "id":              s.id,
+                "status":          s.status,
+                "scan_type":       s.scan_type,
+                "target_host":     s.target_host,
+                "datastream_name": s.datastream_name,
+                "profile_title":   s.profile_title,
+                "profile_id":      s.profile_id,
+                "pass_count":      s.pass_count,
+                "fail_count":      s.fail_count,
+                "error_count":     s.error_count,
+                "notchecked_count": s.notchecked_count,
+                "error_msg":       s.error_msg,
+                "created_at":      s.created_at.isoformat() if s.created_at else None,
+                "completed_at":    s.completed_at.isoformat() if s.completed_at else None,
+                "created_by":      s.created_by,
+            }
+            for s in rows
+        ]})
+
+
+@app.get("/api/systems/{sid}/scans/{scan_id}/findings")
+async def api_scan_findings(request: Request, sid: str, scan_id: str,
+                             result_filter: str = Query("all")):
+    """Return findings for a completed SCAP scan."""
+    import json as _json_scap
+    _require_user(request)
+    async with SessionLocal() as db:
+        scan = await db.get(SystemScan, scan_id)
+        if not scan or scan.system_id != sid:
+            raise HTTPException(404, "Scan not found")
+        if not await _can_access_system(sid, request, db):
+            raise HTTPException(403)
+        await _require_scan_enabled(sid, request, db)
+        q = select(ScanFinding).where(ScanFinding.scan_id == scan_id)
+        if result_filter != "all":
+            q = q.where(ScanFinding.result == result_filter)
+        q = q.order_by(ScanFinding.severity, ScanFinding.short_id)
+        rows = (await db.execute(q)).scalars().all()
+        return JSONResponse({"findings": [
+            {
+                "id":            f.id,
+                "rule_id":       f.rule_id,
+                "short_id":      f.short_id,
+                "title":         f.title,
+                "result":        f.result,
+                "severity":      f.severity,
+                "nist_controls": _json_scap.loads(f.nist_controls) if f.nist_controls else [],
+                "description":   f.description,
+                "fix_text":      f.fix_text,
+                "ident":         f.ident,
+                "poam_item_id":  f.poam_item_id,
+            }
+            for f in rows
+        ]})
+
+
+@app.get("/api/systems/{sid}/scans/{scan_id}/report")
+async def api_scan_report(request: Request, sid: str, scan_id: str):
+    """Download the HTML oscap report for a completed scan."""
+    _require_user(request)
+    async with SessionLocal() as db:
+        scan = await db.get(SystemScan, scan_id)
+        if not scan or scan.system_id != sid:
+            raise HTTPException(404, "Scan not found")
+        if not await _can_access_system(sid, request, db):
+            raise HTTPException(403)
+        await _require_scan_enabled(sid, request, db)
+        if not scan.html_path or not Path(scan.html_path).exists():
+            raise HTTPException(404, "Report not yet available")
+        return FileResponse(
+            scan.html_path,
+            media_type="text/html",
+            filename=f"scap-report-{scan_id[:8]}.html",
+        )
+
+
+@app.post("/api/systems/{sid}/scans")
+async def api_start_scan(
+    request: Request,
+    sid: str,
+    background_tasks: BackgroundTasks,
+):
+    """
+    Start a new SCAP scan for a system.
+
+    JSON body:
+      datastream (str):    filename of datastream in /opt/scap-content/
+      profile_id (str):    XCCDF profile ID
+      target_host (str):   hostname/IP (default: localhost)
+      target_port (int):   SSH port (default: 22)
+      target_user (str):   SSH user (default: root)
+    """
+    _require_user(request)
+    async with SessionLocal() as db:
+        sys_obj = await db.get(System, sid)
+        if not sys_obj or sys_obj.deleted_at:
+            raise HTTPException(404, "System not found")
+        if not await _can_access_system(sid, request, db):
+            raise HTTPException(403)
+        await _require_scan_enabled(sid, request, db)
+
+    body = await request.json()
+    datastream_name = body.get("datastream", "")
+    profile_id      = body.get("profile_id", "")
+    target_host     = body.get("target_host", "localhost").strip() or "localhost"
+    target_port     = int(body.get("target_port", 22))
+    target_user     = body.get("target_user", "root").strip() or "root"
+
+    if not datastream_name or not profile_id:
+        raise HTTPException(400, "datastream and profile_id are required")
+
+    ds_path = _oscap.SCAP_CONTENT_DIR / datastream_name
+    if not str(ds_path.resolve()).startswith(str(_oscap.SCAP_CONTENT_DIR.resolve())):
+        raise HTTPException(400, "Invalid datastream path")
+    if not ds_path.exists():
+        raise HTTPException(404, f"Datastream '{datastream_name}' not found")
+
+    profiles = _oscap.list_profiles(str(ds_path))
+    profile_title = next((p["title"] for p in profiles if p["id"] == profile_id), profile_id)
+
+    scan_id = str(uuid.uuid4())
+    remote_user = request.headers.get("Remote-User", "system")
+
+    async with SessionLocal() as db:
+        scan = SystemScan(
+            id              = scan_id,
+            system_id       = sid,
+            target_host     = target_host,
+            target_port     = target_port,
+            target_user     = target_user,
+            datastream_path = str(ds_path),
+            datastream_name = datastream_name,
+            profile_id      = profile_id,
+            profile_title   = profile_title,
+            status          = "queued",
+            created_by      = remote_user,
+        )
+        db.add(scan)
+        await db.commit()
+
+    background_tasks.add_task(
+        _run_scap_scan_bg, scan_id, sid, target_host, target_port, target_user,
+        str(ds_path), profile_id, profile_title,
+    )
+    return JSONResponse({"ok": True, "scan_id": scan_id, "status": "queued"}, status_code=202)
+
+
+@app.post("/api/systems/{sid}/scans/{scan_id}/import-poam")
+async def api_import_scan_to_poam(request: Request, sid: str, scan_id: str):
+    """Create POA&M items from failed SCAP findings. Skips already-linked findings."""
+    import json as _json_scap2
+    _require_user(request)
+    async with SessionLocal() as db:
+        scan = await db.get(SystemScan, scan_id)
+        if not scan or scan.system_id != sid:
+            raise HTTPException(404, "Scan not found")
+        if scan.status != "complete":
+            raise HTTPException(400, "Scan is not complete yet")
+        if not await _can_access_system(sid, request, db):
+            raise HTTPException(403)
+        await _require_scan_enabled(sid, request, db)
+
+        remote_user = request.headers.get("Remote-User", "system")
+        failed = (await db.execute(
+            select(ScanFinding).where(
+                ScanFinding.scan_id == scan_id,
+                ScanFinding.result.in_(["fail", "error"]),
+                ScanFinding.poam_item_id.is_(None),
+            )
+        )).scalars().all()
+
+        created = 0
+        for f in failed:
+            nist_controls = _json_scap2.loads(f.nist_controls) if f.nist_controls else []
+            poam = PoamItem(
+                system_id            = sid,
+                control_id           = ", ".join(nist_controls) or None,
+                weakness_name        = f"SCAP: {(f.title or f.short_id or f.rule_id)[:150]}",
+                weakness_description = (
+                    f"SCAP rule '{f.short_id}' failed on '{scan.target_host}'.\n\n"
+                    f"{f.description or ''}\n\n"
+                    f"Remediation: {f.fix_text or '(see oscap report)'}"
+                ).strip()[:3000],
+                detection_source     = "scan",
+                severity             = f.severity or "Moderate",
+                system_generated     = True,
+                created_by           = remote_user,
+                status               = "open",
+            )
+            db.add(poam)
+            await db.flush()
+            f.poam_item_id = poam.id
+            created += 1
+
+        await db.commit()
+        return JSONResponse({"ok": True, "created": created})
+
+
+async def _run_scap_scan_bg(
+    scan_id: str,
+    system_id: str,
+    target_host: str,
+    target_port: int,
+    target_user: str,
+    datastream_path: str,
+    profile_id: str,
+    profile_title: str,
+):
+    """Background task: run oscap, parse ARF, persist findings."""
+    import json as _json_bg
+    from datetime import datetime, timezone as _tz
+
+    async with SessionLocal() as db:
+        scan = await db.get(SystemScan, scan_id)
+        if not scan:
+            return
+        scan.status     = "running"
+        scan.started_at = datetime.now(_tz.utc)
+        await db.commit()
+
+    try:
+        is_local = target_host in ("localhost", "127.0.0.1", "::1")
+        if is_local:
+            result = await _oscap.run_local_scan(datastream_path, profile_id, scan_id)
+        else:
+            result = await _oscap.run_remote_scan(
+                target_host, target_port, target_user,
+                datastream_path, profile_id, scan_id,
+            )
+
+        arf_path  = result.get("arf_path")
+        html_path = result.get("html_path")
+        error_msg = result.get("error")
+        exit_code = result.get("exit_code", -1)
+
+        parsed   = {"findings": [], "summary": {}}
+        if arf_path and Path(arf_path).exists():
+            parsed = _oscap.parse_arf(arf_path, datastream_path=datastream_path)
+            parsed["profile_title"] = profile_title
+
+        summary  = parsed.get("summary", {})
+        findings = parsed.get("findings", [])
+
+        async with SessionLocal() as db:
+            scan = await db.get(SystemScan, scan_id)
+            scan.status              = "complete" if exit_code in (0, 2) else "failed"
+            scan.arf_path            = arf_path
+            scan.html_path           = html_path
+            scan.exit_code           = exit_code
+            scan.error_msg           = error_msg
+            scan.pass_count          = summary.get("pass", 0)
+            scan.fail_count          = summary.get("fail", 0)
+            scan.error_count         = summary.get("error", 0)
+            scan.notchecked_count    = summary.get("notchecked", 0)
+            scan.notapplicable_count = summary.get("notapplicable", 0)
+            scan.completed_at        = datetime.now(_tz.utc)
+
+            for f in findings:
+                db.add(ScanFinding(
+                    scan_id       = scan_id,
+                    rule_id       = f["rule_id"],
+                    short_id      = f["short_id"],
+                    title         = (f.get("title") or "")[:300],
+                    result        = f["result"],
+                    severity      = f.get("severity", "Informational"),
+                    nist_controls = _json_bg.dumps(f.get("nist_controls", [])),
+                    description   = (f.get("description") or "")[:1000],
+                    fix_text      = (f.get("fix_text") or "")[:1000],
+                    ident         = (f.get("ident") or "")[:100],
+                ))
+            await db.commit()
+
+    except Exception as exc:
+        log.exception("SCAP scan %s background task failed", scan_id)
+        async with SessionLocal() as db:
+            scan = await db.get(SystemScan, scan_id)
+            if scan:
+                from datetime import datetime, timezone as _tz2
+                scan.status       = "failed"
+                scan.error_msg    = str(exc)[:500]
+                scan.completed_at = datetime.now(_tz2.utc)
+                await db.commit()
+
+
+# ── Background Workload Engine ─────────────────────────────────────────────────
+
+async def _generate_daily_assignments(session, user: str, today: str) -> list:
+    """
+    Deterministically generate daily control review + POA&M check assignments
+    for the given user based on their accessible systems.  Seeded by user+date
+    so the same user always sees the same tasks on the same day.
+    """
+    seed = int(hashlib.md5(f"{user}:{today}".encode()).hexdigest(), 16) % (2**32)
+    rng = random.Random(seed)
+
+    sys_ids = await session.execute(
+        select(SystemAssignment.system_id)
+        .where(SystemAssignment.remote_user == user)
+    )
+    sys_id_list = [r[0] for r in sys_ids.all()]
+    if not sys_id_list:
+        return []
+
+    systems = (await session.execute(
+        select(System).where(System.id.in_(sys_id_list)).where(System.deleted_at.is_(None))
+    )).scalars().all()
+
+    assignments: list[DailyWorkAssignment] = []
+    per_system = max(1, min(3, len(sys_id_list)))
+
+    for sys in systems:
+        # Fetch controls for this system
+        ctrl_rows = (await session.execute(
+            select(SystemControl.control_id)
+            .where(SystemControl.system_id == sys.id)
+            .where(SystemControl.status != "not_applicable")
+        )).scalars().all()
+
+        if ctrl_rows:
+            chosen = rng.sample(ctrl_rows, min(per_system, len(ctrl_rows)))
+            for cid in chosen:
+                a = DailyWorkAssignment(
+                    remote_user=user,
+                    system_id=sys.id,
+                    system_abbr=sys.abbreviation or sys.name[:8],
+                    system_name=sys.name,
+                    control_id=cid,
+                    control_title=cid,
+                    task_type="control_review",
+                    assignment_date=today,
+                    status="pending",
+                )
+                session.add(a)
+                assignments.append(a)
+
+        # Add one POA&M check per system if open items exist
+        open_poam = (await session.execute(
+            select(PoamItem.id)
+            .where(PoamItem.system_id == sys.id)
+            .where(PoamItem.status.notin_(["closed", "completed"]))
+            .limit(1)
+        )).scalar_one_or_none()
+
+        if open_poam:
+            a = DailyWorkAssignment(
+                remote_user=user,
+                system_id=sys.id,
+                system_abbr=sys.abbreviation or sys.name[:8],
+                system_name=sys.name,
+                control_id=None,
+                control_title=None,
+                task_type="poam_check",
+                assignment_date=today,
+                status="pending",
+            )
+            session.add(a)
+            assignments.append(a)
+
+    await session.flush()
+    return assignments
+
+
+@app.get("/api/workload/today")
+async def api_workload_today(request: Request):
+    """Return (or generate) today's work assignments for the requesting user."""
+    user = _require_user(request)
+    today = date.today().isoformat()
+
+    async with SessionLocal() as session:
+        existing = (await session.execute(
+            select(DailyWorkAssignment)
+            .where(DailyWorkAssignment.remote_user == user)
+            .where(DailyWorkAssignment.assignment_date == today)
+            .order_by(DailyWorkAssignment.system_name, DailyWorkAssignment.task_type)
+        )).scalars().all()
+
+        if not existing:
+            existing = await _generate_daily_assignments(session, user, today)
+            await session.commit()
+
+        return JSONResponse([{
+            "id":          a.id,
+            "system_id":   a.system_id,
+            "system_abbr": a.system_abbr,
+            "system_name": a.system_name,
+            "control_id":  a.control_id,
+            "task_type":   a.task_type,
+            "status":      a.status,
+            "notes":       a.notes,
+        } for a in existing])
+
+
+@app.post("/api/workload/{assignment_id}/complete")
+async def api_workload_complete(request: Request, assignment_id: str):
+    """Mark a workload assignment as done."""
+    user = _require_user(request)
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    notes = (body.get("notes") or "")[:1000] if isinstance(body, dict) else ""
+
+    async with SessionLocal() as session:
+        a = await session.get(DailyWorkAssignment, assignment_id)
+        if not a or a.remote_user != user:
+            raise HTTPException(404, "Assignment not found")
+        a.status       = "done"
+        a.notes        = notes or a.notes
+        a.completed_at = datetime.utcnow()
+        await session.commit()
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/workload/{assignment_id}/skip")
+async def api_workload_skip(request: Request, assignment_id: str):
+    """Mark a workload assignment as skipped."""
+    user = _require_user(request)
+    async with SessionLocal() as session:
+        a = await session.get(DailyWorkAssignment, assignment_id)
+        if not a or a.remote_user != user:
+            raise HTTPException(404, "Assignment not found")
+        a.status = "skipped"
+        await session.commit()
+    return JSONResponse({"ok": True})
+
+
+@app.get("/issm/workload-overview", response_class=HTMLResponse)
+async def issm_workload_overview(request: Request):
+    """ISSM team-wide workload overview."""
+    _require_user(request)
+    today = date.today().isoformat()
+
+    async with SessionLocal() as session:
+        rows = (await session.execute(
+            select(DailyWorkAssignment)
+            .where(DailyWorkAssignment.assignment_date == today)
+            .order_by(DailyWorkAssignment.remote_user, DailyWorkAssignment.system_name)
+        )).scalars().all()
+        ctx = await _full_ctx(request, session)
+
+    ctx["today"] = today
+    ctx["assignments"] = rows
+    return templates.TemplateResponse("workload_overview.html", ctx)
+
+
+# ── Framework Applicability Detection ─────────────────────────────────────────
+
+_FW_RULES: list[dict] = [
+    {"id": "nist80053r5", "name": "NIST SP 800-53 Rev 5",
+     "match": lambda s: s.is_federal,
+     "reason": "System is flagged as a federal information system — NIST 800-53 Rev 5 is the required baseline."},
+    {"id": "fisma",       "name": "FISMA",
+     "match": lambda s: s.is_federal,
+     "reason": "Federal systems are subject to FISMA requirements by law."},
+    {"id": "fedramp",     "name": "FedRAMP",
+     "match": lambda s: s.is_federal and s.environment in ("cloud", "saas", "paas", "iaas"),
+     "reason": "Federal cloud-hosted systems must meet FedRAMP authorization requirements."},
+    {"id": "cmmc",        "name": "CMMC",
+     "match": lambda s: s.has_cui,
+     "reason": "System handles Controlled Unclassified Information (CUI) — CMMC applies to DoD contractors."},
+    {"id": "hipaa",       "name": "HIPAA Security Rule",
+     "match": lambda s: s.has_phi or s.has_ephi,
+     "reason": "System stores or transmits PHI/ePHI — HIPAA Security Rule compliance is required."},
+    {"id": "hitech",      "name": "HITECH",
+     "match": lambda s: s.has_ephi,
+     "reason": "System handles electronic PHI — HITECH extends HIPAA obligations to business associates."},
+    {"id": "pci_dss",     "name": "PCI DSS",
+     "match": lambda s: s.has_financial_data,
+     "reason": "System processes or stores financial/cardholder data — PCI DSS v4 requirements apply."},
+    {"id": "gdpr",        "name": "GDPR",
+     "match": lambda s: s.has_gdpr_data,
+     "reason": "System processes EU personal data — GDPR requirements apply regardless of organization location."},
+    {"id": "iso27001",    "name": "ISO/IEC 27001:2022",
+     "match": lambda s: not s.is_federal,
+     "reason": "ISO 27001 is the leading international standard for information security management systems."},
+    {"id": "soc2",        "name": "SOC 2",
+     "match": lambda s: s.is_public_facing and not s.is_federal,
+     "reason": "Public-facing systems often require SOC 2 Type II attestation for customer assurance."},
+    {"id": "nist_csf",    "name": "NIST CSF 2.0",
+     "match": lambda s: True,
+     "reason": "NIST CSF is broadly applicable to any organization as a voluntary risk management framework."},
+    {"id": "cis_benchmarks", "name": "CIS Benchmarks",
+     "match": lambda s: True,
+     "reason": "CIS Benchmarks provide prescriptive hardening guidance applicable to all system types."},
+    {"id": "itar",        "name": "ITAR / EAR",
+     "match": lambda s: s.is_federal and s.overall_impact in ("High", "Moderate"),
+     "reason": "High/Moderate federal systems with defense context may be subject to ITAR/EAR export control requirements."},
+    {"id": "cjis",        "name": "CJIS Security Policy",
+     "match": lambda s: s.connects_to_federal and not s.has_phi,
+     "reason": "Systems connecting to federal criminal justice information systems must comply with CJIS policy."},
+    {"id": "nist800171",  "name": "NIST SP 800-171",
+     "match": lambda s: s.has_cui and not s.is_federal,
+     "reason": "Non-federal organizations handling CUI must comply with NIST SP 800-171 requirements."},
+    {"id": "nist800137",  "name": "NIST SP 800-137 (ISCM)",
+     "match": lambda s: s.is_federal and s.auth_status in ("authorized", "in_progress"),
+     "reason": "Authorized or in-progress federal systems should implement continuous monitoring per NIST 800-137."},
+]
+
+
+@app.get("/api/systems/{sid}/suggest-frameworks")
+async def api_suggest_frameworks(request: Request, sid: str):
+    """Rule-based framework applicability suggestions for a system."""
+    _require_user(request)
+    async with SessionLocal() as session:
+        sys = await session.get(System, sid)
+        if not sys or sys.deleted_at:
+            raise HTTPException(404, "System not found")
+
+        # Collect short_names of already-applied frameworks via join
+        already_rows = await session.execute(
+            select(ComplianceFramework.short_name)
+            .join(SystemFramework, SystemFramework.framework_id == ComplianceFramework.id)
+            .where(SystemFramework.system_id == sid)
+        )
+        already = {r[0] for r in already_rows.all()}
+
+    suggestions = []
+    for rule in _FW_RULES:
+        try:
+            matches = rule["match"](sys)
+        except Exception:
+            matches = False
+        if matches:
+            suggestions.append({
+                "framework_id":    rule["id"],
+                "name":            rule["name"],
+                "reason":          rule["reason"],
+                "already_applied": rule["id"] in already,
+            })
+
+    return JSONResponse({"suggestions": suggestions})
+
+
+# ── Welcome / MOTD Page ────────────────────────────────────────────────────────
+
+_WELCOME_SKIP_NOTICE_ROLES = {"employee", "executive", "vendor", "contracting_officer"}
+
+@app.get("/welcome", response_class=HTMLResponse)
+async def welcome_page(request: Request):
+    """Welcome / MOTD landing page shown to new or returning users."""
+    _require_user(request)
+    async with SessionLocal() as session:
+        ctx = await _full_ctx(request, session)
+    role = ctx.get("user_role_ctx", "employee")
+    ctx["show_security_notice"] = role not in _WELCOME_SKIP_NOTICE_ROLES
+    return templates.TemplateResponse("welcome.html", ctx)
+
+
+# ── IL4 Security Admin Endpoints ──────────────────────────────────────────────
+
+@app.get("/api/admin/security/status")
+async def api_security_status(request: Request):
+    """Return current IL4 compliance posture as JSON."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+
+    import os
+    is_prod = os.environ.get("BLACKSITE_ENV", "dev").lower() == "prod"
+    env_label = "prod" if is_prod else "dev"
+
+    db_enc = bool(_SEC_CFG.get("db_encryption", False))
+    req_mfa = bool(_SEC_CFG.get("require_mfa", False))
+    fips_session = bool(_SEC_CFG.get("fips_session_crypto", False))
+    il4_mode = bool(_SEC_CFG.get("il4_mode", False))
+
+    gaps = [
+        {
+            "id": 1,
+            "ref": "SC-28",
+            "label": "Encryption at Rest",
+            "status": "closed" if db_enc else "warned",
+            "detail": "SQLCipher db_encryption is active." if db_enc
+                      else "db_encryption not enabled — data at rest is unencrypted. Set security.db_encryption=true and install libsqlcipher3.",
+        },
+        {
+            "id": 2,
+            "ref": "AU-2/AU-10",
+            "label": "Immutable Audit Log",
+            "status": "closed",
+            "detail": "ImmutableAuditEntry table active — append-only non-repudiation log present.",
+        },
+        {
+            "id": 3,
+            "ref": "IA-2(1)",
+            "label": "MFA Enforcement",
+            "status": "closed" if req_mfa else "open",
+            "detail": "Application-layer MFA enforcement active (X-Authelia-Auth-Level: two_factor required)." if req_mfa
+                      else "require_mfa not enabled — MFA is not being enforced at the application layer.",
+        },
+        {
+            "id": 4,
+            "ref": "SC-13",
+            "label": "FIPS Session Crypto",
+            "status": "closed" if fips_session else ("dev_excluded" if not is_prod else "prod_block"),
+            "detail": "FIPS-validated session crypto active." if fips_session
+                      else ("Dev environment — fips_session_crypto check bypassed (BLACKSITE_ENV != prod)." if not is_prod
+                            else "fips_session_crypto not enabled — FIPS-validated session crypto required in production."),
+        },
+    ]
+
+    return JSONResponse({
+        "il4_mode": il4_mode,
+        "gaps": gaps,
+        "cac_piv_auth": bool(_SEC_CFG.get("cac_piv_auth", False)),
+        "require_mfa": req_mfa,
+        "audit_all_requests": bool(_SEC_CFG.get("audit_all_requests", False)),
+        "db_encryption": db_enc,
+        "env": env_label,
+    })
+
+
+@app.get("/api/admin/security/cac-caddy-snippet")
+async def api_cac_caddy_snippet(request: Request):
+    """Return the Caddy configuration snippet needed to enable CAC/PIV authentication."""
+    if not _is_admin(request):
+        raise HTTPException(403)
+    base_url = CONFIG.get("app", {}).get("base_url", "https://blacksite.example.com")
+    domain = base_url.replace("https://", "").replace("http://", "").split("/")[0]
+    snippet = f"""# Caddy configuration for CAC/PIV client certificate authentication
+# Add this to your {domain} block in the Caddyfile
+
+{domain} {{
+    # Require client certificates issued by DoD PKI
+    tls {{
+        client_auth {{
+            mode require_and_verify
+            trusted_ca_cert_file /etc/caddy/dod-root-ca.pem
+        }}
+    }}
+
+    # Inject certificate Subject DN as header for BLACKSITE
+    header_up X-Client-Cert-Subject {{tls_client_subject}}
+    header_up X-Client-Cert-Serial  {{tls_client_serial}}
+
+    # Remove Remote-User — identity comes from cert now
+    header_down -Remote-User
+
+    reverse_proxy 127.0.0.1:{CONFIG.get('app', {}).get('port', 8100)} {{
+        header_up X-Client-Cert-Subject {{tls_client_subject}}
+    }}
+}}
+
+# Required: download DoD root CA bundle from:
+# https://public.cyber.mil/pki-pke/tools-configuration-files/
+# Place all root CA certs in /etc/caddy/dod-root-ca.pem
+"""
+    return JSONResponse({"snippet": snippet})
+
+
+@app.get("/admin/il4-security", response_class=HTMLResponse)
+async def admin_il4_security(request: Request):
+    """IL4 Security Posture admin page."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+    async with SessionLocal() as session:
+        ctx = await _full_ctx(request, session)
+    return templates.TemplateResponse("admin_il4_security.html", ctx)
+
+
+# ---------------------------------------------------------------------------
+# Framework Version Migration Tool — Rev 4 → Rev 5 crosswalk
+# ---------------------------------------------------------------------------
+
+def _r4_to_r5_analysis(system_controls: Optional[dict] = None) -> dict:
+    """
+    Compare NIST 800-53 Rev 4 catalog against Rev 5 catalog.
+    Returns structured gap analysis:
+      - direct:      control IDs present in both (same ID, may have scope changes)
+      - new_in_r5:   Rev 5 controls with no Rev 4 equivalent
+      - withdrawn:   Rev 4 controls not carried forward into Rev 5
+    If system_controls dict {ctrl_id: status} is provided, annotates each
+    direct/withdrawn control with the system's documented status.
+    """
+    r4_ids = set(R4_CATALOG.keys())
+    r5_ids = set(CATALOG.keys())
+
+    direct_ids    = sorted(r4_ids & r5_ids,   key=_ctrl_sort_key)
+    new_r5_ids    = sorted(r5_ids - r4_ids,   key=_ctrl_sort_key)
+    withdrawn_ids = sorted(r4_ids - r5_ids,   key=_ctrl_sort_key)
+
+    sc = system_controls or {}
+
+    def _row(cid, cat):
+        r4 = R4_CATALOG.get(cid, {})
+        r5 = CATALOG.get(cid, {})
+        return {
+            "id":            cid.upper(),
+            "family":        (r5 or r4).get("family_id", cid.split("-")[0].upper()),
+            "r4_title":      r4.get("title", ""),
+            "r5_title":      r5.get("title", ""),
+            "category":      cat,
+            "sys_status":    sc.get(cid.lower(), sc.get(cid.upper(), "")),
+        }
+
+    direct    = [_row(c, "direct")    for c in direct_ids]
+    new_in_r5 = [_row(c, "new_r5")   for c in new_r5_ids]
+    withdrawn = [_row(c, "withdrawn") for c in withdrawn_ids]
+
+    # Group by family for display
+    families = sorted({r["family"] for r in direct + new_in_r5 + withdrawn})
+
+    return {
+        "direct":    direct,
+        "new_in_r5": new_in_r5,
+        "withdrawn": withdrawn,
+        "families":  families,
+        "stats": {
+            "r4_total":   len(r4_ids),
+            "r5_total":   len(r5_ids),
+            "direct":     len(direct),
+            "new_in_r5":  len(new_in_r5),
+            "withdrawn":  len(withdrawn),
+        },
+    }
+
+
+@app.get("/tools/r4-to-r5", response_class=HTMLResponse)
+async def tool_r4_to_r5(
+    request: Request,
+    system_id: Optional[str] = None,
+    family: Optional[str] = None,
+    view: str = "all",         # all | new_r5 | withdrawn | direct
+):
+    """NIST 800-53 Rev 4 → Rev 5 migration gap analysis tool."""
+    user = _require_user(request)
+
+    system_controls: dict = {}
+    selected_system = None
+
+    async with SessionLocal() as session:
+        ctx = await _full_ctx(request, session)
+
+        if system_id:
+            sys_row = (await session.execute(
+                text("SELECT id, name FROM systems WHERE id = :sid AND deleted_at IS NULL"),
+                {"sid": system_id},
+            )).fetchone()
+            if sys_row and _can_access_system(system_id, request, session):
+                selected_system = {"id": str(sys_row[0]), "name": sys_row[1]}
+                sc_rows = (await session.execute(
+                    text("SELECT control_id, status FROM system_controls WHERE system_id = :sid"),
+                    {"sid": system_id},
+                )).fetchall()
+                system_controls = {r[0].lower(): r[1] for r in sc_rows}
+
+        # User's accessible systems for the selector
+        user_systems = (await session.execute(
+            text("SELECT id, name FROM systems WHERE deleted_at IS NULL ORDER BY name LIMIT 200"),
+        )).fetchall()
+
+    if not R4_CATALOG:
+        ctx["error"] = "NIST 800-53 Rev 4 catalog is not yet loaded. Check connectivity and restart."
+        ctx["analysis"] = None
+    else:
+        analysis = _r4_to_r5_analysis(system_controls if system_id else None)
+        # Apply family filter
+        if family:
+            for key in ("direct", "new_in_r5", "withdrawn"):
+                analysis[key] = [r for r in analysis[key] if r["family"] == family.upper()]
+        # Apply view filter
+        if view == "new_r5":
+            analysis["direct"] = []
+            analysis["withdrawn"] = []
+        elif view == "withdrawn":
+            analysis["direct"] = []
+            analysis["new_in_r5"] = []
+        elif view == "direct":
+            analysis["new_in_r5"] = []
+            analysis["withdrawn"] = []
+        ctx["analysis"] = analysis
+        ctx["error"] = None
+
+    ctx["selected_system"] = selected_system
+    ctx["user_systems"]    = [{"id": str(r[0]), "name": r[1]} for r in user_systems]
+    ctx["family_filter"]   = family or ""
+    ctx["view_filter"]     = view
+    ctx["page_title"]      = "Rev 4 → Rev 5 Migration"
+    return templates.TemplateResponse("r4_r5_migration.html", ctx)
+
+
+# ---------------------------------------------------------------------------
+# Framework Version Migration Tool — SP 800-171 Rev 2 → Rev 3 crosswalk
+# ---------------------------------------------------------------------------
+
+def _normalize_sp171_id(ctrl_id: str) -> str:
+    """
+    Normalize a SP 800-171 requirement ID to a common comparable form.
+    Rev 2 uses '3.1.1', Rev 3 uses 'SP_800_171_03.01.01'.
+    Both normalize to '03.01.01' for comparison.
+    """
+    cid = ctrl_id.strip().lower()
+    # Rev 3 format: sp_800_171_03.01.01 — strip prefix
+    if cid.startswith("sp_800_171_"):
+        return cid[len("sp_800_171_"):]
+    # Rev 2 format: 3.1.1 — pad each segment to 2 digits
+    parts = cid.split(".")
+    if len(parts) == 3 and parts[0] == "3":
+        try:
+            return f"{int(parts[0]):02d}.{int(parts[1]):02d}.{int(parts[2]):02d}"
+        except ValueError:
+            pass
+    return cid
+
+
+def _sp171_r2_to_r3_analysis(system_controls: Optional[dict] = None) -> dict:
+    """
+    Compare NIST SP 800-171 Rev 2 catalog against Rev 3 catalog.
+    Normalizes IDs before comparing — Rev 2 uses '3.1.1', Rev 3 uses
+    'SP_800_171_03.01.01'; both normalize to '03.01.01'.
+
+    Returns structured gap analysis:
+      - direct:      requirements present in both revisions (by normalized ID)
+      - new_in_r3:   Rev 3 requirements with no Rev 2 equivalent
+      - restructured: Rev 2 requirements not carried into Rev 3
+    """
+    # Build normalized→original maps
+    r2_norm = {_normalize_sp171_id(k): k for k in SP171_R2}
+    r3_norm = {_normalize_sp171_id(k): k for k in SP171_R3}
+
+    r2_norm_ids = set(r2_norm.keys())
+    r3_norm_ids = set(r3_norm.keys())
+
+    direct_norm    = sorted(r2_norm_ids & r3_norm_ids, key=_ctrl_sort_key)
+    new_r3_norm    = sorted(r3_norm_ids - r2_norm_ids, key=_ctrl_sort_key)
+    restructured_n = sorted(r2_norm_ids - r3_norm_ids, key=_ctrl_sort_key)
+
+    sc = system_controls or {}
+
+    def _row(norm_id, cat):
+        r2_orig = r2_norm.get(norm_id, norm_id)
+        r3_orig = r3_norm.get(norm_id, norm_id)
+        r2      = SP171_R2.get(r2_orig, {})
+        r3      = SP171_R3.get(r3_orig, {})
+        fam_raw = (r3 or r2).get("family_id", norm_id.split(".")[0])
+        # Family label: strip SP_800_171_ prefix if present
+        family  = fam_raw.replace("SP_800_171_", "").upper()
+        return {
+            "id":         norm_id,
+            "r2_id":      r2_orig.upper(),
+            "r3_id":      r3_orig.upper(),
+            "family":     family,
+            "r2_title":   r2.get("title", ""),
+            "r3_title":   r3.get("title", ""),
+            "category":   cat,
+            "sys_status": sc.get(r2_orig.lower(), sc.get(r2_orig.upper(), "")),
+        }
+
+    direct       = [_row(n, "direct")       for n in direct_norm]
+    new_in_r3    = [_row(n, "new_r3")       for n in new_r3_norm]
+    restructured = [_row(n, "restructured") for n in restructured_n]
+
+    families = sorted({r["family"] for r in direct + new_in_r3 + restructured})
+
+    return {
+        "direct":       direct,
+        "new_in_r3":    new_in_r3,
+        "restructured": restructured,
+        "families":     families,
+        "stats": {
+            "r2_total":      len(r2_norm_ids),
+            "r3_total":      len(r3_norm_ids),
+            "direct":        len(direct),
+            "new_in_r3":     len(new_in_r3),
+            "restructured":  len(restructured),
+        },
+    }
+
+
+@app.get("/tools/sp171-migration", response_class=HTMLResponse)
+async def tool_sp171_migration(
+    request: Request,
+    system_id: Optional[str] = None,
+    family: Optional[str] = None,
+    view: str = "all",         # all | new_r3 | withdrawn | direct
+):
+    """NIST SP 800-171 Rev 2 → Rev 3 migration gap analysis tool."""
+    user = _require_user(request)
+
+    system_controls: dict = {}
+    selected_system = None
+
+    async with SessionLocal() as session:
+        ctx = await _full_ctx(request, session)
+
+        if system_id:
+            sys_row = (await session.execute(
+                text("SELECT id, name FROM systems WHERE id = :sid AND deleted_at IS NULL"),
+                {"sid": system_id},
+            )).fetchone()
+            if sys_row and _can_access_system(system_id, request, session):
+                selected_system = {"id": str(sys_row[0]), "name": sys_row[1]}
+                sc_rows = (await session.execute(
+                    text("SELECT control_id, status FROM system_controls WHERE system_id = :sid"),
+                    {"sid": system_id},
+                )).fetchall()
+                system_controls = {r[0].lower(): r[1] for r in sc_rows}
+
+        user_systems = (await session.execute(
+            text("SELECT id, name FROM systems WHERE deleted_at IS NULL ORDER BY name LIMIT 200"),
+        )).fetchall()
+
+    if not SP171_R2 or not SP171_R3:
+        ctx["error"] = "SP 800-171 Rev 2 or Rev 3 catalog is not yet loaded. Check connectivity and restart."
+        ctx["analysis"] = None
+    else:
+        analysis = _sp171_r2_to_r3_analysis(system_controls if system_id else None)
+        if family:
+            for key in ("direct", "new_in_r3", "withdrawn"):
+                analysis[key] = [r for r in analysis[key] if r["family"] == family.upper()]
+        if view == "new_r3":
+            analysis["direct"] = []
+            analysis["withdrawn"] = []
+        elif view == "withdrawn":
+            analysis["direct"] = []
+            analysis["new_in_r3"] = []
+        elif view == "direct":
+            analysis["new_in_r3"] = []
+            analysis["withdrawn"] = []
+        ctx["analysis"] = analysis
+        ctx["error"] = None
+
+    ctx["selected_system"] = selected_system
+    ctx["user_systems"]    = [{"id": str(r[0]), "name": r[1]} for r in user_systems]
+    ctx["family_filter"]   = family or ""
+    ctx["view_filter"]     = view
+    ctx["page_title"]      = "SP 800-171 Rev 2 → Rev 3 Migration"
+    return templates.TemplateResponse("sp171_migration.html", ctx)

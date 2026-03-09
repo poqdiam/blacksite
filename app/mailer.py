@@ -29,6 +29,41 @@ def _sanitize_header(value: str) -> str:
     return str(value).translate(_HEADER_STRIP).strip()
 
 
+# CAN-SPAM / CASL compliance note:
+# All emails sent by this module are purely transactional:
+#   - send_report:        internal admin notification (assessment result to operator)
+#   - forward_assessment: internal workflow notification (assessment forwarded to reviewer)
+#   - send_welcome_email: account provisioning (credentials delivery to new user)
+#   - send_bundle:        user-requested work-product delivery (user triggered the action)
+#
+# CAN-SPAM Act §7(1)(B) and CASL §6(6)(b) both exempt transactional and relationship
+# messages from opt-out and postal-address requirements. None of these messages are
+# commercial solicitations or marketing communications.
+#
+# However, all emails still identify the sender clearly (From header) and include
+# the organization identifier in the footer per best practice.
+def _email_footer(app_name: str = "BLACKSITE") -> str:
+    """
+    Return a standard plain-text/HTML footer for all outbound emails.
+
+    CAN-SPAM / CASL: All current email types are transactional (account, workflow,
+    security). Opt-out language is not legally required but the organization
+    identifier and contact information are included for transparency.
+
+    If non-transactional emails (digests, newsletters) are added in future,
+    include: unsubscribe link, physical mailing address, and explicit opt-out
+    mechanism per CAN-SPAM §5(a)(5) and CASL §6(2)(c).
+    """
+    return (
+        f'<p style="margin-top:32px;font-size:0.68em;color:#444;border-top:1px solid #1a1a2e;'
+        f'padding-top:10px">'
+        f'{app_name} Platform &mdash; borisov.network<br/>'
+        f'This is an automated transactional notification. Do not reply to this message.<br/>'
+        f'Sent to you because you are a registered {app_name} user or platform operator.'
+        f'</p>'
+    )
+
+
 def _load_system_email_creds() -> tuple:
     """
     Read Gmail credentials from /etc/blacksite/email.conf (root-owned, 600).
@@ -165,7 +200,7 @@ def _build_html(assessment_data: dict, quiz_data: Optional[dict]) -> str:
     This is an AI-generated baseline assessment. Proctor review is required before
     any final determination.
   </p>
-  <p style="font-size:0.7em;color:#333">BLACKSITE — TheKramerica | daniel@thekramerica.com</p>
+  {_email_footer()}
 </body>
 </html>"""
 
@@ -348,9 +383,7 @@ def forward_assessment(
     </a>
   </div>
 
-  <p style="margin-top:32px;font-size:0.72em;color:#555">
-    BLACKSITE — TheKramerica | This is an automated notification.
-  </p>
+  {_email_footer()}
 </body>
 </html>"""
 
@@ -438,9 +471,7 @@ def send_welcome_email(
     Contact your administrator if you need access adjustments.
   </p>
 
-  <p style="margin-top:28px;font-size:0.72em;color:#444">
-    {app_name} — This is an automated message. Do not reply.
-  </p>
+  {_email_footer(app_name)}
 </body>
 </html>"""
 
@@ -499,9 +530,7 @@ def send_bundle(
     The bundle includes an <code>INDEX.md</code> file listing each item with its
     purpose, generation timestamp, and speed-up suggestions.
   </p>
-  <p style="margin-top:28px;font-size:0.7em;color:#444">
-    {app_name} — Automated daily bundle. Do not reply.
-  </p>
+  {_email_footer(app_name)}
 </body>
 </html>"""
 

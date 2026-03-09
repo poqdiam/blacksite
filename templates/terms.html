@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Terms of Acceptable Use{% endblock %}
+
+{% block content %}
+<div style="max-width:860px;margin:0 auto;padding:24px 16px">
+
+  <h1 style="font-family:var(--mono);font-size:1.4em;color:var(--cyan);
+             letter-spacing:1px;margin-bottom:4px">Terms of Acceptable Use</h1>
+  <p style="color:var(--muted);font-size:0.85em;margin-bottom:32px">
+    Effective date: 2026-03-09
+  </p>
+
+  {# ── Authorized Use Only ──────────────────────────────────────────────────── #}
+  <div style="background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.25);
+              border-left:4px solid var(--yellow);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--yellow);margin:0 0 10px;font-weight:700">
+      Authorized Use Only
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      BLACKSITE is an internal enterprise compliance and risk management platform. Access is granted
+      exclusively to individuals who have been authorized by their organization. Accessing,
+      attempting to access, or using this platform without authorization is strictly prohibited
+      and may constitute a violation of federal law, including the Computer Fraud and Abuse Act
+      (18 U.S.C. § 1030).
+    </p>
+  </div>
+
+  {# ── Terms Sections ───────────────────────────────────────────────────────── #}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      1. Scope of Authorization
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0 0 10px">
+      Your authorization to use this platform is limited to the specific role, systems, and
+      organizational scope assigned to you by your administrator. You may not:
+    </p>
+    <ul style="margin:0;padding:0 0 0 20px;color:var(--text);font-size:0.88em;line-height:1.9">
+      <li>Access systems, assessments, or records outside your assigned authorization</li>
+      <li>Attempt to escalate privileges or bypass access controls</li>
+      <li>Use another user's credentials to access the platform</li>
+      <li>Access systems or data for which you have not received explicit authorization</li>
+    </ul>
+  </div>
+
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      2. Prohibition on Falsification of Compliance Records
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      Compliance records entered into BLACKSITE — including control assessments, Plans of Action &amp;
+      Milestones (POA&amp;Ms), System Security Plans (SSPs), risk acceptance decisions, and related
+      documentation — must be accurate and made in good faith. <strong>Deliberate falsification,
+      fabrication, or misrepresentation of compliance records may constitute a federal offense</strong>
+      under 18 U.S.C. § 1001 (false statements to the federal government) and related statutes.
+      Violations will be reported to appropriate authorities.
+    </p>
+  </div>
+
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      3. Credential Security and No Sharing
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      You are responsible for maintaining the security of your login credentials. You must not share
+      your username, password, session token, or any authentication factor with any other person.
+      If you believe your credentials have been compromised, you must notify the platform administrator
+      immediately and reset your password. All actions taken under your account are your responsibility.
+    </p>
+  </div>
+
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      4. Session Monitoring Notice
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      <strong>All activity on this platform is monitored, logged, and subject to audit.</strong>
+      An immutable audit log records authentication events, record access, modifications, deletions,
+      and administrative actions with your username, IP address, and timestamp.
+      <strong>There is no expectation of privacy for activity conducted on this system.</strong>
+      By using this platform, you consent to this monitoring.
+    </p>
+  </div>
+
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      5. Data Entered Is Retained for Audit Purposes
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      Data you submit to BLACKSITE — including compliance documentation, control implementation
+      statements, risk decisions, and personnel information — is retained for audit and legal
+      compliance purposes. Retention periods are defined in the
+      <a href="/privacy" style="color:var(--cyan)">Privacy Notice</a>. Records subject to legal
+      retention obligations cannot be deleted even upon user request. You are responsible for
+      the accuracy and completeness of data you enter.
+    </p>
+  </div>
+
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      6. Security Incident Reporting Obligation
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      If you discover or suspect a security incident — including unauthorized access to the platform,
+      loss or theft of credentials, or exposure of sensitive data — you are required to report it to
+      the platform administrator <strong>within one (1) hour</strong> of discovery. Delay in reporting
+      a known incident may constitute a violation of these terms and applicable security policy.
+    </p>
+  </div>
+
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 14px;font-weight:700">
+      7. Consequences of Violations
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0 0 10px">
+      Violations of these terms may result in:
+    </p>
+    <ul style="margin:0;padding:0 0 0 20px;color:var(--text);font-size:0.88em;line-height:1.9">
+      <li>Immediate revocation of platform access</li>
+      <li>Notification of your organization and management chain</li>
+      <li>Civil liability under applicable law</li>
+      <li>Criminal prosecution for violations of federal law (18 U.S.C. §§ 1001, 1030, and related statutes)</li>
+    </ul>
+  </div>
+
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      8. Governing Law
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      These Terms of Acceptable Use are governed by the laws of the United States of America,
+      including applicable federal statutes and regulations. Use of this platform constitutes
+      acceptance of these terms.
+    </p>
+  </div>
+
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;
+              padding:20px 24px;margin-bottom:24px">
+    <h2 style="font-size:1em;color:var(--text);margin:0 0 10px;font-weight:700">
+      9. Changes to These Terms
+    </h2>
+    <p style="color:var(--text);font-size:0.9em;line-height:1.7;margin:0">
+      These terms may be updated by the platform administrator. The effective date above reflects the
+      most recent revision. Continued use of the platform following any update constitutes acceptance
+      of the revised terms.
+    </p>
+  </div>
+
+  <p style="color:var(--muted);font-size:0.78em;text-align:center;padding:8px 0 16px">
+    <a href="/privacy" style="color:var(--muted);text-decoration:none"
+       onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Privacy Notice</a>
+    &nbsp;·&nbsp;
+    <a href="/accessibility" style="color:var(--muted);text-decoration:none"
+       onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Accessibility</a>
+    &nbsp;·&nbsp;
+    <a href="/compliance-info" style="color:var(--muted);text-decoration:none"
+       onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Platform Compliance</a>
+  </p>
+
+</div>
+{% endblock %}
