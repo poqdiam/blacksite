@@ -959,6 +959,8 @@ async def _migrate_db(engine):
         # Phase 36 — Multi-tenant org columns
         ("systems",    "org_id",   "TEXT DEFAULT NULL REFERENCES organizations(id)"),
         ("audit_log",  "org_id",   "TEXT DEFAULT NULL"),
+        # Phase 38 — mime_type on generated_reports (PDF vs DOCX templates)
+        ("generated_reports", "mime_type", "TEXT DEFAULT 'application/pdf'"),
     ]
     # Performance indexes — CREATE INDEX IF NOT EXISTS is idempotent
     index_migrations = [
@@ -973,6 +975,8 @@ async def _migrate_db(engine):
         "CREATE INDEX IF NOT EXISTS ix_system_assignments_system_id   ON system_assignments (system_id)",
         "CREATE INDEX IF NOT EXISTS ix_system_assignments_remote_user ON system_assignments (remote_user)",
         "CREATE INDEX IF NOT EXISTS ix_audit_log_remote_user          ON audit_log (remote_user)",
+        "CREATE INDEX IF NOT EXISTS ix_report_templates_org_id        ON report_templates (org_id)",
+        "CREATE INDEX IF NOT EXISTS ix_report_templates_active        ON report_templates (is_active, deleted_at)",
         "CREATE INDEX IF NOT EXISTS ix_assessments_system_id          ON assessments (system_id)",
         "CREATE INDEX IF NOT EXISTS ix_ato_documents_system_id        ON ato_documents (system_id)",
         "CREATE INDEX IF NOT EXISTS ix_ato_doc_versions_document_id   ON ato_document_versions (document_id)",
@@ -2230,6 +2234,29 @@ class GeneratedReport(Base):
     error_msg    = Column(Text, nullable=True)
     generated_at = Column(DateTime, nullable=True)
     created_at   = Column(DateTime, default=_now)
+
+
+class ReportTemplate(Base):
+    """Phase 38 — Admin-uploaded DOCX report templates with Jinja2-style {{variables}}."""
+    __tablename__ = "report_templates"
+
+    id             = Column(Integer,  primary_key=True, autoincrement=True)
+    name           = Column(String,   nullable=False)
+    description    = Column(Text,     nullable=True)
+    template_type  = Column(String,   nullable=False, default="custom")
+    # custom | executive_summary | sca_pack | bcdr_pack | audit_report | poam_export
+    file_path      = Column(String,   nullable=False)   # path under uploads/report_templates/
+    original_name  = Column(String,   nullable=False)   # filename as uploaded
+    file_size      = Column(Integer,  nullable=True)
+    variables_json = Column(Text,     nullable=True)    # JSON list of detected {{variable}} names
+    is_active      = Column(Boolean,  default=True,  nullable=False)
+    org_id         = Column(String,   ForeignKey("organizations.id"), nullable=True, index=True)
+    # NULL = available to all orgs
+    created_by     = Column(String,   nullable=False)
+    created_at     = Column(DateTime, default=_now)
+    updated_at     = Column(DateTime, nullable=True)
+    deleted_at     = Column(DateTime, nullable=True)
+    deleted_by     = Column(String,   nullable=True)
 
 
 class EvidenceFile(Base):

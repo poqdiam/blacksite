@@ -144,6 +144,8 @@ from app.models import (
     DailyWorkAssignment,
     # IL4 security
     ImmutableAuditEntry,
+    # Phase 38 — SSO + custom report templates
+    ReportTemplate,
     Organization, UserOrganizationMembership, OrgSettings, DEFAULT_ORG_ID, DEFAULT_ORG_NAME,
     init_db, make_engine, make_session_factory, _upsert_sql
 )
@@ -228,6 +230,10 @@ _SEC_CFG: dict = {}          # populated in lifespan
 _CAC_PIV_AUTH: bool = False  # cached at startup
 _REQUIRE_MFA: bool = False
 _AUDIT_ALL: bool = False
+
+# ── SSO / OIDC Configuration (Phase 38) ───────────────────────────────────────
+_SSO_CFG:  dict = {}         # populated in lifespan from config.yaml sso: section
+_OIDC_META: dict = {}        # cached OIDC discovery document
 
 # ── Phase 6: Build stamp ──────────────────────────────────────────────────────
 import subprocess as _sp_bld
@@ -324,6 +330,64 @@ def _verify_shell(signed: str) -> str | None:
     role, sig = signed.rsplit(".", 1)
     expected = _hmac.new(_APP_SECRET.encode(), role.encode(), "sha256").hexdigest()[:20]
     return role if _hmac.compare_digest(sig, expected) else None
+
+
+# ── SSO session cookie helpers (Phase 38) ─────────────────────────────────────
+
+def _sign_sso_session(identity: str, role: str, expiry_ts: int) -> str:
+    """Return signed SSO session cookie: identity|role|expiry.sig"""
+    payload = f"{identity}|{role}|{expiry_ts}"
+    sig = _hmac.new(_APP_SECRET.encode(), payload.encode(), "sha256").hexdigest()[:32]
+    return f"{payload}.{sig}"
+
+
+def _verify_sso_session(request: Request):
+    """Return (identity, role) from SSO cookie if valid and unexpired, else None."""
+    import time as _time
+    raw = request.cookies.get("bsv_sso_session", "")
+    if not raw or "." not in raw:
+        return None
+    payload, sig = raw.rsplit(".", 1)
+    expected = _hmac.new(_APP_SECRET.encode(), payload.encode(), "sha256").hexdigest()[:32]
+    if not _hmac.compare_digest(sig, expected):
+        return None
+    try:
+        parts = payload.split("|", 2)
+        if len(parts) != 3:
+            return None
+        identity, role, expiry_str = parts
+        if int(expiry_str) < int(_time.time()):
+            return None
+        return identity, role
+    except (ValueError, TypeError):
+        return None
+
+
+def _sign_oidc_state(nonce: str, next_path: str, expiry_ts: int) -> str:
+    payload = f"{nonce}|{next_path}|{expiry_ts}"
+    sig = _hmac.new(_APP_SECRET.encode(), payload.encode(), "sha256").hexdigest()[:20]
+    return f"{payload}.{sig}"
+
+
+def _verify_oidc_state(raw: str):
+    """Return (nonce, next_path) if valid, else None."""
+    import time as _time
+    if not raw or "." not in raw:
+        return None
+    payload, sig = raw.rsplit(".", 1)
+    expected = _hmac.new(_APP_SECRET.encode(), payload.encode(), "sha256").hexdigest()[:20]
+    if not _hmac.compare_digest(sig, expected):
+        return None
+    try:
+        parts = payload.split("|", 2)
+        if len(parts) != 3:
+            return None
+        nonce, next_path, expiry_str = parts
+        if int(expiry_str) < int(_time.time()):
+            return None
+        return nonce, next_path
+    except (ValueError, TypeError):
+        return None
 
 
 # ── Org context helpers (Phase 36) ────────────────────────────────────────────
@@ -786,7 +850,7 @@ def _il4_startup_checks(sec_cfg: dict) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global CATALOG, _APP_SECRET, _CTRL_META, _ODP_LABELS, _ASSESSMENT_PROCS, _SESSION_EXEMPT, _SESSION_TIMEOUT
+    global CATALOG, _APP_SECRET, _CTRL_META, _ODP_LABELS, _ASSESSMENT_PROCS, _SESSION_EXEMPT, _SESSION_TIMEOUT, _SSO_CFG, _OIDC_META
     await init_db(engine)
     # Pre-warm system settings cache so _tpl_ctx() doesn't fall back to defaults
     try:
@@ -804,6 +868,20 @@ async def lifespan(app: FastAPI):
     _REQUIRE_MFA   = bool(_SEC_CFG.get("require_mfa", False))
     _AUDIT_ALL     = bool(_SEC_CFG.get("audit_all_requests", False))
 
+    # ── SSO / OIDC initialization (Phase 38) ─────────────────────────────────
+    _SSO_CFG  = CONFIG.get("sso", {})
+    _OIDC_META = {}
+    if _SSO_CFG.get("enabled") and _SSO_CFG.get("discovery_url"):
+        try:
+            import httpx as _httpx_sso
+            async with _httpx_sso.AsyncClient(timeout=10) as _c:
+                _disc = await _c.get(_SSO_CFG["discovery_url"])
+                _disc.raise_for_status()
+                _OIDC_META = _disc.json()
+            log.info("OIDC discovery loaded: %s", _SSO_CFG.get("discovery_url"))
+        except Exception as _e:
+            log.warning("SSO: OIDC discovery failed at startup: %s", _e)
+
     il4_mode = bool(_SEC_CFG.get("il4_mode", False))
     if il4_mode:
         log.info("IL4 mode enabled — enforcing compliance checks.")
@@ -817,8 +895,8 @@ async def lifespan(app: FastAPI):
     log.info("Control meta loaded: %d records.", len(_CTRL_META))
     log.info("ODP labels loaded: %d entries.", len(_ODP_LABELS))
     log.info("Assessment procedures loaded: %d controls.", len(_ASSESSMENT_PROCS))
-    for d in ["uploads", "results", "controls", "static"]:
-        Path(d).mkdir(exist_ok=True)
+    for d in ["uploads", "results", "controls", "static", "uploads/report_templates"]:
+        Path(d).mkdir(exist_ok=True, parents=True)
     try:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, update_if_needed, CONFIG)
@@ -1083,6 +1161,11 @@ _SESSION_SKIP_PREFIXES = ("/static", "/api/heartbeat", "/ws/", "/favicon")
 async def session_timeout_middleware(request: Request, call_next):
     """Enforce idle session timeout for non-exempt users."""
     user = request.headers.get(_REMOTE_USER_HDR, "")
+    # SSO sessions: if no Remote-User header, check SSO cookie
+    if not user and _SSO_CFG.get("enabled"):
+        sso_result = _verify_sso_session(request)
+        if sso_result:
+            user = sso_result[0]
     path = request.url.path
     if user and user not in _SESSION_EXEMPT and not any(path.startswith(p) for p in _SESSION_SKIP_PREFIXES):
         last = _LAST_ACTIVITY.get(user)
@@ -1371,10 +1454,24 @@ def _require_user(request: Request) -> str:
         # Fall through to Remote-User if CAC header absent (allows mixed environments)
 
     _u = request.headers.get(_REMOTE_USER_HDR, "")
-    if not _u:
-        raise HTTPException(status_code=401)
-    _check_mfa(request)
-    return _u
+    if _u:
+        _check_mfa(request)
+        return _u
+
+    # SSO session cookie (Phase 38) — only when Authelia header is absent
+    if _SSO_CFG.get("enabled"):
+        sso_result = _verify_sso_session(request)
+        if sso_result:
+            return sso_result[0]
+        # No valid SSO session → redirect to login
+        from urllib.parse import quote as _quote
+        next_path = _quote(str(request.url.path), safe="")
+        raise HTTPException(
+            status_code=307,
+            headers={"Location": f"/auth/login?next={next_path}"},
+        )
+
+    raise HTTPException(status_code=401)
 
 
 def _check_mfa(request: Request) -> None:
@@ -1394,8 +1491,17 @@ def _check_mfa(request: Request) -> None:
 
 
 def _is_admin(request: Request) -> bool:
+    admin_users = set(CONFIG.get("app", {}).get("admin_users", ["dan"]))
     user = request.headers.get(_REMOTE_USER_HDR, "")
-    return bool(user) and user in set(CONFIG.get("app", {}).get("admin_users", ["dan"]))
+    if user:
+        return user in admin_users
+    # SSO: check session cookie
+    if _SSO_CFG.get("enabled"):
+        sso_result = _verify_sso_session(request)
+        if sso_result:
+            identity, role = sso_result
+            return identity in admin_users or role == "admin"
+    return False
 
 
 def _effective_is_admin(request: Request) -> bool:
@@ -3785,6 +3891,225 @@ async def logout():
     return RedirectResponse(url=url, status_code=302)
 
 
+# ── SSO / OIDC Routes (Phase 38) ───────────────────────────────────────────────
+
+@app.get("/auth/login")
+async def sso_login(request: Request, next: str = Query(default="/")):
+    """Initiate OIDC authorization code flow."""
+    if not _SSO_CFG.get("enabled"):
+        raise HTTPException(404)
+
+    # Re-fetch discovery if not yet loaded
+    disc = _OIDC_META
+    if not disc:
+        try:
+            import httpx as _hx
+            async with _hx.AsyncClient(timeout=10) as c:
+                r = await c.get(_SSO_CFG.get("discovery_url", ""))
+                r.raise_for_status()
+                disc = r.json()
+        except Exception:
+            raise HTTPException(503, "SSO identity provider is unreachable")
+
+    auth_endpoint = disc.get("authorization_endpoint", "")
+    if not auth_endpoint:
+        raise HTTPException(503, "SSO: missing authorization_endpoint in OIDC discovery")
+
+    import secrets as _sec, time as _t
+    from urllib.parse import urlencode as _ue, quote as _q
+    nonce     = _sec.token_hex(16)
+    expiry_ts = int(_t.time()) + 600   # state cookie valid 10 min
+    state_val = _sign_oidc_state(nonce, next or "/", expiry_ts)
+
+    params = {
+        "response_type": "code",
+        "client_id":     _SSO_CFG.get("client_id", ""),
+        "redirect_uri":  _SSO_CFG.get("redirect_uri", ""),
+        "scope":         _SSO_CFG.get("scopes", "openid profile email"),
+        "state":         state_val,
+        "nonce":         nonce,
+    }
+    redirect_url = f"{auth_endpoint}?{_ue(params)}"
+    response = RedirectResponse(redirect_url, status_code=302)
+    response.set_cookie(
+        "bsv_oidc_state", state_val,
+        httponly=True, samesite="lax", secure=True, max_age=600
+    )
+    return response
+
+
+@app.get("/auth/callback")
+async def sso_callback(
+    request: Request,
+    code:  str = Query(default=""),
+    state: str = Query(default=""),
+    error: str = Query(default=""),
+):
+    """Handle OIDC provider callback: exchange code, validate token, set session."""
+    if not _SSO_CFG.get("enabled"):
+        raise HTTPException(404)
+    if error:
+        raise HTTPException(400, f"SSO error: {error}")
+
+    # Verify state cookie
+    stored_state = request.cookies.get("bsv_oidc_state", "")
+    if not stored_state or not _hmac.compare_digest(stored_state, state):
+        raise HTTPException(400, "SSO: state mismatch — possible CSRF")
+    state_result = _verify_oidc_state(state)
+    if not state_result:
+        raise HTTPException(400, "SSO: state expired or invalid")
+    _nonce, next_path = state_result
+
+    # Exchange code for tokens
+    disc = _OIDC_META
+    if not disc:
+        raise HTTPException(503, "SSO discovery not loaded")
+    token_endpoint = disc.get("token_endpoint", "")
+
+    import httpx as _hx
+    try:
+        async with _hx.AsyncClient(timeout=15) as c:
+            tok_resp = await c.post(token_endpoint, data={
+                "grant_type":   "authorization_code",
+                "code":         code,
+                "redirect_uri": _SSO_CFG.get("redirect_uri", ""),
+                "client_id":    _SSO_CFG.get("client_id", ""),
+                "client_secret": _SSO_CFG.get("client_secret",
+                                  os.environ.get("BLACKSITE_SSO_SECRET", "")),
+            })
+            tok_resp.raise_for_status()
+            tokens = tok_resp.json()
+    except Exception as e:
+        log.warning("SSO: token exchange failed: %s", e)
+        raise HTTPException(502, "SSO: token exchange failed")
+
+    # Decode ID token (validate signature via JWKS)
+    id_token = tokens.get("id_token", "")
+    if not id_token:
+        raise HTTPException(502, "SSO: no id_token in response")
+
+    try:
+        from authlib.jose import JsonWebKey, jwt as _authlib_jwt
+        jwks_uri = disc.get("jwks_uri", "")
+        async with _hx.AsyncClient(timeout=10) as c:
+            jwks_resp = await c.get(jwks_uri)
+            jwks_resp.raise_for_status()
+            jwks = jwks_resp.json()
+        key_set  = JsonWebKey.import_key_set(jwks)
+        claims   = _authlib_jwt.decode(id_token, key_set)
+        claims.validate()
+    except Exception as e:
+        log.warning("SSO: JWT validation failed: %s", e)
+        raise HTTPException(401, "SSO: ID token validation failed")
+
+    # Extract identity
+    identity = (claims.get("preferred_username")
+                or claims.get("email")
+                or claims.get("sub", ""))
+    if not identity:
+        raise HTTPException(401, "SSO: could not determine identity from token claims")
+
+    # Map role claim to blacksite role
+    role_claim_name = _SSO_CFG.get("role_claim", "groups")
+    role_map        = _SSO_CFG.get("role_map", {})
+    raw_groups      = claims.get(role_claim_name, [])
+    if isinstance(raw_groups, str):
+        raw_groups = [raw_groups]
+    mapped_role = "employee"
+    for grp in raw_groups:
+        if grp in role_map:
+            mapped_role = role_map[grp]
+            break
+
+    # Auto-provision UserProfile on first login
+    if _SSO_CFG.get("auto_provision", True):
+        async with SessionLocal() as session:
+            existing = await session.get(UserProfile, identity)
+            if not existing:
+                session.add(UserProfile(
+                    remote_user = identity,
+                    full_name   = claims.get("name", identity),
+                    email       = claims.get("email", ""),
+                ))
+                await _log_audit(session, identity, "CREATE", "user_profile", identity,
+                                 {"source": "sso_auto_provision",
+                                  "provider": _SSO_CFG.get("provider", "oidc")})
+                await session.commit()
+
+    # Set signed session cookie
+    import time as _t
+    max_age   = int(_SSO_CFG.get("session_max_age", 28800))
+    expiry_ts = int(_t.time()) + max_age
+    cookie_val = _sign_sso_session(identity, mapped_role, expiry_ts)
+
+    safe_next = next_path if next_path.startswith("/") else "/"
+    response = RedirectResponse(safe_next, status_code=303)
+    response.set_cookie(
+        "bsv_sso_session", cookie_val,
+        httponly=True, samesite="lax", secure=True, max_age=max_age
+    )
+    response.delete_cookie("bsv_oidc_state")
+    return response
+
+
+@app.get("/auth/logout")
+async def sso_logout(request: Request):
+    """Clear SSO session and redirect to provider end_session_endpoint if available."""
+    if not _SSO_CFG.get("enabled"):
+        return RedirectResponse("/", status_code=302)
+    end_session = _OIDC_META.get("end_session_endpoint", "")
+    dest = end_session or _cfg("app.authelia_logout_url", "/")
+    response = RedirectResponse(dest, status_code=302)
+    response.delete_cookie("bsv_sso_session")
+    response.delete_cookie("bsv_oidc_state")
+    return response
+
+
+@app.get("/admin/sso", response_class=HTMLResponse)
+async def admin_sso_config(request: Request):
+    """SSO configuration status and test page."""
+    if not _is_admin(request):
+        raise HTTPException(403)
+    masked_cfg = {
+        k: ("***" if k == "client_secret" and v else v)
+        for k, v in _SSO_CFG.items()
+    }
+    ctx = {**_tpl_ctx(request), "request": request}
+    ctx.update({
+        "page_title": "SSO Configuration",
+        "sso_cfg":    masked_cfg,
+        "oidc_meta":  _OIDC_META,
+        "sso_enabled": _SSO_CFG.get("enabled", False),
+    })
+    return templates.TemplateResponse("admin_sso.html", ctx)
+
+
+@app.post("/admin/sso/test")
+async def admin_sso_test(request: Request):
+    """Live-test the OIDC discovery URL. Returns JSON status."""
+    if not _is_admin(request):
+        raise HTTPException(403)
+    disc_url = _SSO_CFG.get("discovery_url", "")
+    if not disc_url:
+        return JSONResponse({"ok": False, "error": "discovery_url not configured"})
+    try:
+        import httpx as _hx
+        async with _hx.AsyncClient(timeout=10) as c:
+            r = await c.get(disc_url)
+            r.raise_for_status()
+            meta = r.json()
+        return JSONResponse({
+            "ok":                   True,
+            "issuer":               meta.get("issuer"),
+            "authorization_endpoint": meta.get("authorization_endpoint"),
+            "token_endpoint":       meta.get("token_endpoint"),
+            "jwks_uri":             meta.get("jwks_uri"),
+            "end_session_endpoint": meta.get("end_session_endpoint"),
+        })
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+
+
 @app.post("/switch-org")
 async def switch_org(request: Request, org_id: str = Form(...)):
     """Switch the user's active organization context (signed cookie)."""
@@ -5476,10 +5801,78 @@ _AVATAR_DIR        = Path("data/avatars")
 _POAM_EVIDENCE_DIR = Path("data/uploads/poam_evidence")
 _ATO_GENERATED_DIR = Path("data/ato_generated")
 _ATO_UPLOAD_DIR    = Path("data/ato_uploads")
-_ARTIFACT_DIR      = Path("uploads")
-_BUNDLE_DIR        = Path("data/bundles")
+_ARTIFACT_DIR          = Path("uploads")
+_BUNDLE_DIR            = Path("data/bundles")
+_TEMPLATE_UPLOAD_DIR   = Path("uploads/report_templates")
 # _SSP_UPLOAD_DIR is defined near the SSP section (~line 7758)
 # _REPORT_DIR is defined near Phase 25 section (~line 12853)
+
+# ── Report Template Variable Catalog (Phase 38) ───────────────────────────────
+# Every {{variable}} available in customer-uploaded DOCX templates.
+TEMPLATE_VARIABLES: dict = {
+    # System identity
+    "system_name":              {"label": "System Name",                   "source": "system.name"},
+    "system_abbr":              {"label": "System Abbreviation",           "source": "system.abbreviation"},
+    "system_id":                {"label": "System ID",                     "source": "system.id"},
+    "system_description":       {"label": "System Description",            "source": "system.description"},
+    "impact_level":             {"label": "FIPS 199 Impact Level",         "source": "system.impact_level"},
+    "system_type":              {"label": "System Type",                   "source": "system.system_type"},
+    "deployment_env":           {"label": "Deployment Environment",        "source": "system.environment"},
+    # Dates
+    "date_generated":           {"label": "Report Generation Date",        "source": "computed.today"},
+    "auth_expiry":              {"label": "ATO Expiration Date",           "source": "system.auth_expiry"},
+    "ato_date":                 {"label": "ATO Grant Date",                "source": "system.ato_date"},
+    # Key personnel
+    "issm_name":                {"label": "ISSM Name",                     "source": "system.issm_name"},
+    "issm_email":               {"label": "ISSM Email",                    "source": "system.issm_email"},
+    "isso_name":                {"label": "ISSO Name",                     "source": "system.isso_name"},
+    "isso_email":               {"label": "ISSO Email",                    "source": "system.isso_email"},
+    "ao_name":                  {"label": "Authorizing Official",          "source": "system.ao_name"},
+    "ao_email":                 {"label": "AO Email",                      "source": "system.ao_email"},
+    "org_name":                 {"label": "Organization Name",             "source": "org.name"},
+    # Control compliance metrics
+    "controls_total":           {"label": "Total Controls",                "source": "computed.controls_total"},
+    "controls_implemented":     {"label": "Controls Implemented",          "source": "computed.ctrl_implemented"},
+    "controls_partial":         {"label": "Controls Partially Implemented","source": "computed.ctrl_partial"},
+    "controls_not_implemented": {"label": "Controls Not Implemented",      "source": "computed.ctrl_not_impl"},
+    "controls_not_applicable":  {"label": "Controls N/A",                  "source": "computed.ctrl_na"},
+    "compliance_pct":           {"label": "Overall Compliance %",          "source": "computed.compliance_pct"},
+    # POA&M metrics
+    "open_poams":               {"label": "Open POA&M Items",              "source": "computed.open_poams"},
+    "high_risk_poams":          {"label": "High-Risk POA&M Items",         "source": "computed.high_risk_poams"},
+    "overdue_poams":            {"label": "Overdue POA&M Items",           "source": "computed.overdue_poams"},
+    # Risk metrics
+    "open_risks":               {"label": "Open Risks",                    "source": "computed.open_risks"},
+    "critical_risks":           {"label": "Critical Risks",                "source": "computed.critical_risks"},
+    # Branding / meta
+    "app_name":                 {"label": "Platform Name",                 "source": "config.app_name"},
+    "brand":                    {"label": "Brand Name",                    "source": "config.brand"},
+    "report_generated_by":      {"label": "Generated By (username)",       "source": "user.username"},
+}
+
+
+def _scan_template_variables(file_path: Path) -> list:
+    """Scan a DOCX template and return sorted list of {{variable}} names found."""
+    import re as _re_scan
+    found: set = set()
+    try:
+        from docxtpl import DocxTemplate as _DT
+        tpl = _DT(str(file_path))
+        found = tpl.get_undeclared_template_variables()
+    except Exception:
+        pass
+    if not found:
+        # Fallback: raw XML regex scan
+        try:
+            import zipfile as _zf
+            with _zf.ZipFile(str(file_path)) as zf:
+                for name in zf.namelist():
+                    if name.endswith(".xml"):
+                        content = zf.read(name).decode("utf-8", errors="ignore")
+                        found.update(_re_scan.findall(r'\{\{\s*(\w+)\s*\}\}', content))
+        except Exception:
+            pass
+    return sorted(found)
 
 # Allowlist of valid report_type values for _generate_system_report
 _REPORT_TYPE_ALLOWLIST: frozenset = frozenset({
@@ -21943,10 +22336,11 @@ async def system_report_download(request: Request, system_id: str, rid: int):
             raise HTTPException(404, "Report file missing")
         await _log_audit(session, user, "DOWNLOAD", "generated_report", str(rid), {})
         await session.commit()
+    mime = getattr(rpt, "mime_type", None) or "application/pdf"
     return FileResponse(
         path=str(fpath),
         filename=rpt.filename,
-        media_type="application/pdf",
+        media_type=mime,
         headers={"Content-Disposition": f'attachment; filename="{rpt.filename}"'},
     )
 
@@ -23384,3 +23778,289 @@ async def tool_sp171_migration(
     ctx["view_filter"]     = view
     ctx["page_title"]      = "SP 800-171 Rev 2 → Rev 3 Migration"
     return templates.TemplateResponse("sp171_migration.html", ctx)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 38 — Custom Report Templates (DOCX ingestion + rendering)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/admin/report-templates", response_class=HTMLResponse)
+async def admin_report_templates(request: Request):
+    """List all uploaded report templates."""
+    if not _is_admin(request):
+        raise HTTPException(403)
+    async with SessionLocal() as session:
+        rows = (await session.execute(
+            select(ReportTemplate)
+            .where(ReportTemplate.deleted_at.is_(None))
+            .order_by(ReportTemplate.created_at.desc())
+        )).scalars().all()
+    import json as _json_rt
+    templates_vars = {r.id: _json_rt.loads(r.variables_json or "[]") for r in rows}
+    ctx = {**_tpl_ctx(request), "request": request}
+    ctx.update({
+        "page_title": "Report Templates",
+        "templates_list": rows,
+        "templates_vars": templates_vars,
+        "template_types": ["custom", "executive_summary", "sca_pack",
+                           "bcdr_pack", "audit_report", "poam_export"],
+        "variable_catalog": TEMPLATE_VARIABLES,
+    })
+    return templates.TemplateResponse("admin_report_templates.html", ctx)
+
+
+@app.post("/admin/report-templates/upload")
+async def admin_report_templates_upload(
+    request: Request,
+    name:          str        = Form(...),
+    description:   str        = Form(""),
+    template_type: str        = Form("custom"),
+    org_id:        str        = Form(""),
+    file:          UploadFile = File(...),
+):
+    """Upload a DOCX template, auto-detect {{variables}}, store metadata."""
+    if not _is_admin(request):
+        raise HTTPException(403)
+    user = _require_user(request)
+
+    if not file.filename or not file.filename.lower().endswith(".docx"):
+        raise HTTPException(400, "Only .docx files are accepted")
+
+    import uuid as _uuid2
+    safe_name  = f"{_uuid2.uuid4().hex}.docx"
+    dest       = _TEMPLATE_UPLOAD_DIR / safe_name
+    contents   = await file.read()
+    dest.write_bytes(contents)
+
+    detected_vars = _scan_template_variables(dest)
+    import json as _json
+    org_id_val = org_id.strip() or None
+
+    async with SessionLocal() as session:
+        tpl = ReportTemplate(
+            name          = name.strip(),
+            description   = description.strip(),
+            template_type = template_type,
+            file_path     = str(dest),
+            original_name = file.filename,
+            file_size     = len(contents),
+            variables_json= _json.dumps(detected_vars),
+            is_active     = True,
+            org_id        = org_id_val,
+            created_by    = user,
+        )
+        session.add(tpl)
+        await _log_audit(session, user, "CREATE", "report_template", name,
+                         {"vars": detected_vars, "type": template_type})
+        await session.commit()
+
+    return RedirectResponse("/admin/report-templates", status_code=303)
+
+
+@app.post("/admin/report-templates/{template_id}/delete")
+async def admin_report_template_delete(request: Request, template_id: int):
+    """Soft-delete a report template."""
+    if not _is_admin(request):
+        raise HTTPException(403)
+    user = _require_user(request)
+    async with SessionLocal() as session:
+        tpl = await session.get(ReportTemplate, template_id)
+        if not tpl or tpl.deleted_at:
+            raise HTTPException(404)
+        tpl.deleted_at = datetime.utcnow()
+        tpl.deleted_by = user
+        tpl.is_active  = False
+        await _log_audit(session, user, "DELETE", "report_template",
+                         str(template_id), {"name": tpl.name})
+        await session.commit()
+    return RedirectResponse("/admin/report-templates", status_code=303)
+
+
+@app.get("/admin/report-templates/{template_id}/variables")
+async def admin_report_template_variables(request: Request, template_id: int):
+    """Return JSON: detected variables with labels and whether they're in the catalog."""
+    if not _is_admin(request):
+        raise HTTPException(403)
+    import json as _json
+    async with SessionLocal() as session:
+        tpl = await session.get(ReportTemplate, template_id)
+        if not tpl or tpl.deleted_at:
+            raise HTTPException(404)
+    detected = _json.loads(tpl.variables_json or "[]")
+    result = []
+    for var in detected:
+        meta = TEMPLATE_VARIABLES.get(var, {})
+        result.append({
+            "variable": var,
+            "label":    meta.get("label", var),
+            "source":   meta.get("source", "unknown"),
+            "known":    var in TEMPLATE_VARIABLES,
+        })
+    return JSONResponse(result)
+
+
+async def _build_template_context(system, user: str, session) -> dict:
+    """Build the Jinja2 context dict for DOCX template rendering."""
+    from datetime import date as _date
+    import json as _json
+
+    # Control status counts
+    ctrl_rows = (await session.execute(
+        select(SystemControl.status)
+        .where(SystemControl.system_id == system.id)
+    )).scalars().all()
+    total        = len(ctrl_rows)
+    implemented  = sum(1 for s in ctrl_rows if s == "implemented")
+    partial      = sum(1 for s in ctrl_rows if s in ("partial", "planned"))
+    not_impl     = sum(1 for s in ctrl_rows if s == "not_implemented")
+    not_app      = sum(1 for s in ctrl_rows if s == "not_applicable")
+    compliance   = round(implemented / total * 100, 1) if total else 0.0
+
+    # POA&M counts
+    poam_rows = (await session.execute(
+        select(PoamItem.risk_level, PoamItem.scheduled_completion_date)
+        .where(PoamItem.system_id == system.id)
+        .where(PoamItem.status.in_(["open", "in_progress", "delayed"]))
+    )).all()
+    open_poams     = len(poam_rows)
+    high_risk      = sum(1 for p in poam_rows if p[0] in ("high", "critical"))
+    today_str      = _date.today().isoformat()
+    overdue        = sum(1 for p in poam_rows if p[1] and p[1] < today_str)
+
+    # Risk counts
+    risk_rows = (await session.execute(
+        select(Risk.risk_level)
+        .where(Risk.system_id == system.id)
+        .where(Risk.status == "open")
+    )).scalars().all()
+    open_risks    = len(risk_rows)
+    critical_risk = sum(1 for r in risk_rows if r in ("high", "critical"))
+
+    # Org
+    org_name = CONFIG.get("app", {}).get("brand", "")
+    if system.org_id:
+        org_row = await session.get(Organization, system.org_id)
+        if org_row:
+            org_name = org_row.name
+
+    return {
+        # System
+        "system_name":              system.name or "",
+        "system_abbr":              system.abbreviation or "",
+        "system_id":                str(system.id),
+        "system_description":       system.description or "",
+        "impact_level":             system.impact_level or "",
+        "system_type":              system.system_type or "",
+        "deployment_env":           system.environment or "",
+        # Dates
+        "date_generated":           _date.today().strftime("%B %d, %Y"),
+        "auth_expiry":              str(system.auth_expiry or ""),
+        "ato_date":                 str(system.ato_date or ""),
+        # Personnel
+        "issm_name":                getattr(system, "issm_name", "") or "",
+        "issm_email":               getattr(system, "issm_email", "") or "",
+        "isso_name":                getattr(system, "isso_name", "") or "",
+        "isso_email":               getattr(system, "isso_email", "") or "",
+        "ao_name":                  getattr(system, "ao_name", "") or "",
+        "ao_email":                 getattr(system, "ao_email", "") or "",
+        "org_name":                 org_name,
+        # Controls
+        "controls_total":           total,
+        "controls_implemented":     implemented,
+        "controls_partial":         partial,
+        "controls_not_implemented": not_impl,
+        "controls_not_applicable":  not_app,
+        "compliance_pct":           f"{compliance}%",
+        # POA&M
+        "open_poams":               open_poams,
+        "high_risk_poams":          high_risk,
+        "overdue_poams":            overdue,
+        # Risks
+        "open_risks":               open_risks,
+        "critical_risks":           critical_risk,
+        # Meta
+        "app_name":                 CONFIG.get("app", {}).get("name", "BLACKSITE"),
+        "brand":                    CONFIG.get("app", {}).get("brand", ""),
+        "report_generated_by":      user,
+    }
+
+
+async def _render_docx_template(report_id: int, system_id: str,
+                                 template_id: int, user: str) -> None:
+    """BackgroundTask: render DOCX template with live system data."""
+    from docxtpl import DocxTemplate as _DocxTemplate
+    import uuid as _uuid3
+
+    async with SessionLocal() as session:
+        sys_r = await session.get(System, system_id)
+        tpl_r = await session.get(ReportTemplate, template_id)
+        rpt_r = await session.get(GeneratedReport, report_id)
+        if not sys_r or not tpl_r or not rpt_r:
+            return
+
+        try:
+            context  = await _build_template_context(sys_r, user, session)
+            src_path = Path(tpl_r.file_path)
+            if not src_path.exists():
+                raise FileNotFoundError(f"Template file missing: {src_path}")
+
+            out_dir  = Path("data/reports") / system_id
+            out_dir.mkdir(parents=True, exist_ok=True)
+            abbr     = (sys_r.abbreviation or sys_r.name[:8]).replace(" ", "_")
+            from datetime import date as _date
+            out_name = f"{abbr}.CUSTOM.{_date.today().isoformat()}.{_uuid3.uuid4().hex[:6]}.docx"
+            out_path = out_dir / out_name
+
+            docx_tpl = _DocxTemplate(str(src_path))
+            docx_tpl.render(context)
+            docx_tpl.save(str(out_path))
+
+            rpt_r.filename     = out_name
+            rpt_r.file_path    = str(out_path)
+            rpt_r.file_size    = out_path.stat().st_size
+            rpt_r.status       = "ready"
+            rpt_r.generated_at = datetime.utcnow()
+            rpt_r.mime_type    = ("application/vnd.openxmlformats-officedocument"
+                                  ".wordprocessingml.document")
+        except Exception as exc:
+            log.error("DOCX template render failed (report %s): %s", report_id, exc)
+            rpt_r.status    = "error"
+            rpt_r.error_msg = str(exc)
+
+        await session.commit()
+
+
+@app.post("/systems/{system_id}/reports/generate-from-template/{template_id}")
+async def system_report_from_template(
+    request: Request,
+    system_id:   str,
+    template_id: int,
+    background_tasks: BackgroundTasks,
+):
+    """Render a custom DOCX report template for the given system."""
+    user = _require_user(request)
+    async with SessionLocal() as session:
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(403)
+        if not _is_admin(request) and await _get_user_role(request, session) not in _SSP_WRITE_ROLES:
+            raise HTTPException(403, "Insufficient role to generate reports")
+
+        tpl = await session.get(ReportTemplate, template_id)
+        if not tpl or tpl.deleted_at or not tpl.is_active:
+            raise HTTPException(404, "Template not found or inactive")
+
+        rpt = GeneratedReport(
+            system_id   = system_id,
+            remote_user = user,
+            report_type = f"custom_template:{tpl.name}",
+            status      = "generating",
+        )
+        session.add(rpt)
+        await session.flush()
+        rpt_id = rpt.id
+        await _log_audit(session, user, "CREATE", "generated_report", system_id,
+                         {"template_id": template_id, "template_name": tpl.name})
+        await session.commit()
+
+    background_tasks.add_task(_render_docx_template, rpt_id, system_id, template_id, user)
+    return RedirectResponse(f"/systems/{system_id}/reports", status_code=303)

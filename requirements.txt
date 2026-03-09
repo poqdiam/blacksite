@@ -12,3 +12,5 @@ aiofiles>=23.2.1
 python-dateutil>=2.8.2
 httpx>=0.27.0
 defusedxml>=0.7.1
+authlib>=1.3.0
+docxtpl>=0.16.7

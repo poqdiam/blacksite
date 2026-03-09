@@ -119,3 +119,32 @@ security:
   db_encryption_key_env: BLACKSITE_DB_KEY   # env var name holding the encryption key
   fips_session_crypto: false   # [PROD GUARD] Require FIPS-validated session crypto — do not enable in dev
   audit_all_requests: false    # Log every HTTP request to security_events table (verbose)
+
+# ── SSO / OIDC Identity Provider ──────────────────────────────────────────────
+# Works with Keycloak, Okta, Azure AD, Auth0, or any OIDC-compliant provider.
+# When enabled, users without a Remote-User header (no Authelia) are redirected
+# to the provider's login page. Existing Authelia deployments are unaffected —
+# Remote-User header always takes precedence over SSO session cookie.
+#
+# Keycloak discovery_url:  https://<host>/realms/<realm>/.well-known/openid-configuration
+# Okta discovery_url:      https://<okta-domain>/.well-known/openid-configuration
+# Azure AD discovery_url:  https://login.microsoftonline.com/<tenant>/v2.0/.well-known/openid-configuration
+sso:
+  enabled: false
+  provider: "keycloak"           # keycloak | okta | azure | generic  (label only)
+  client_id: ""
+  client_secret: ""              # Use env var BLACKSITE_SSO_SECRET in production
+  discovery_url: ""
+  redirect_uri: ""               # Full callback URL: https://blacksite.example.com/auth/callback
+  scopes: "openid profile email"
+  role_claim: "groups"           # JWT claim that carries group/role list
+  role_map:                      # Provider group name → blacksite role
+    blacksite-admins:   admin
+    blacksite-isso:     isso
+    blacksite-issm:     issm
+    blacksite-ciso:     ciso
+    blacksite-ao:       ao
+    blacksite-sca:      sca
+    blacksite-auditor:  auditor
+  auto_provision: true           # Create UserProfile on first successful OIDC login
+  session_max_age: 28800         # Cookie lifetime in seconds (8 hours)

@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}SSO Configuration · BLACKSITE{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title"><span class="material-symbols-outlined">key</span> SSO / OIDC Configuration</h1>
+  <p class="page-subtitle">Keycloak · Okta · Azure AD · Any OIDC-compliant provider</p>
+</div>
+
+{% if not sso_enabled %}
+<div class="alert alert-warning" style="margin-bottom:1.5rem;">
+  <span class="material-symbols-outlined">warning</span>
+  SSO is currently <strong>disabled</strong>. Set <code>sso.enabled: true</code> in
+  <code>config.yaml</code> and restart to activate.
+</div>
+{% else %}
+<div class="alert alert-success" style="margin-bottom:1.5rem;">
+  <span class="material-symbols-outlined">check_circle</span>
+  SSO is <strong>enabled</strong>. Provider: <strong>{{ sso_cfg.provider }}</strong>
+</div>
+{% endif %}
+
+<div class="admin-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+
+  <!-- Current Config -->
+  <div class="card">
+    <div class="card-header">
+      <h3><span class="material-symbols-outlined">settings</span> Active Configuration</h3>
+    </div>
+    <div class="card-body">
+      <table class="data-table" style="width:100%">
+        <tbody>
+          {% for key, val in sso_cfg.items() %}
+          {% if val is mapping %}
+          <tr>
+            <td><code>{{ key }}</code></td>
+            <td style="font-size:0.8rem;color:var(--text-muted)">
+              {% for k2,v2 in val.items() %}
+                <span class="badge">{{ k2 }} → {{ v2 }}</span>
+              {% endfor %}
+            </td>
+          </tr>
+          {% elif val is iterable and val is not string %}
+          <tr>
+            <td><code>{{ key }}</code></td>
+            <td>{{ val | join(", ") }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td><code>{{ key }}</code></td>
+            <td>{% if val %}{{ val }}{% else %}<em style="color:var(--text-muted)">not set</em>{% endif %}</td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- OIDC Discovery Status -->
+  <div class="card">
+    <div class="card-header">
+      <h3><span class="material-symbols-outlined">hub</span> OIDC Discovery</h3>
+      <button class="btn btn-sm btn-primary" id="test-btn" onclick="testConnection()">
+        <span class="material-symbols-outlined">network_check</span> Test Connection
+      </button>
+    </div>
+    <div class="card-body">
+      {% if oidc_meta %}
+      <table class="data-table" style="width:100%">
+        <tbody>
+          <tr><td>Issuer</td><td style="word-break:break-all;font-size:0.82rem">{{ oidc_meta.get("issuer","—") }}</td></tr>
+          <tr><td>Auth Endpoint</td><td style="word-break:break-all;font-size:0.82rem">{{ oidc_meta.get("authorization_endpoint","—") }}</td></tr>
+          <tr><td>Token Endpoint</td><td style="word-break:break-all;font-size:0.82rem">{{ oidc_meta.get("token_endpoint","—") }}</td></tr>
+          <tr><td>JWKS URI</td><td style="word-break:break-all;font-size:0.82rem">{{ oidc_meta.get("jwks_uri","—") }}</td></tr>
+          <tr><td>End Session</td><td style="word-break:break-all;font-size:0.82rem">{{ oidc_meta.get("end_session_endpoint","—") }}</td></tr>
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:var(--text-muted)">Discovery not loaded (SSO disabled or unreachable at startup).</p>
+      {% endif %}
+      <div id="test-result" style="margin-top:1rem;display:none"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Setup Guide -->
+<div class="card" style="margin-top:1.5rem;">
+  <div class="card-header">
+    <h3><span class="material-symbols-outlined">menu_book</span> Setup Guide</h3>
+  </div>
+  <div class="card-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.5rem">
+
+      <div>
+        <h4 style="color:var(--accent)">Keycloak</h4>
+        <ol style="padding-left:1.2rem;font-size:0.875rem;line-height:1.8">
+          <li>Create a <strong>Client</strong> in your realm with<br>
+              <em>Client type: OpenID Connect</em></li>
+          <li>Set <code>redirect_uri</code> in the client's Valid Redirect URIs</li>
+          <li>Set <code>discovery_url</code>:<br>
+              <code style="font-size:0.78rem">https://&lt;host&gt;/realms/&lt;realm&gt;/.well-known/openid-configuration</code>
+          </li>
+          <li>Add <code>groups</code> mapper to include group membership in token</li>
+          <li>Map Keycloak group names in <code>role_map</code></li>
+        </ol>
+      </div>
+
+      <div>
+        <h4 style="color:var(--accent)">Okta</h4>
+        <ol style="padding-left:1.2rem;font-size:0.875rem;line-height:1.8">
+          <li>Create an <strong>OIDC Web Application</strong></li>
+          <li>Add Sign-in redirect URI matching your <code>redirect_uri</code></li>
+          <li>Set <code>discovery_url</code>:<br>
+              <code style="font-size:0.78rem">https://&lt;domain&gt;/.well-known/openid-configuration</code>
+          </li>
+          <li>Add <strong>Groups claim</strong> in token settings</li>
+          <li>Map Okta group names in <code>role_map</code></li>
+        </ol>
+      </div>
+
+      <div>
+        <h4 style="color:var(--accent)">Azure AD</h4>
+        <ol style="padding-left:1.2rem;font-size:0.875rem;line-height:1.8">
+          <li>Register an app in <strong>Entra ID</strong></li>
+          <li>Add a Web redirect URI matching <code>redirect_uri</code></li>
+          <li>Set <code>discovery_url</code>:<br>
+              <code style="font-size:0.78rem">https://login.microsoftonline.com/&lt;tenant&gt;/v2.0/.well-known/openid-configuration</code>
+          </li>
+          <li>Set <code>role_claim: roles</code> and configure app roles</li>
+          <li>Map Azure role names in <code>role_map</code></li>
+        </ol>
+      </div>
+
+    </div>
+
+    <div style="margin-top:1.5rem;padding:1rem;background:var(--bg-secondary);border-radius:6px">
+      <strong>Authelia co-existence:</strong> When Authelia injects a
+      <code>Remote-User</code> header, SSO is bypassed entirely — existing
+      deployments are unaffected. SSO activates only when no <code>Remote-User</code>
+      header is present (e.g. direct access without Caddy/Authelia in the path).
+    </div>
+  </div>
+</div>
+
+<script>
+async function testConnection() {
+  const btn = document.getElementById('test-btn');
+  const res = document.getElementById('test-result');
+  btn.disabled = true;
+  btn.textContent = 'Testing…';
+  res.style.display = 'block';
+  res.innerHTML = '<em>Connecting…</em>';
+  try {
+    const r = await fetch('/admin/sso/test', {method:'POST',
+      headers:{'Content-Type':'application/json'}});
+    const d = await r.json();
+    if (d.ok) {
+      res.innerHTML = `<div class="alert alert-success">
+        ✓ Connection OK — Issuer: <strong>${d.issuer || '—'}</strong></div>`;
+    } else {
+      res.innerHTML = `<div class="alert alert-danger">
+        ✗ Failed: ${d.error}</div>`;
+    }
+  } catch(e) {
+    res.innerHTML = `<div class="alert alert-danger">✗ Request error: ${e}</div>`;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<span class="material-symbols-outlined">network_check</span> Test Connection';
+}
+</script>
+{% endblock %}

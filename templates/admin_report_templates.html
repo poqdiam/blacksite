@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}Report Templates · BLACKSITE{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">
+    <span class="material-symbols-outlined">description</span> Report Templates
+  </h1>
+  <p class="page-subtitle">Upload DOCX templates with <code>{{variable}}</code> placeholders — rendered on-demand with live system data</p>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 380px;gap:1.5rem;align-items:start">
+
+  <!-- Template list -->
+  <div>
+    {% if templates_list %}
+    <div class="card">
+      <div class="card-header">
+        <h3>Uploaded Templates ({{ templates_list|length }})</h3>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Variables</th>
+            <th>Org</th>
+            <th>Uploaded by</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in templates_list %}
+          {% set var_count = templates_vars[t.id] | default([]) | length %}
+          <tr>
+            <td>
+              <strong>{{ t.name }}</strong>
+              {% if t.description %}
+              <br><small style="color:var(--text-muted)">{{ t.description }}</small>
+              {% endif %}
+            </td>
+            <td><span class="badge">{{ t.template_type }}</span></td>
+            <td>
+              <button class="btn btn-xs btn-secondary" onclick="showVars({{ t.id }}, '{{ t.name | e }}')">
+                {{ var_count }} vars
+              </button>
+            </td>
+            <td>{{ t.org_id or '(all)' }}</td>
+            <td>{{ t.created_by }}</td>
+            <td style="white-space:nowrap">{{ t.created_at.strftime('%Y-%m-%d') if t.created_at else '—' }}</td>
+            <td>
+              {% if t.is_active %}
+              <span class="badge badge-green">Active</span>
+              {% else %}
+              <span class="badge badge-gray">Inactive</span>
+              {% endif %}
+            </td>
+            <td>
+              <form method="post" action="/admin/report-templates/{{ t.id }}/delete"
+                    onsubmit="return confirm('Delete template \'{{ t.name | e }}\'?')">
+                <button class="btn btn-xs btn-danger" type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <span class="material-symbols-outlined" style="font-size:3rem;color:var(--text-muted)">description</span>
+      <p>No templates yet. Upload a DOCX template to get started.</p>
+    </div>
+    {% endif %}
+
+    <!-- Variable catalog reference -->
+    <div class="card" style="margin-top:1.5rem;">
+      <div class="card-header">
+        <h3><span class="material-symbols-outlined">data_object</span> Available Template Variables</h3>
+        <small style="color:var(--text-muted)">Use these in your DOCX as <code>{{variable_name}}</code></small>
+      </div>
+      <table class="data-table" style="font-size:0.85rem">
+        <thead>
+          <tr><th>Variable</th><th>Label</th><th>Source</th></tr>
+        </thead>
+        <tbody>
+          {% for var, meta in variable_catalog.items() %}
+          <tr>
+            <td><code>{{"{{"}}{{ var }}{{"}}"}}</code></td>
+            <td>{{ meta.label }}</td>
+            <td style="color:var(--text-muted)">{{ meta.source }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Upload form -->
+  <div class="card" style="position:sticky;top:80px">
+    <div class="card-header">
+      <h3><span class="material-symbols-outlined">upload_file</span> Upload Template</h3>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/admin/report-templates/upload" enctype="multipart/form-data">
+        <div class="form-group">
+          <label>Template Name *</label>
+          <input type="text" name="name" class="form-control" required
+                 placeholder="e.g. Executive Summary Q4">
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea name="description" class="form-control" rows="2"
+                    placeholder="Optional description"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Template Type</label>
+          <select name="template_type" class="form-control">
+            {% for t in template_types %}
+            <option value="{{ t }}">{{ t.replace('_', ' ').title() }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Restrict to Org ID <small style="color:var(--text-muted)">(leave blank for all orgs)</small></label>
+          <input type="text" name="org_id" class="form-control" placeholder="org-uuid or blank">
+        </div>
+        <div class="form-group">
+          <label>DOCX File *</label>
+          <input type="file" name="file" class="form-control" accept=".docx" required>
+          <small style="color:var(--text-muted)">Only .docx files. Use <code>{{variable}}</code> syntax inside.</small>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%">
+          <span class="material-symbols-outlined">upload</span> Upload Template
+        </button>
+      </form>
+
+      <div style="margin-top:1.5rem;padding:1rem;background:var(--bg-secondary);border-radius:6px;font-size:0.83rem">
+        <strong>How to create a template:</strong>
+        <ol style="padding-left:1.2rem;margin-top:0.5rem;line-height:1.8">
+          <li>Create a .docx file in Word or LibreOffice</li>
+          <li>Add <code>{{system_name}}</code>, <code>{{compliance_pct}}</code>, etc. wherever you want data</li>
+          <li>Upload — variables are auto-detected</li>
+          <li>Generate from any system's Reports tab</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Variable modal -->
+<div id="var-modal" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);
+     z-index:9999;align-items:center;justify-content:center">
+  <div class="card" style="width:500px;max-height:80vh;overflow-y:auto">
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+      <h3 id="var-modal-title">Variables</h3>
+      <button class="btn btn-sm btn-secondary" onclick="closeVars()">✕</button>
+    </div>
+    <div id="var-modal-body" class="card-body"></div>
+  </div>
+</div>
+
+<script>
+{% raw %}
+async function showVars(id, name) {
+  const modal = document.getElementById('var-modal');
+  document.getElementById('var-modal-title').textContent = name + ' — Variables';
+  document.getElementById('var-modal-body').innerHTML = '<em>Loading…</em>';
+  modal.style.display = 'flex';
+  const r = await fetch(`/admin/report-templates/${id}/variables`);
+  const vars = await r.json();
+  if (!vars.length) {
+    document.getElementById('var-modal-body').innerHTML = '<p>No variables detected.</p>';
+    return;
+  }
+  let html = '<table class="data-table" style="width:100%;font-size:0.85rem"><thead><tr><th>Variable</th><th>Label</th><th>Known</th></tr></thead><tbody>';
+  for (const v of vars) {
+    const badge = v.known
+      ? '<span class="badge badge-green">✓ Known</span>'
+      : '<span class="badge badge-yellow">! Unknown</span>';
+    html += `<tr><td><code>{{${v.variable}}}</code></td><td>${v.label}</td><td>${badge}</td></tr>`;
+  }
+  html += '</tbody></table>';
+  if (vars.some(v => !v.known)) {
+    html += '<div style="margin-top:.75rem;font-size:.82rem;color:var(--text-muted)">⚠ Unknown variables will render as empty strings.</div>';
+  }
+  document.getElementById('var-modal-body').innerHTML = html;
+}
+function closeVars() {
+  document.getElementById('var-modal').style.display = 'none';
+}
+document.getElementById('var-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeVars();
+});
+{% endraw %}
+</script>
+{% endblock %}
