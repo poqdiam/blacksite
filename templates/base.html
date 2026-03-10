@@ -1024,6 +1024,51 @@
   hx-on:htmx:before-request="sessionStorage.setItem('bsv-sb-scroll', document.getElementById('sidebar')?.scrollTop || 0)"
   hx-on:htmx:after-settle="(function(){var sb=document.getElementById('sidebar');if(sb){sb.scrollTop=parseInt(sessionStorage.getItem('bsv-sb-scroll')||'0',10);}if(typeof initPage==='function')initPage();})()">
 <a href="#main-content" class="skip-link">Skip to main content</a>
+
+{# ── AC-8: System Use Notification ─────────────────────────────────────────── #}
+{# Shown once per session; dismissed via cookie. Satisfies NIST AC-8. #}
+<div id="ac8-notice" style="display:none;position:fixed;inset:0;z-index:99999;
+     background:rgba(0,0,0,.82);align-items:center;justify-content:center">
+  <div style="max-width:560px;background:var(--card,#14141f);border:1px solid var(--cyan,#00ffcc);
+       border-radius:8px;padding:2rem;color:var(--text,#e0e0e0);font-size:0.9rem;line-height:1.6">
+    <h2 style="margin:0 0 1rem;color:var(--cyan,#00ffcc);font-family:monospace;letter-spacing:.05em">
+      ⚠ AUTHORIZED USE ONLY
+    </h2>
+    <p style="margin:0 0 .75rem">
+      This system is the property of <strong>TheKramerica</strong> and is for
+      <strong>authorized users only</strong>. By continuing, you acknowledge that:
+    </p>
+    <ul style="margin:0 0 1rem;padding-left:1.2rem">
+      <li>All activity on this system is subject to monitoring and recording.</li>
+      <li>Unauthorized access or use is prohibited and may result in disciplinary action or prosecution.</li>
+      <li>There is no expectation of privacy on this system.</li>
+      <li>Use of this system constitutes consent to monitoring.</li>
+    </ul>
+    <p style="margin:0 0 1.25rem;color:var(--text-muted,#888);font-size:0.82rem">
+      BLACKSITE Security Assessment Platform — Classification: Unclassified // Internal Use Only<br>
+      NIST SP 800-53 Rev 5 AC-8 | TheKramerica Information Security Policy v1.0
+    </p>
+    <button onclick="dismissAC8Notice()"
+            style="background:var(--cyan,#00ffcc);color:#000;border:none;padding:.6rem 1.5rem;
+                   border-radius:4px;font-weight:700;cursor:pointer;width:100%">
+      I Acknowledge — Continue to BLACKSITE
+    </button>
+  </div>
+</div>
+<script>
+(function(){
+  // AC-8: Show system use notice once per session
+  if (!sessionStorage.getItem('ac8-accepted')) {
+    var el = document.getElementById('ac8-notice');
+    if (el) { el.style.display = 'flex'; }
+  }
+})();
+function dismissAC8Notice() {
+  sessionStorage.setItem('ac8-accepted', '1');
+  document.getElementById('ac8-notice').style.display = 'none';
+}
+</script>
+
 {# ── Role Shell banner — fixed above topbar, role-colored ─────────────────── #}
 {% if is_role_view|default(false) or demo_mode|default(false) %}
 {% set _role_colors = {
@@ -2036,7 +2081,7 @@
   </div>
 
   {# ── Admin Chat (admin users only) — below security advisories ── #}
-  {% if is_admin and not is_role_view|default(false) and not demo_mode|default(false) %}
+  {% if (is_admin or is_staff_chat) and not is_role_view|default(false) and not demo_mode|default(false) %}
   <div id="sbAdminChatArea" style="border-top:1px solid var(--sidebar-border);flex-shrink:0;overflow:hidden">
     {# Clickable header — collapses chat body #}
     <div id="sbChatHeader"

@@ -241,6 +241,33 @@
   transition: opacity 0.15s;
 }
 .chat-input-row button:hover { opacity: 1; }
+.chat-img-btn {
+  cursor: pointer;
+  font-size: 1.1em;
+  padding: 4px 4px;
+  flex-shrink: 0;
+  line-height: 1;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+  user-select: none;
+}
+.chat-img-btn:hover { opacity: 1; }
+
+/* ── Chat image messages ──────────────────────────────────────────────────── */
+.chat-img-preview {
+  display: block;
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 6px;
+  cursor: zoom-in;
+  object-fit: contain;
+  margin-bottom: 2px;
+}
+.chat-img-caption {
+  font-size: 0.78em;
+  opacity: 0.8;
+  margin-top: 3px;
+}
 
 /* ── Window resize handle (top edge) ────────────────────────────────────────── */
 .chat-resize-handle {

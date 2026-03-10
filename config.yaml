@@ -14,6 +14,7 @@ app:
     - dan
   staff_users:           # Staff with admin chat access (no full admin dashboard)
     - t.conlin
+    - dickie
 
 employees:               # Known employees (non-admin Authelia users)
   - username: "alice.chen"
@@ -129,6 +130,15 @@ security:
 # Keycloak discovery_url:  https://<host>/realms/<realm>/.well-known/openid-configuration
 # Okta discovery_url:      https://<okta-domain>/.well-known/openid-configuration
 # Azure AD discovery_url:  https://login.microsoftonline.com/<tenant>/v2.0/.well-known/openid-configuration
+geo_restrict:
+  # Restricts /api/geo-check to allowed countries (ISO 3166-1 alpha-2).
+  # Used by Caddy forward_auth to gate demo.borisov.network and standin.borisov.network.
+  # Set enabled: false to disable all geo blocking (all countries pass through).
+  enabled: true
+  allowed_countries:
+    - US
+  fail_open: true   # true = allow on lookup failure (ip-api.com down); false = deny on failure
+
 sso:
   enabled: false
   provider: "keycloak"           # keycloak | okta | azure | generic  (label only)

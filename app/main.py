@@ -111,7 +111,7 @@ from sqlalchemy import func, or_, select, update, text, case as sa_case, bindpar
 from app.models import (
     Assessment, Candidate, ControlResult, ControlsMeta, DailyQuizActivity, QuizResponse, TrainingClick,
     System, PoamItem, PoamEvidence, Risk, UserProfile, AuditLog, SystemAssignment, ControlEdit,
-    SystemControl, Submission, RmfRecord,
+    SystemControl, ControlRemovalRequest, Submission, RmfRecord,
     AtoDocument, AtoDocumentVersion, AtoWorkflowEvent,
     SystemTeam, TeamMembership, BcdrEvent, BcdrSignoff,
     Observation, InventoryItem, SystemConnection, Artifact,
@@ -234,6 +234,11 @@ _AUDIT_ALL: bool = False
 # ── SSO / OIDC Configuration (Phase 38) ───────────────────────────────────────
 _SSO_CFG:  dict = {}         # populated in lifespan from config.yaml sso: section
 _OIDC_META: dict = {}        # cached OIDC discovery document
+
+# ── Geo-restriction (Phase 39) ─────────────────────────────────────────────────
+_GEO_RESTRICT_ENABLED:  bool      = False
+_GEO_ALLOWED_COUNTRIES: frozenset = frozenset({"US"})
+_GEO_FAIL_OPEN:         bool      = True   # allow on lookup failure
 
 # ── Phase 6: Build stamp ──────────────────────────────────────────────────────
 import subprocess as _sp_bld
@@ -868,6 +873,18 @@ async def lifespan(app: FastAPI):
     _REQUIRE_MFA   = bool(_SEC_CFG.get("require_mfa", False))
     _AUDIT_ALL     = bool(_SEC_CFG.get("audit_all_requests", False))
 
+    # ── Geo-restriction initialization (Phase 39) ────────────────────────────
+    global _GEO_RESTRICT_ENABLED, _GEO_ALLOWED_COUNTRIES, _GEO_FAIL_OPEN
+    _geo_cfg = CONFIG.get("geo_restrict", {})
+    _GEO_RESTRICT_ENABLED  = bool(_geo_cfg.get("enabled", False))
+    _GEO_ALLOWED_COUNTRIES = frozenset(
+        c.upper() for c in _geo_cfg.get("allowed_countries", ["US"])
+    )
+    _GEO_FAIL_OPEN = bool(_geo_cfg.get("fail_open", True))
+    if _GEO_RESTRICT_ENABLED:
+        log.info("Geo-restriction ENABLED — allowed: %s (fail_open=%s)",
+                 sorted(_GEO_ALLOWED_COUNTRIES), _GEO_FAIL_OPEN)
+
     # ── SSO / OIDC initialization (Phase 38) ─────────────────────────────────
     _SSO_CFG  = CONFIG.get("sso", {})
     _OIDC_META = {}
@@ -1226,6 +1243,18 @@ async def _geo_lookup(ips: list[str]) -> dict[str, dict]:
         except Exception:
             pass
     return {ip: _GEO_CACHE.get(ip, {}) for ip in ips}
+
+
+def _is_private_ip(ip: str) -> bool:
+    """Return True for loopback, RFC1918, and link-local addresses."""
+    if not ip:
+        return True
+    import ipaddress as _ipa
+    try:
+        a = _ipa.ip_address(ip)
+        return a.is_private or a.is_loopback or a.is_link_local
+    except ValueError:
+        return False
 
 
 def _country_flag(code: str) -> str:
@@ -4238,6 +4267,17 @@ async def upload(
     if suffix not in allowed:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}. Allowed: {', '.join(allowed)}")
 
+    # SI-3: verify file magic bytes match declared extension (closes GHSA-wp53-j4wj-2cfg analog)
+    _magic = await file.read(8)
+    await file.seek(0)
+    _magic_ok = (
+        (suffix == ".pdf"  and _magic[:4] == b"%PDF") or
+        (suffix in {".docx", ".xlsx"} and _magic[:4] == b"PK\x03\x04") or
+        (suffix in {".txt", ".csv"}   and all(b < 128 or b in (0x09,0x0a,0x0d) for b in _magic[:8]))
+    )
+    if not _magic_ok:
+        raise HTTPException(status_code=400, detail="File content does not match declared type")
+
     submitted_by = request.headers.get(_REMOTE_USER_HDR, "")
 
     uploads_dir = Path(_cfg("storage.uploads_dir", "uploads"))
@@ -5798,6 +5838,7 @@ async def profile_save(
 # All file-path construction MUST go through these constants + _safe_subpath().
 
 _AVATAR_DIR        = Path("data/avatars")
+_CHAT_IMAGE_DIR    = Path("data/uploads/chat_images")
 _POAM_EVIDENCE_DIR = Path("data/uploads/poam_evidence")
 _ATO_GENERATED_DIR = Path("data/ato_generated")
 _ATO_UPLOAD_DIR    = Path("data/ato_uploads")
@@ -10869,6 +10910,16 @@ async def system_controls_page(request: Request, system_id: str, family: str = "
         )
         existing = {sc.control_id: sc for sc in sc_rows.scalars().all()}
 
+        # Build set of hidden (approved removal/NA) control IDs when plan is locked
+        hidden_ctrl_ids: set = set()
+        if system.controls_built:
+            hidden_rows = await session.execute(
+                select(SystemControl.control_id)
+                .where(SystemControl.system_id == system_id,
+                       SystemControl.hidden_post_build == True)
+            )
+            hidden_ctrl_ids = {row[0] for row in hidden_rows.all()}
+
         # Build unified list from catalog + existing records
         all_catalog = _catalog_list()
         if family:
@@ -10876,6 +10927,9 @@ async def system_controls_page(request: Request, system_id: str, family: str = "
 
         controls = []
         for c in all_catalog:
+            # Filter out hidden controls on locked plans
+            if system.controls_built and c["id"] in hidden_ctrl_ids:
+                continue
             sc = existing.get(c["id"])
             stat = sc.status if sc else "not_started"
             if status_filter and stat != status_filter:
@@ -10923,18 +10977,19 @@ async def system_controls_page(request: Request, system_id: str, family: str = "
     controls    = controls[offset:offset + per_page]
 
     return templates.TemplateResponse("system_controls.html", {
-        "request":       request,
-        "system":        system,
-        "controls":      controls,
-        "stats":         stats,
-        "families":      _ctrl_families(),
-        "family":        family.upper(),
-        "status_filter": status_filter,
-        "other_systems": other_systems,
-        "page":          page,
-        "per_page":      per_page,
-        "total_pages":   total_pages,
-        "total_count":   total_count,
+        "request":        request,
+        "system":         system,
+        "controls":       controls,
+        "stats":          stats,
+        "families":       _ctrl_families(),
+        "family":         family.upper(),
+        "status_filter":  status_filter,
+        "other_systems":  other_systems,
+        "page":           page,
+        "per_page":       per_page,
+        "total_pages":    total_pages,
+        "total_count":    total_count,
+        "controls_built": system.controls_built,
         **_tpl_ctx(request),
     })
 
@@ -11035,6 +11090,14 @@ async def isso_control_workspace_get(request: Request, system_id: str, ctrl_id: 
         )
         other_systems = list(other_sys_rows.scalars().all())
 
+        # Load any pending removal request for this control
+        removal_request = (await session.execute(
+            select(ControlRemovalRequest)
+            .where(ControlRemovalRequest.system_id == system_id,
+                   ControlRemovalRequest.control_id == ctrl_id,
+                   ControlRemovalRequest.status == "pending")
+        )).scalar_one_or_none()
+
         await _log_audit(session, user, "VIEW", "system_control",
                          f"{system_id}:{ctrl_id}", {"page": "workspace"})
         await session.commit()
@@ -11058,17 +11121,19 @@ async def isso_control_workspace_get(request: Request, system_id: str, ctrl_id: 
     assess_ctx  = _build_assessment_ctx(ctrl_id)
 
     return templates.TemplateResponse("system_control_detail.html", {
-        "request":       request,
-        "system":        system,
-        "ctrl_id":       ctrl_id,
-        "cat_ctrl":      cat_ctrl,
-        "sc":            sc,
-        "prev_ctrl":     prev_ctrl,
-        "next_ctrl":     next_ctrl,
-        "can_edit":      can_edit,
-        "can_assess":    can_assess,
-        "assess_ctx":    assess_ctx,
-        "other_systems": other_systems,
+        "request":          request,
+        "system":           system,
+        "ctrl_id":          ctrl_id,
+        "cat_ctrl":         cat_ctrl,
+        "sc":               sc,
+        "prev_ctrl":        prev_ctrl,
+        "next_ctrl":        next_ctrl,
+        "can_edit":         can_edit,
+        "can_assess":       can_assess,
+        "assess_ctx":       assess_ctx,
+        "other_systems":    other_systems,
+        "removal_request":  removal_request,
+        "controls_built":   system.controls_built,
         **_tpl_ctx(request),
     })
 
@@ -11132,6 +11197,22 @@ async def isso_control_workspace_post(request: Request, system_id: str, ctrl_id:
                                     detail="Your role cannot edit implementation records.")
 
             new_status    = str(form.get("status", "not_started"))
+
+            # Post-build gate: block N/A status changes on locked plans without approval
+            sys_row_chk = await session.execute(select(System).where(System.id == system_id))
+            _sys_chk = sys_row_chk.scalar_one_or_none()
+            if _sys_chk and _sys_chk.controls_built and new_status == "not_applicable":
+                _existing_approval = (await session.execute(
+                    select(ControlRemovalRequest)
+                    .where(ControlRemovalRequest.system_id == system_id,
+                           ControlRemovalRequest.control_id == ctrl_id,
+                           ControlRemovalRequest.status == "approved")
+                )).scalar_one_or_none()
+                if not _existing_approval:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Control plan is locked. Submit a removal/N/A request for ISSO/SCA approval first."
+                    )
             new_narrative = str(form.get("narrative", "")).strip()
             new_role      = str(form.get("responsible_role", "")).strip()
             new_itype     = str(form.get("implementation_type", "system"))
@@ -11177,6 +11258,325 @@ async def isso_control_workspace_post(request: Request, system_id: str, ctrl_id:
 
     return RedirectResponse(
         url=f"/systems/{system_id}/workspace/{ctrl_id}?saved=1",
+        status_code=303
+    )
+
+
+# ── Control Plan Lock / Unlock ────────────────────────────────────────────────
+
+@app.post("/systems/{system_id}/controls/lock")
+async def lock_control_plan(request: Request, system_id: str):
+    """Lock the control plan — future N/A/removal changes require two-party approval."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        role = await _get_user_role(request, session)
+        _require_role(role, ["admin", "isso"])
+
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403, detail="Not assigned to this system")
+
+        sys_row = await session.execute(select(System).where(System.id == system_id))
+        system = sys_row.scalar_one_or_none()
+        if not system:
+            raise HTTPException(status_code=404)
+        if system.controls_built:
+            return RedirectResponse(
+                url=f"/systems/{system_id}/controls?msg=already_locked",
+                status_code=303
+            )
+
+        system.controls_built    = True
+        system.controls_built_by = user
+        system.controls_built_at = datetime.now(timezone.utc)
+
+        await _log_audit(session, user, "UPDATE", "system", system_id,
+                         {"action": "lock_control_plan"})
+        await session.commit()
+
+    return RedirectResponse(
+        url=f"/systems/{system_id}/controls?msg=locked",
+        status_code=303
+    )
+
+
+@app.post("/systems/{system_id}/controls/unlock")
+async def unlock_control_plan(request: Request, system_id: str):
+    """Unlock the control plan (admin only)."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    async with SessionLocal() as session:
+        role = await _get_user_role(request, session)
+        _require_role(role, ["admin"])
+
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403, detail="Not assigned to this system")
+
+        sys_row = await session.execute(select(System).where(System.id == system_id))
+        system = sys_row.scalar_one_or_none()
+        if not system:
+            raise HTTPException(status_code=404)
+
+        system.controls_built    = False
+        system.controls_built_by = None
+        system.controls_built_at = None
+
+        await _log_audit(session, user, "UPDATE", "system", system_id,
+                         {"action": "unlock_control_plan"})
+        await session.commit()
+
+    return RedirectResponse(
+        url=f"/systems/{system_id}/controls?msg=unlocked",
+        status_code=303
+    )
+
+
+# ── Control Removal / N/A Request ─────────────────────────────────────────────
+
+@app.post("/systems/{system_id}/controls/{ctrl_id}/request-removal")
+async def request_control_removal(request: Request, system_id: str, ctrl_id: str):
+    """Submit a removal or N/A request for an ISSO/SCA counterpart to approve."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    ctrl_id = ctrl_id.lower()
+
+    async with SessionLocal() as session:
+        role = await _get_user_role(request, session)
+        _require_role(role, ["admin", "isso", "sca"])
+
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403, detail="Not assigned to this system")
+
+        sys_row = await session.execute(select(System).where(System.id == system_id))
+        system = sys_row.scalar_one_or_none()
+        if not system:
+            raise HTTPException(status_code=404)
+        if not system.controls_built:
+            raise HTTPException(status_code=400,
+                                detail="Control plan is not locked. Edit the control directly.")
+
+        form             = await request.form()
+        requested_action = str(form.get("requested_action", "")).strip()
+        justification    = str(form.get("justification", "")).strip()
+
+        if requested_action not in ("remove", "set_na"):
+            raise HTTPException(status_code=422, detail="Invalid requested_action")
+        if len(justification) < 20:
+            raise HTTPException(status_code=422,
+                                detail="Justification must be at least 20 characters")
+
+        # Check no existing pending request for this (system_id, control_id)
+        existing_pending = (await session.execute(
+            select(ControlRemovalRequest)
+            .where(ControlRemovalRequest.system_id == system_id,
+                   ControlRemovalRequest.control_id == ctrl_id,
+                   ControlRemovalRequest.status == "pending")
+        )).scalar_one_or_none()
+        if existing_pending:
+            raise HTTPException(status_code=409,
+                                detail="A pending request already exists for this control")
+
+        # Determine the initiating role (cap to isso/sca/admin)
+        if role == "admin":
+            init_role = "admin"
+        elif role == "isso":
+            init_role = "isso"
+        else:
+            init_role = "sca"
+
+        req = ControlRemovalRequest(
+            system_id         = system_id,
+            control_id        = ctrl_id,
+            requested_action  = requested_action,
+            justification     = justification,
+            initiated_by      = user,
+            initiated_by_role = init_role,
+        )
+        session.add(req)
+        await session.flush()  # get req.id
+
+        action_url = f"/systems/{system_id}/workspace/{ctrl_id}"
+
+        # Notify the counterpart role
+        if init_role == "isso":
+            await _notify_role(
+                session, "sca",
+                "removal_request_pending",
+                f"Removal request: {ctrl_id.upper()} on {system.name}",
+                body=f"{user} (ISSO) requested {requested_action.replace('_',' ')} for {ctrl_id.upper()}. Justification: {justification[:120]}",
+                action_url=action_url,
+                exclude_user=user,
+            )
+        elif init_role == "sca":
+            await _notify_role(
+                session, "isso",
+                "removal_request_pending",
+                f"Removal request: {ctrl_id.upper()} on {system.name}",
+                body=f"{user} (SCA) requested {requested_action.replace('_',' ')} for {ctrl_id.upper()}. Justification: {justification[:120]}",
+                action_url=action_url,
+                exclude_user=user,
+            )
+        # Admin-initiated: notify both
+        else:
+            for _counterpart in ("isso", "sca"):
+                await _notify_role(
+                    session, _counterpart,
+                    "removal_request_pending",
+                    f"Removal request: {ctrl_id.upper()} on {system.name}",
+                    body=f"{user} (admin) requested {requested_action.replace('_',' ')} for {ctrl_id.upper()}. Justification: {justification[:120]}",
+                    action_url=action_url,
+                    exclude_user=user,
+                )
+
+        await _log_audit(session, user, "CREATE", "control_removal_request",
+                         f"{system_id}:{ctrl_id}",
+                         {"action": requested_action, "justification": justification[:80]})
+        await session.commit()
+
+    return RedirectResponse(
+        url=f"/systems/{system_id}/workspace/{ctrl_id}?removal_submitted=1",
+        status_code=303
+    )
+
+
+@app.post("/systems/{system_id}/controls/{ctrl_id}/review-removal/{request_id}")
+async def review_control_removal(request: Request, system_id: str, ctrl_id: str, request_id: int):
+    """Approve or deny a pending control removal/N/A request."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    ctrl_id = ctrl_id.lower()
+
+    async with SessionLocal() as session:
+        role = await _get_user_role(request, session)
+        _require_role(role, ["admin", "isso", "sca"])
+
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403, detail="Not assigned to this system")
+
+        rem_req = await session.get(ControlRemovalRequest, request_id)
+        if not rem_req or rem_req.system_id != system_id or rem_req.control_id != ctrl_id:
+            raise HTTPException(status_code=404, detail="Request not found")
+        if rem_req.status != "pending":
+            raise HTTPException(status_code=409, detail="Request is no longer pending")
+
+        # Enforce crossover: initiator and reviewer must be different parties
+        if role != "admin":
+            if rem_req.initiated_by_role == "isso" and role not in ("sca", "admin"):
+                raise HTTPException(status_code=403,
+                                    detail="ISSO-initiated requests must be reviewed by SCA or admin")
+            if rem_req.initiated_by_role == "sca" and role not in ("isso", "admin"):
+                raise HTTPException(status_code=403,
+                                    detail="SCA-initiated requests must be reviewed by ISSO or admin")
+            if rem_req.initiated_by == user:
+                raise HTTPException(status_code=403,
+                                    detail="You cannot review your own request")
+
+        form           = await request.form()
+        decision       = str(form.get("decision", "")).strip()
+        review_comment = str(form.get("review_comment", "")).strip()
+
+        if decision not in ("approved", "denied"):
+            raise HTTPException(status_code=422, detail="Decision must be 'approved' or 'denied'")
+
+        now = datetime.now(timezone.utc)
+        rem_req.status          = decision
+        rem_req.reviewed_by     = user
+        rem_req.reviewed_by_role = role
+        rem_req.reviewed_at     = now
+        rem_req.review_comment  = review_comment or None
+
+        if decision == "approved":
+            # Apply the approved action to the SystemControl record
+            sc_row = await session.execute(
+                select(SystemControl)
+                .where(SystemControl.system_id == system_id,
+                       SystemControl.control_id == ctrl_id)
+            )
+            sc = sc_row.scalar_one_or_none()
+            if sc is None:
+                cat_ctrl = CATALOG.get(ctrl_id, {})
+                sc = SystemControl(
+                    system_id      = system_id,
+                    control_id     = ctrl_id,
+                    control_family = ctrl_id.split("-")[0].upper(),
+                    control_title  = cat_ctrl.get("title", ""),
+                    created_by     = user,
+                )
+                session.add(sc)
+
+            sc.hidden_post_build  = True
+            sc.hidden_approved_at = now
+            sc.hidden_approved_by = user
+
+            if rem_req.requested_action == "set_na":
+                sc.status          = "not_applicable"
+                sc.last_updated_by = user
+                sc.last_updated_at = now
+
+        # Notify the initiator
+        sys_row = await session.execute(select(System).where(System.id == system_id))
+        system = sys_row.scalar_one_or_none()
+        sys_name = system.name if system else system_id
+        await _notify_user(
+            session, rem_req.initiated_by,
+            f"removal_request_{decision}",
+            f"Removal request {decision}: {ctrl_id.upper()} on {sys_name}",
+            body=f"Your request to {rem_req.requested_action.replace('_',' ')} {ctrl_id.upper()} was {decision} by {user}."
+                 + (f" Comment: {review_comment}" if review_comment else ""),
+            action_url=f"/systems/{system_id}/workspace/{ctrl_id}",
+        )
+
+        await _log_audit(session, user, "UPDATE", "control_removal_request",
+                         f"{system_id}:{ctrl_id}:{request_id}",
+                         {"decision": decision, "comment": (review_comment or "")[:80]})
+        await session.commit()
+
+    return RedirectResponse(
+        url=f"/systems/{system_id}/workspace/{ctrl_id}?review_done=1",
+        status_code=303
+    )
+
+
+@app.post("/systems/{system_id}/controls/{ctrl_id}/withdraw-removal/{request_id}")
+async def withdraw_control_removal(request: Request, system_id: str, ctrl_id: str, request_id: int):
+    """Withdraw a pending control removal request (initiator or admin only)."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not user:
+        raise HTTPException(status_code=401)
+
+    ctrl_id = ctrl_id.lower()
+
+    async with SessionLocal() as session:
+        role = await _get_user_role(request, session)
+
+        if not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=403, detail="Not assigned to this system")
+
+        rem_req = await session.get(ControlRemovalRequest, request_id)
+        if not rem_req or rem_req.system_id != system_id or rem_req.control_id != ctrl_id:
+            raise HTTPException(status_code=404, detail="Request not found")
+        if rem_req.status != "pending":
+            raise HTTPException(status_code=409, detail="Request is no longer pending")
+        if rem_req.initiated_by != user and role != "admin":
+            raise HTTPException(status_code=403, detail="Only the initiator or admin can withdraw")
+
+        rem_req.status = "withdrawn"
+
+        await _log_audit(session, user, "UPDATE", "control_removal_request",
+                         f"{system_id}:{ctrl_id}:{request_id}",
+                         {"action": "withdrawn"})
+        await session.commit()
+
+    return RedirectResponse(
+        url=f"/systems/{system_id}/workspace/{ctrl_id}?withdrawn=1",
         status_code=303
     )
 
@@ -12186,6 +12586,38 @@ async def api_heartbeat(request: Request):
     if user not in _SESSION_EXEMPT:
         _LAST_ACTIVITY[user] = datetime.now(timezone.utc)  # BLKS022826-1003AC03
     return {"ok": True, "next_in": 300}
+
+
+@app.get("/api/geo-check")
+async def api_geo_check(request: Request):
+    """Caddy forward_auth gate for geo-restriction.
+    Returns 200 if caller is from an allowed country, 403 otherwise.
+    Used to gate standin.borisov.network and demo.borisov.network."""
+    if not _GEO_RESTRICT_ENABLED:
+        return Response(status_code=200)
+
+    # Caddy passes the real client IP in X-Forwarded-For
+    xff = request.headers.get("X-Forwarded-For", "")
+    ip = (xff.split(",")[0].strip() if xff else "") or (request.client.host if request.client else "")
+
+    if not ip or _is_private_ip(ip):
+        return Response(status_code=200)
+
+    geo = await _geo_lookup([ip])
+    country_code = geo.get(ip, {}).get("country_code", "")
+
+    if not country_code:
+        if _GEO_FAIL_OPEN:
+            return Response(status_code=200)
+        raise HTTPException(status_code=403, detail="Location could not be determined")
+
+    if country_code in _GEO_ALLOWED_COUNTRIES:
+        return Response(status_code=200)
+
+    raise HTTPException(
+        status_code=403,
+        detail=f"Access restricted. Detected country: {country_code}"
+    )
 
 
 @app.patch("/api/preferences")
@@ -19041,6 +19473,43 @@ async def ws_admin_chat(websocket: WebSocket):
                 }
                 await _chat_broadcast(payload)
 
+            elif msg_type == "image":
+                room      = data.get("room", "@group")
+                media_url = str(data.get("url", "")).strip()
+                mime      = str(data.get("mime", "image/jpeg"))
+                caption   = str(data.get("caption", ""))[:500].strip()
+                if not media_url.startswith("/api/admin-chat/media/"):
+                    continue
+                if room != "@group" and user not in room.split(":"):
+                    continue
+                # Derive filename from URL and record in DB
+                filename = media_url.split("/")[-1]
+                rel_path = filename
+
+                async with SessionLocal() as session:
+                    msg = AdminChatMessage(
+                        room=room, from_user=user,
+                        body=caption or "",
+                        media_path=rel_path,
+                        media_mime=mime,
+                    )
+                    session.add(msg)
+                    await session.flush()
+                    msg_id = msg.id
+                    await session.commit()
+
+                payload = {
+                    "type":       "image",
+                    "id":         msg_id,
+                    "room":       room,
+                    "from_user":  user,
+                    "body":       caption,
+                    "media_url":  media_url,
+                    "media_mime": mime,
+                    "sent_at":    datetime.now(timezone.utc).isoformat(),
+                }
+                await _chat_broadcast(payload)
+
             elif msg_type == "status":
                 status   = data.get("status", "online")
                 away_msg = str(data.get("away_msg", ""))[:200]
@@ -19101,11 +19570,13 @@ async def api_chat_history(request: Request, room: str, before: int = 0):
 
     return JSONResponse([
         {
-            "id":        m.id,
-            "room":      m.room,
-            "from_user": m.from_user,
-            "body":      m.body,
-            "sent_at":   m.sent_at.isoformat() if m.sent_at else "",
+            "id":         m.id,
+            "room":       m.room,
+            "from_user":  m.from_user,
+            "body":       m.body,
+            "media_url":  f"/api/admin-chat/media/{m.media_path}" if m.media_path else None,
+            "media_mime": m.media_mime,
+            "sent_at":    (m.sent_at.isoformat() + ("+00:00" if m.sent_at.tzinfo is None else "")) if m.sent_at else "",
         }
         for m in reversed(msgs)
     ])
@@ -19147,6 +19618,69 @@ async def api_chat_unread(request: Request):
     return JSONResponse(unread)
 
 
+_CHAT_IMAGE_ALLOWED_MIME = {
+    "image/jpeg": ".jpg",
+    "image/png":  ".png",
+    "image/gif":  ".gif",
+    "image/webp": ".webp",
+}
+_CHAT_IMAGE_MAX_BYTES = 8 * 1024 * 1024  # 8 MB
+
+
+@app.post("/api/admin-chat/upload")
+async def api_chat_upload(request: Request, file: UploadFile = File(...)):
+    """Upload an image for the admin chat. Returns the media URL to embed in a message."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not _is_admin_user(user):
+        raise HTTPException(status_code=403)
+    if not await _chat_enabled():
+        raise HTTPException(status_code=403, detail="Chat is disabled")
+
+    mime = file.content_type or ""
+    if mime not in _CHAT_IMAGE_ALLOWED_MIME:
+        raise HTTPException(status_code=415, detail=f"Unsupported image type: {mime!r}. Allowed: JPEG, PNG, GIF, WebP")
+
+    data = await file.read()
+    if len(data) > _CHAT_IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Image exceeds 8 MB limit")
+
+    ext      = _CHAT_IMAGE_ALLOWED_MIME[mime]
+    ts       = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+    filename = f"{user}_{ts}{ext}"
+
+    _CHAT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    dest = _safe_subpath(_CHAT_IMAGE_DIR, filename)
+    dest.write_bytes(data)
+
+    return JSONResponse({"url": f"/api/admin-chat/media/{filename}", "mime": mime})
+
+
+@app.get("/api/admin-chat/media/{filename}")
+async def api_chat_media(request: Request, filename: str):
+    """Serve a chat image. Restricted to authenticated chat users."""
+    user = request.headers.get(_REMOTE_USER_HDR, "")
+    if not _is_admin_user(user):
+        raise HTTPException(status_code=403)
+
+    try:
+        fpath = _safe_subpath(_CHAT_IMAGE_DIR, filename)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    if not fpath.exists():
+        raise HTTPException(status_code=404)
+
+    ext  = fpath.suffix.lower()
+    mime = {".jpg": "image/jpeg", ".png": "image/png",
+            ".gif": "image/gif",  ".webp": "image/webp"}.get(ext, "application/octet-stream")
+
+    return StreamingResponse(
+        iter([fpath.read_bytes()]),
+        media_type=mime,
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
+
+
 @app.post("/api/profile/theme")
 async def api_set_theme(request: Request):
     user = request.headers.get(_REMOTE_USER_HDR, "")
@@ -19184,14 +19718,16 @@ async def api_chat_users(request: Request):
     if not _is_admin_user(user):
         raise HTTPException(status_code=403)
     admin_usernames = list(CONFIG.get("app", {}).get("admin_users", ["dan"]))
+    staff_usernames = list(CONFIG.get("app", {}).get("staff_users", []))
+    all_chat_users  = list(dict.fromkeys(admin_usernames + staff_usernames))  # dedupe, preserve order
     # Merge with DB display names
     async with SessionLocal() as session:
         profiles = (await session.execute(
-            select(UserProfile).where(UserProfile.remote_user.in_(admin_usernames))
+            select(UserProfile).where(UserProfile.remote_user.in_(all_chat_users))
         )).scalars().all()
     name_map = {p.remote_user: p.display_name for p in profiles}
     result = []
-    for u in admin_usernames:
+    for u in all_chat_users:
         p = _ADMIN_PRESENCE.get(u, {"status": "offline", "away_msg": ""})
         result.append({
             "username":     u,

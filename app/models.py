@@ -210,6 +210,10 @@ class System(Base):
     isso_email              = Column(String, nullable=True)    # ISSO email
     # Phase 36 — Multi-tenant org ownership (added via col_migrations)
     org_id                  = Column(String, ForeignKey("organizations.id"), nullable=True, index=True)
+    # Control plan lock (added via col_migrations)
+    controls_built          = Column(Boolean, default=False)
+    controls_built_by       = Column(String, nullable=True)
+    controls_built_at       = Column(DateTime, nullable=True)
 
 
 class PoamItem(Base):
@@ -504,10 +508,33 @@ class SystemControl(Base):
     assessed_at          = Column(DateTime, nullable=True)
     # Crosswalk propagation tracking — set when status was derived from another framework
     xw_source            = Column(String, nullable=True)   # e.g. "nist80053r5:ac-2" — source of propagated status
+    # Post-build suppression (N/A or removal approved via two-party workflow)
+    hidden_post_build    = Column(Boolean, default=False)
+    hidden_approved_at   = Column(DateTime, nullable=True)
+    hidden_approved_by   = Column(String, nullable=True)
 
     __table_args__ = (
         Index("ix_sysctl_system_ctrl", "system_id", "control_id", unique=True),
     )
+
+
+class ControlRemovalRequest(Base):
+    """Two-party approval workflow for removing or N/A-ing a control after the plan is locked."""
+    __tablename__ = "control_removal_requests"
+
+    id                = Column(Integer, primary_key=True, autoincrement=True)
+    system_id         = Column(String, ForeignKey("systems.id"), nullable=False, index=True)
+    control_id        = Column(String, nullable=False)
+    requested_action  = Column(String, nullable=False)   # "remove" | "set_na"
+    justification     = Column(Text, nullable=False)
+    status            = Column(String, default="pending")  # pending|approved|denied|withdrawn
+    initiated_by      = Column(String, nullable=False)
+    initiated_by_role = Column(String, nullable=False)
+    initiated_at      = Column(DateTime, default=_now)
+    reviewed_by       = Column(String, nullable=True)
+    reviewed_by_role  = Column(String, nullable=True)
+    reviewed_at       = Column(DateTime, nullable=True)
+    review_comment    = Column(Text, nullable=True)
 
 
 class Submission(Base):
@@ -762,12 +789,14 @@ class Artifact(Base):
 class AdminChatMessage(Base):
     __tablename__ = "admin_chat_messages"
 
-    id        = Column(Integer, primary_key=True, autoincrement=True)
-    room      = Column(String(120), nullable=False, index=True)
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    room       = Column(String(120), nullable=False, index=True)
     # room values: "@group"  OR  sorted pair "alice:dan"
-    from_user = Column(String(120), nullable=False)
-    body      = Column(Text, nullable=False)
-    sent_at   = Column(DateTime, default=_now)
+    from_user  = Column(String(120), nullable=False)
+    body       = Column(Text, nullable=False)
+    sent_at    = Column(DateTime, default=_now)
+    media_path = Column(String(260), nullable=True)   # relative path under data/uploads/chat_images/
+    media_mime = Column(String(40),  nullable=True)   # e.g. image/jpeg
 
 
 class AdminChatReceipt(Base):
@@ -961,6 +990,16 @@ async def _migrate_db(engine):
         ("audit_log",  "org_id",   "TEXT DEFAULT NULL"),
         # Phase 38 — mime_type on generated_reports (PDF vs DOCX templates)
         ("generated_reports", "mime_type", "TEXT DEFAULT 'application/pdf'"),
+        # Control plan lock + two-party approval workflow
+        ("systems",          "controls_built",       "BOOLEAN DEFAULT 0"),
+        ("systems",          "controls_built_by",    "TEXT DEFAULT NULL"),
+        ("systems",          "controls_built_at",    "DATETIME DEFAULT NULL"),
+        ("system_controls",  "hidden_post_build",    "BOOLEAN DEFAULT 0"),
+        ("system_controls",  "hidden_approved_at",   "DATETIME DEFAULT NULL"),
+        ("system_controls",  "hidden_approved_by",   "TEXT DEFAULT NULL"),
+        # Chat image attachments
+        ("admin_chat_messages", "media_path", "TEXT DEFAULT NULL"),
+        ("admin_chat_messages", "media_mime", "TEXT DEFAULT NULL"),
     ]
     # Performance indexes — CREATE INDEX IF NOT EXISTS is idempotent
     index_migrations = [
@@ -1041,6 +1080,28 @@ async def _migrate_db(engine):
                 await conn.execute(text(
                     f"ALTER TABLE {table} ADD COLUMN {col} {_adapt_col_def(col_def)}"
                 ))
+        # Control plan removal request table (created here for existing DBs that predate Base.metadata.create_all)
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS control_removal_requests (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                system_id         TEXT NOT NULL REFERENCES systems(id),
+                control_id        TEXT NOT NULL,
+                requested_action  TEXT NOT NULL,
+                justification     TEXT NOT NULL,
+                status            TEXT DEFAULT 'pending',
+                initiated_by      TEXT NOT NULL,
+                initiated_by_role TEXT NOT NULL,
+                initiated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+                reviewed_by       TEXT,
+                reviewed_by_role  TEXT,
+                reviewed_at       DATETIME,
+                review_comment    TEXT
+            )
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_ctrl_removal_system ON control_removal_requests (system_id)"
+        ))
+
         # Phase 36: dedup org membership rows before unique index (backfill may run multiple times)
         await conn.execute(text("""
             DELETE FROM user_org_memberships WHERE id NOT IN (

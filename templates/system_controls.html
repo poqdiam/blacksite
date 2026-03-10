@@ -149,6 +149,29 @@
   </div>
 </div>
 
+{# ── Control Plan Lock Banner ── #}
+{% if controls_built %}
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;margin-bottom:14px;
+            background:rgba(0,255,204,0.06);border:1px solid rgba(0,255,204,0.25);border-radius:6px">
+  <span style="font-size:0.85em;color:var(--cyan)">🔒 Control plan is locked. Removing or marking controls N/A requires ISSO + SCA two-party approval.</span>
+  {% if user_role == 'admin' %}
+  <form method="post" action="/systems/{{ system.id }}/controls/unlock" style="margin:0"
+        onsubmit="return confirm('Unlock control plan? This bypasses the two-party approval workflow.')">
+    <button type="submit" class="btn btn-outline btn-xs" style="font-size:0.75em">Unlock (Admin)</button>
+  </form>
+  {% endif %}
+</div>
+{% else %}
+{% if user_role in ('isso', 'admin') %}
+<div style="margin-bottom:14px">
+  <form method="post" action="/systems/{{ system.id }}/controls/lock" style="margin:0"
+        onsubmit="return confirm('Lock control plan? Removing or marking controls N/A will require two-party approval.')">
+    <button type="submit" class="btn btn-warn btn-sm" style="font-size:0.82em">🔒 Lock Control Plan</button>
+  </form>
+</div>
+{% endif %}
+{% endif %}
+
 {# ── Stats — each box is a clickable filter ── #}
 <div class="ctrl-stats">
   <a href="/systems/{{ system.id }}/controls"

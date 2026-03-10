@@ -12,6 +12,7 @@ const AdminChat = (() => {
   let SHOW_AWAY_MSG    = true; // overridden by server setting via init()
 
   const openWindows = {};   // room → { el, typingTimer, lastMsgId }
+  const poppedOut   = {};   // room → popup window ref (tracks rooms open in popup windows)
   const presence    = {};   // username → {status, away_msg}
   let allUsers      = [];   // all configured admin users (from /api/admin-chat/users)
   let myUsername    = "";
@@ -310,6 +311,9 @@ const AdminChat = (() => {
       <div class="chat-typing"></div>
       <div class="chat-input-row">
         <textarea rows="1" placeholder="Message…"></textarea>
+        <label class="chat-img-btn" title="Send image" aria-label="Attach image">
+          📎<input type="file" accept="image/*" class="chat-img-input" style="display:none">
+        </label>
         <button class="chat-send" title="Send">➤</button>
       </div>`;
 
@@ -338,11 +342,20 @@ const AdminChat = (() => {
     // Pop-out
     win.querySelector(".chat-popout").addEventListener("click", e => {
       e.stopPropagation();
-      window.open(
+      const popup = window.open(
         "/chat/popup?room=" + encodeURIComponent(room),
         "bsv-chat-" + room,
         "width=380,height=560,resizable=yes,menubar=no,toolbar=no,location=no,status=no"
       );
+      if (popup) {
+        poppedOut[room] = popup;
+        const poll = setInterval(() => {
+          if (!poppedOut[room] || poppedOut[room].closed) {
+            delete poppedOut[room];
+            clearInterval(poll);
+          }
+        }, 1000);
+      }
       closeWindow(room);
     });
 
@@ -353,7 +366,11 @@ const AdminChat = (() => {
     });
     win.querySelector(".chat-close").addEventListener("click", e => {
       e.stopPropagation();
-      closeWindow(room);
+      if (win.classList.contains("minimized")) {
+        closeWindow(room);   // already minimized → fully remove
+      } else {
+        win.classList.add("minimized");   // expanded → just minimize
+      }
     });
 
     // Send on click or Enter (Shift+Enter = newline)
@@ -374,6 +391,29 @@ const AdminChat = (() => {
     textarea.addEventListener("input", () => {
       textarea.style.height = "auto";
       textarea.style.height = Math.min(textarea.scrollHeight, 80) + "px";
+    });
+
+    // Image upload
+    const imgInput = win.querySelector(".chat-img-input");
+    imgInput.addEventListener("change", async () => {
+      const file = imgInput.files[0];
+      imgInput.value = "";
+      if (!file) return;
+      if (!file.type.startsWith("image/")) { alert("Please select an image file."); return; }
+      if (file.size > 8 * 1024 * 1024) { alert("Image must be under 8 MB."); return; }
+      await _uploadAndSendImage(room, file);
+    });
+
+    // Paste screenshot / clipboard image
+    textarea.addEventListener("paste", async (e) => {
+      const items = Array.from(e.clipboardData?.items || []);
+      const imgItem = items.find(it => it.kind === "file" && it.type.startsWith("image/"));
+      if (!imgItem) return;           // let normal text paste through
+      e.preventDefault();
+      const file = imgItem.getAsFile();
+      if (!file) return;
+      if (file.size > 8 * 1024 * 1024) { alert("Image must be under 8 MB."); return; }
+      await _uploadAndSendImage(room, file);
     });
 
     // Typing indicator broadcast
@@ -479,12 +519,50 @@ const AdminChat = (() => {
     }
     const bubble = document.createElement("div");
     bubble.className = "msg-bubble";
-    bubble.textContent = msg.body;
+    if (msg.media_url) {
+      const img = document.createElement("img");
+      img.src = msg.media_url;
+      img.className = "chat-img-preview";
+      img.alt = msg.body || "image";
+      img.loading = "lazy";
+      img.addEventListener("click", () => window.open(msg.media_url, "_blank"));
+      bubble.appendChild(img);
+      if (msg.body) {
+        const cap = document.createElement("div");
+        cap.className = "chat-img-caption";
+        cap.textContent = msg.body;
+        bubble.appendChild(cap);
+      }
+    } else {
+      bubble.textContent = msg.body;
+    }
     const time = document.createElement("div");
     time.className = "msg-time";
     time.textContent = _fmtTime(msg.sent_at);
     wrap.append(bubble, time);
     bodyEl.appendChild(wrap);
+  }
+
+  async function _uploadAndSendImage(room, file) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const resp = await fetch("/api/admin-chat/upload", {method: "POST", body: fd});
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        alert("Upload failed: " + (err.detail || resp.status));
+        return;
+      }
+      const {url, mime} = await resp.json();
+      ws.send(JSON.stringify({type: "image", room, url, mime, caption: ""}));
+      if (room !== "@group") {
+        const other = room.split(":").find(u => u !== myUsername);
+        if (other) { _touchRecent(other); renderSidebar(); }
+      }
+    } catch (e) {
+      alert("Upload error: " + e.message);
+    }
   }
 
   function appendMessage(room, msg) {
@@ -503,7 +581,7 @@ const AdminChat = (() => {
       const badge = document.getElementById(`unread-${room}`);
       const cur = badge ? (parseInt(badge.textContent, 10) || 0) : 0;
       _setUnread(room, cur + 1);
-      _notify(_roomTitle(room), `${msg.from_user}: ${msg.body}`);
+      _notify(_roomTitle(room), `${msg.from_user}: ${msg.media_url ? "📎 Image" : msg.body}`);
     }
   }
 
@@ -574,12 +652,12 @@ const AdminChat = (() => {
     } else if (data.type === "unread") {
       _applyUnreadCounts(data.counts);
 
-    } else if (data.type === "message") {
+    } else if (data.type === "message" || data.type === "image") {
       const room = data.room;
       if (room !== "@group" && myUsername && room.includes(myUsername)) {
         const other = room.split(":").find(u => u !== myUsername);
         if (other) { _touchRecent(other); renderSidebar(); }
-        if (!openWindows[room]) openRoom(room, "@ " + other);
+        if (!openWindows[room] && !poppedOut[room]) openRoom(room, "@ " + other);
       }
       if (openWindows[room]) {
         appendMessage(room, data);
@@ -587,7 +665,7 @@ const AdminChat = (() => {
         const badge = document.getElementById(`unread-${room}`);
         const cur = badge ? (parseInt(badge.textContent, 10) || 0) : 0;
         _setUnread(room, cur + 1);
-        _notify(_roomTitle(room), `${data.from_user}: ${data.body}`);
+        _notify(_roomTitle(room), `${data.from_user}: ${data.media_url ? "📎 Image" : data.body}`);
       }
 
     } else if (data.type === "typing") {

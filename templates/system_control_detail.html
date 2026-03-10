@@ -269,6 +269,130 @@
   ✓ Implementation record saved successfully.
 </div>
 {% endif %}
+{% if request.query_params.get('removal_submitted') %}
+<div class="save-banner">
+  ✓ Removal/N/A request submitted. The counterpart will be notified for review.
+</div>
+{% endif %}
+{% if request.query_params.get('review_done') %}
+<div class="save-banner">
+  ✓ Review decision recorded and initiator notified.
+</div>
+{% endif %}
+{% if request.query_params.get('withdrawn') %}
+<div class="save-banner" style="background:rgba(255,179,0,0.1);border-color:rgba(255,179,0,0.3);color:var(--yellow)">
+  Request withdrawn.
+</div>
+{% endif %}
+
+{# ── Control Plan Lock / Removal Request Banner ────────────────────────────── #}
+{% if controls_built %}
+<div style="padding:10px 16px;margin-bottom:14px;background:rgba(0,255,204,0.05);
+            border:1px solid rgba(0,255,204,0.2);border-radius:6px;font-size:0.84em;color:var(--cyan)">
+  🔒 Control plan is locked.
+  {% if removal_request %}
+    <strong style="color:var(--yellow)">Pending removal/N/A request exists</strong> — awaiting review.
+    {# Show withdraw option to initiator #}
+    {% if removal_request.initiated_by == user or user_role == 'admin' %}
+    <form method="post"
+          action="/systems/{{ system.id }}/controls/{{ ctrl_id }}/withdraw-removal/{{ removal_request.id }}"
+          style="display:inline;margin-left:10px"
+          onsubmit="return confirm('Withdraw this request?')">
+      <button type="submit" class="btn btn-outline btn-xs" style="font-size:0.75em;color:var(--red)">Withdraw</button>
+    </form>
+    {% endif %}
+  {% else %}
+    Removing or marking this control N/A requires two-party approval.
+    {# Show "Request N/A / Removal" button for ISSO, SCA, admin #}
+    {% if user_role in ('isso', 'sca', 'admin') %}
+    <button type="button" class="btn btn-ghost btn-xs"
+            style="font-size:0.76em;margin-left:8px"
+            onclick="document.getElementById('removal-request-form').style.display='block';this.style.display='none'">
+      Submit Request →
+    </button>
+    <div id="removal-request-form" style="display:none;margin-top:12px;padding:14px;
+         background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:6px">
+      <form method="post" action="/systems/{{ system.id }}/controls/{{ ctrl_id }}/request-removal">
+        <div style="margin-bottom:10px">
+          <label style="font-size:0.68em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--cyan);display:block;margin-bottom:4px">
+            Action
+          </label>
+          <select name="requested_action" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;
+                  padding:6px 10px;color:var(--text);font-size:0.84em;font-family:var(--mono)">
+            <option value="set_na">Mark N/A (not applicable)</option>
+            <option value="remove">Remove control from plan</option>
+          </select>
+        </div>
+        <div style="margin-bottom:10px">
+          <label style="font-size:0.68em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--cyan);display:block;margin-bottom:4px">
+            Justification <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(min 20 characters)</span>
+          </label>
+          <textarea name="justification" rows="3" required minlength="20"
+                    style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:4px;
+                           padding:8px 10px;color:var(--text);font-size:0.84em;font-family:var(--mono);
+                           resize:vertical;box-sizing:border-box"
+                    placeholder="Explain why this control should be removed or marked N/A…"></textarea>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button type="submit" class="btn btn-primary btn-sm" style="font-size:0.82em">Submit Request</button>
+          <button type="button" class="btn btn-ghost btn-sm" style="font-size:0.82em"
+                  onclick="document.getElementById('removal-request-form').style.display='none';
+                           document.querySelector('[onclick*=removal-request-form]').style.display=''">Cancel</button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
+  {% endif %}
+</div>
+
+{# ── Pending request review panel (for counterpart/admin) ─────────────────── #}
+{% if removal_request %}
+{% set can_review = (
+    (removal_request.initiated_by_role == 'isso' and user_role in ('sca', 'admin')) or
+    (removal_request.initiated_by_role == 'sca'  and user_role in ('isso', 'admin')) or
+    (removal_request.initiated_by_role == 'admin' and user_role in ('isso', 'sca', 'admin'))
+) and removal_request.initiated_by != user %}
+{% if can_review %}
+<div style="padding:14px 16px;margin-bottom:14px;background:rgba(255,193,7,0.06);
+            border:1px solid rgba(255,193,7,0.3);border-radius:6px">
+  <div style="font-size:0.72em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+              color:var(--yellow);margin-bottom:8px">Pending Review — {{ removal_request.requested_action | replace('_',' ') | title }}</div>
+  <div style="font-size:0.84em;margin-bottom:8px">
+    <strong>{{ removal_request.initiated_by }}</strong> ({{ removal_request.initiated_by_role | upper }}) requested
+    <strong>{{ removal_request.requested_action | replace('_',' ') }}</strong>
+    {% if removal_request.initiated_at %} on {{ removal_request.initiated_at.strftime('%Y-%m-%d') }}{% endif %}
+  </div>
+  <div style="font-size:0.82em;color:var(--muted);margin-bottom:12px;
+              background:rgba(0,0,0,0.2);padding:8px 10px;border-radius:4px">
+    Justification: {{ removal_request.justification }}
+  </div>
+  <form method="post" action="/systems/{{ system.id }}/controls/{{ ctrl_id }}/review-removal/{{ removal_request.id }}">
+    <div style="margin-bottom:8px">
+      <label style="font-size:0.68em;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--cyan);display:block;margin-bottom:4px">
+        Comment (optional)
+      </label>
+      <input type="text" name="review_comment"
+             style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:4px;
+                    padding:6px 10px;color:var(--text);font-size:0.84em;font-family:var(--mono);box-sizing:border-box"
+             placeholder="Optional rationale for your decision…">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button type="submit" name="decision" value="approved"
+              class="btn btn-primary btn-sm" style="font-size:0.82em;background:var(--green)">
+        Approve
+      </button>
+      <button type="submit" name="decision" value="denied"
+              class="btn btn-ghost btn-sm" style="font-size:0.82em;color:var(--red)"
+              onclick="return confirm('Deny this request?')">
+        Deny
+      </button>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% endif %}
+
+{% endif %}
 
 {# ── NIST Control Definition card ─────────────────────────────────────────── #}
 <div class="ws-card">

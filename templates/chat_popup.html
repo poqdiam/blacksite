@@ -148,6 +148,16 @@
     transition: opacity 0.15s;
   }
   #popup-input-row button:hover { opacity: 1; }
+  .popup-img-btn {
+    cursor: pointer; font-size: 1.1em; padding: 4px 4px;
+    flex-shrink: 0; line-height: 1; opacity: 0.6; transition: opacity 0.15s; user-select: none;
+  }
+  .popup-img-btn:hover { opacity: 1; }
+  .chat-img-preview {
+    display: block; max-width: 220px; max-height: 220px;
+    border-radius: 6px; cursor: zoom-in; object-fit: contain; margin-bottom: 2px;
+  }
+  .chat-img-caption { font-size: 0.78em; opacity: 0.8; margin-top: 3px; }
 </style>
 </head>
 <body>
@@ -164,7 +174,10 @@
   <div id="popup-typing"></div>
 
   <div id="popup-input-row">
-    <textarea id="msgInput" rows="1" placeholder="Message…"></textarea>
+    <textarea id="msgInput" rows="1" placeholder="Message… (paste screenshot with Ctrl+V)"></textarea>
+    <label class="popup-img-btn" title="Attach image" aria-label="Attach image">
+      📎<input type="file" id="imgFileInput" accept="image/*" style="display:none">
+    </label>
     <button id="sendBtn" title="Send">➤</button>
   </div>
 </div>
@@ -219,7 +232,23 @@
     }
     const b = document.createElement("div");
     b.className = "msg-bubble";
-    b.textContent = msg.body;
+    if (msg.media_url) {
+      const img = document.createElement("img");
+      img.src = msg.media_url;
+      img.className = "chat-img-preview";
+      img.alt = msg.body || "image";
+      img.loading = "lazy";
+      img.addEventListener("click", () => window.open(msg.media_url, "_blank"));
+      b.appendChild(img);
+      if (msg.body) {
+        const cap = document.createElement("div");
+        cap.className = "chat-img-caption";
+        cap.textContent = msg.body;
+        b.appendChild(cap);
+      }
+    } else {
+      b.textContent = msg.body;
+    }
     const t = document.createElement("div");
     t.className = "msg-time";
     t.textContent = _fmtTime(msg.sent_at);
@@ -227,6 +256,24 @@
     bodyEl.appendChild(wrap);
     bodyEl.scrollTop = bodyEl.scrollHeight;
     lastMsgId = Math.max(lastMsgId, msg.id || 0);
+  }
+
+  async function _uploadAndSendImage(file) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const resp = await fetch("/api/admin-chat/upload", {method: "POST", body: fd});
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        alert("Upload failed: " + (err.detail || resp.status));
+        return;
+      }
+      const {url, mime} = await resp.json();
+      ws.send(JSON.stringify({type: "image", room: ROOM, url, mime, caption: ""}));
+    } catch (e) {
+      alert("Upload error: " + e.message);
+    }
   }
 
   function doSend() {
@@ -247,6 +294,29 @@
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({type: "typing", room: ROOM}));
     }
+  });
+
+  // Paste screenshot / clipboard image
+  input.addEventListener("paste", async (e) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const imgItem = items.find(it => it.kind === "file" && it.type.startsWith("image/"));
+    if (!imgItem) return;
+    e.preventDefault();
+    const file = imgItem.getAsFile();
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) { alert("Image must be under 8 MB."); return; }
+    await _uploadAndSendImage(file);
+  });
+
+  // File picker
+  const imgFileInput = document.getElementById("imgFileInput");
+  imgFileInput.addEventListener("change", async () => {
+    const file = imgFileInput.files[0];
+    imgFileInput.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { alert("Please select an image file."); return; }
+    if (file.size > 8 * 1024 * 1024) { alert("Image must be under 8 MB."); return; }
+    await _uploadAndSendImage(file);
   });
 
   async function loadHistory() {
@@ -283,7 +353,7 @@
         peerDot.className = `status-dot status-${status}`;
         peerDot.title = u && u.away_msg ? `Away: ${u.away_msg}` : status;
 
-      } else if (data.type === "message" && data.room === ROOM) {
+      } else if ((data.type === "message" || data.type === "image") && data.room === ROOM) {
         _renderMsg(data);
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({type: "read", room: ROOM, last_id: lastMsgId}));

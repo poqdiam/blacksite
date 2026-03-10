@@ -35,3 +35,20 @@ email.conf
 .idea/
 .vscode/
 *.swp
+
+# Feed cache (runtime-generated, not source)
+static/feed_cache/
+
+# Test / dev artifacts
+.playwright/
+.venv38/
+=*
+WORKLOG.txt
+FINDINGS.txt
+FIXES.txt
+requirements.hash.txt
+requirements.in
+scap-results/
+scripts/assess_*.py
+*.pre-sqlcipher-backup
+*.unencrypted-backup
