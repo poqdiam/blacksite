@@ -119,7 +119,7 @@ from app.models import (
     AdminChatMessage, AdminChatReceipt,
     ProgramRoleAssignment, DutyAssignment, Notification,
     SspReview, SystemSettings, UserFeedSubscription, IngestJob,
-    NistPublication, NvdCve, ControlParameter, AutoFailEvent,
+    NistPublication, NvdCve, CisaKevEntry, ControlParameter, AutoFailEvent,
     RemovedUserReservation, FeedSource, FEED_ALLOWLIST,
     # Phase 25 — Daily Workflow Stack
     DailyLogbook, DeepWorkRotation, DeepWorkCompletion,
@@ -147,7 +147,9 @@ from app.models import (
     # Phase 38 — SSO + custom report templates
     ReportTemplate,
     Organization, UserOrganizationMembership, OrgSettings, DEFAULT_ORG_ID, DEFAULT_ORG_NAME,
-    init_db, make_engine, make_session_factory, _upsert_sql
+    init_db, make_engine, make_session_factory, _upsert_sql,
+    # Control Interview Questionnaire
+    InterviewSession, InterviewQuestion, InterviewResponse, InterviewAuditEvent,
 )
 from app.updater    import (load_catalog, load_baselines, update_if_needed,
                             ensure_rev4_catalog, load_rev4_catalog,
@@ -649,6 +651,14 @@ CSF2_CATALOG:      dict = {}   # NIST CSF 2.0
 FEDRAMP_HIGH:      dict = {}   # FedRAMP High resolved catalog
 FEDRAMP_MOD:       dict = {}   # FedRAMP Moderate resolved catalog
 FEDRAMP_LOW:       dict = {}   # FedRAMP Low resolved catalog
+
+# Map framework short_name → catalog getter (used at interview creation time)
+# Returns an empty dict when the catalog hasn't been loaded yet.
+def _get_overlay_catalog(fw_sn: str) -> dict:
+    if fw_sn == "fedramp_high": return FEDRAMP_HIGH
+    if fw_sn == "fedramp_mod":  return FEDRAMP_MOD
+    if fw_sn == "fedramp_low":  return FEDRAMP_LOW
+    return {}   # unknown/unloaded → caller generates for all controls
 _CTRL_META:        dict = {}  # lowercase ctrl_id → controls.json record
 _ODP_LABELS:       dict = {}  # odp param id → assessment objective label
 _ASSESSMENT_PROCS: dict = {}  # lowercase ctrl_id → {examine, interview, test}
@@ -1122,7 +1132,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 @app.exception_handler(StarletteHTTPException)
 async def http_exc_handler(request: Request, exc: StarletteHTTPException):
     ctx = {**_tpl_ctx(request), "request": request, "now": datetime.now(timezone.utc)}
-    tpl = {403: "errors/403.html", 404: "errors/404.html"}.get(exc.status_code)
+    tpl = {401: "errors/401.html", 403: "errors/403.html", 404: "errors/404.html"}.get(exc.status_code)
     if tpl is None and exc.status_code >= 500:
         tpl = "errors/500.html"
     if tpl:
@@ -1577,7 +1587,13 @@ def _tpl_ctx(request: Request) -> dict:
         # Permission validity is already enforced in _get_user_role / _full_ctx.
         is_role_view        = shell_cookie in _VALID_SHELL_ROLES
         user_role_ctx       = shell_cookie if is_role_view else "employee"
-        shell_allowed_roles = []   # _full_ctx overrides with DB-derived list
+        if _cfg("demo_mode", False):
+            # Demo: all curated roles are always available; exclude whichever one
+            # the visitor is currently viewing so the dropdown makes sense.
+            _cur = shell_cookie if is_role_view else ""
+            shell_allowed_roles = [r for r in _DEMO_SHELL_ROLES if r != _cur]
+        else:
+            shell_allowed_roles = []   # _full_ctx overrides with DB-derived list
     _default_theme = "cloud" if _cfg("demo_mode", False) else "midnight"
     raw_theme = request.cookies.get("bsv_theme", _default_theme)
     user_theme = raw_theme if raw_theme in VALID_THEMES else _default_theme
@@ -3885,8 +3901,431 @@ _ROLE_DASHBOARD: dict = {
     "ao":                 "/ao/decisions",
     "aodr":               "/ao/decisions",
     "isso":               "/isso/dashboard",
+    "privacy_officer":    "/role/privacy/queue",
+    "risk_manager":       "/risks",
     "admin":              "/admin",
 }
+
+# ── Interview Questionnaire ──────────────────────────────────────────────────
+
+_STAKEHOLDER_FAMILIES: dict[str, list[str] | None] = {
+    "dev":            ["AC", "IA", "SC", "SI", "SA", "CM", "MA"],
+    "ops":            ["AU", "CM", "CP", "MA", "MP", "SI", "IR"],
+    "program_office": ["AT", "PL", "PM", "SA", "RA", "CA"],
+    "system_owner":   ["CA", "PL", "RA", "SA", "AT", "PS", "AC"],
+    "facilities":     ["PE", "MP"],
+    "hr":             ["PS", "AT"],
+    "bcdr":           ["CP", "IR"],
+    "sca":            None,   # all controls
+    "all":            None,   # all controls
+}
+
+_FAMILY_ABBREV: dict[str, str] = {
+    'Access Control': 'AC',
+    'Awareness & Training': 'AT', 'Awareness and Training': 'AT',
+    'Audit & Accountability': 'AU', 'Audit and Accountability': 'AU',
+    'Assessment, Authorization & Monitoring': 'CA', 'Assessment, Authorization, Monitoring': 'CA',
+    'Security Assessment': 'CA',
+    'Configuration Management': 'CM',
+    'Contingency Planning': 'CP',
+    'Identification & Authentication': 'IA', 'Identification and Authentication': 'IA',
+    'Incident Response': 'IR',
+    'Maintenance': 'MA',
+    'Media Protection': 'MP',
+    'Physical & Environmental Protection': 'PE', 'Physical Protection': 'PE',
+    'Planning': 'PL',
+    'Program Management': 'PM',
+    'Personnel Security': 'PS',
+    'PII Processing & Transparency': 'PT',
+    'Risk Assessment': 'RA',
+    'System & Services Acquisition': 'SA', 'System Acquisition': 'SA',
+    'System & Communications Protection': 'SC', 'System & Communications': 'SC',
+    'System and Communications Protection': 'SC',
+    'System & Information Integrity': 'SI', 'System & Info Integrity': 'SI',
+    'System and Information Integrity': 'SI',
+    'Supply Chain Risk Management': 'SR',
+}
+
+def _normalize_questions(rows) -> list[dict]:
+    """Normalize control_family to 2-letter abbreviations and return as dicts."""
+    return [
+        {**dict(q), 'control_family': _FAMILY_ABBREV.get(q['control_family'], q['control_family'])}
+        for q in rows
+    ]
+
+
+# Overlay / baseline framework display labels
+_OVERLAY_FW_LABELS: dict[str, str] = {
+    "fedramp_high": "FedRAMP High",
+    "fedramp_mod":  "FedRAMP Moderate",
+    "fedramp_low":  "FedRAMP Low",
+    "cmmc_l1":      "CMMC Level 1",
+    "cmmc_l2":      "CMMC Level 2",
+    "cmmc_l3":      "CMMC Level 3",
+    "dod_srg":      "DoD SRG",
+    "sp800171":     "NIST SP 800-171",
+    "nist_privacy": "NIST Privacy Framework",
+}
+
+
+def _build_overlay_question_text(base_ctrl_id: str, fw_sn: str, system_name: str) -> str:
+    fw_label = _OVERLAY_FW_LABELS.get(fw_sn, fw_sn.replace("_", " ").title())
+    return (
+        f"Describe how {system_name}'s implementation of {base_ctrl_id.upper()} satisfies "
+        f"the {fw_label}-specific requirements for this control. Include any mandatory "
+        f"parameter values or thresholds defined by {fw_label}, implementation differences "
+        f"from the NIST SP 800-53 baseline, and any additional documentation or evidence "
+        f"required by {fw_label} for this control."
+    )
+
+
+def _build_control_groups(questions: list, system_fw_labels: dict) -> list:
+    """Group questions by base control, collecting overlay questions under their parent."""
+    groups: dict = {}
+    order: list  = []
+
+    for q in questions:
+        ctrl_id    = (q.get("control_id") or "").upper()
+        overlay_fw = q.get("overlay_framework") or None
+        parent_id  = (q.get("parent_control_id") or "").upper() or None
+
+        # Detect legacy FR-* pattern (sessions created before overlay columns existed)
+        if not overlay_fw and ctrl_id.startswith("FR-"):
+            parent_id  = ctrl_id[3:]
+            overlay_fw = "fedramp_high"
+
+        if overlay_fw:
+            base_id = parent_id or ctrl_id
+            if base_id not in groups:
+                groups[base_id] = {
+                    "ctrl_id": base_id,
+                    "family":  q.get("control_family", ""),
+                    "title":   q.get("control_title",  ""),
+                    "base_qs": [],
+                    "overlays": {},
+                }
+                order.append(base_id)
+            if overlay_fw not in groups[base_id]["overlays"]:
+                groups[base_id]["overlays"][overlay_fw] = {
+                    "label": system_fw_labels.get(overlay_fw,
+                                                  overlay_fw.replace("_", " ").title()),
+                    "qs": [],
+                }
+            groups[base_id]["overlays"][overlay_fw]["qs"].append(q)
+        else:
+            if ctrl_id not in groups:
+                groups[ctrl_id] = {
+                    "ctrl_id": ctrl_id,
+                    "family":  q.get("control_family", ""),
+                    "title":   q.get("control_title",  ""),
+                    "base_qs": [],
+                    "overlays": {},
+                }
+                order.append(ctrl_id)
+            groups[ctrl_id]["base_qs"].append(q)
+
+    return [groups[k] for k in order]
+
+_STAKEHOLDER_LABELS: dict[str, str] = {
+    "dev":            "Development / Engineering Team",
+    "ops":            "Operations / Systems Administration",
+    "program_office": "Program Office / Management",
+    "system_owner":   "System Owner / Authorizing Official",
+    "facilities":     "Facilities / Physical Security",
+    "hr":             "Human Resources / Personnel",
+    "bcdr":           "BCDR / Continuity of Operations",
+    "sca":            "Security Control Assessor (All Controls)",
+    "all":            "All Stakeholders (Full Assessment)",
+}
+
+# Per-family supplemental questions (2-3 pulled per control based on family).
+# Placeholder {ctrl_id} is replaced with the control ID, {sys} with the system name.
+_FAMILY_QUESTIONS: dict[str, list[str]] = {
+    "AC": [
+        "How are user accounts created, modified, disabled, and removed in {sys}? Who initiates and approves each step?",
+        "How does {sys} enforce least privilege — what prevents a user from accessing resources beyond their role?",
+        "How are privileged/administrative accounts identified, separated from standard user accounts, and monitored?",
+        "Describe the remote access architecture for {sys}: what methods are permitted, how are sessions established, and what controls prevent unauthorized remote access?",
+        "How does {sys} enforce session lock, idle timeout, or automatic logoff?",
+    ],
+    "AT": [
+        "What security awareness and role-based training is required for personnel with access to {sys}?",
+        "How is training completion tracked and enforced? What happens when a user is non-compliant?",
+        "How frequently is training content reviewed and updated to reflect current threats?",
+    ],
+    "AU": [
+        "What audit log sources are enabled in {sys}? List specific systems, applications, and infrastructure components that generate log records.",
+        "How are audit logs protected from unauthorized access, modification, or deletion?",
+        "What is the log retention period for {sys} and where are logs stored (on-system vs. centralized SIEM)?",
+        "Who reviews audit logs, how often, and what constitutes an alertable or reportable event?",
+        "How are audit log failures or gaps detected and handled?",
+    ],
+    "CA": [
+        "When was the last security assessment of {sys} conducted, and what was the scope?",
+        "How are open findings from past assessments tracked and remediated?",
+        "Describe the continuous monitoring strategy for {sys}: what is monitored, at what frequency, and by whom?",
+        "Is there an active POA&M for {sys}? Who owns remediation tasks and how is progress tracked?",
+    ],
+    "CM": [
+        "What configuration baseline applies to {sys} components (OS, middleware, application)? Reference any STIGs, CIS benchmarks, or vendor hardening guides in use.",
+        "How are configuration changes requested, reviewed, approved, and implemented? What is the change management process?",
+        "How does {sys} detect and alert on unauthorized or unapproved configuration changes?",
+        "How frequently are configuration compliance scans run and what tool is used?",
+    ],
+    "CP": [
+        "Describe the backup strategy for {sys}: what data is backed up, how often, and where are backups stored?",
+        "When was the last backup restoration test performed and what was the result?",
+        "Does {sys} have a tested continuity of operations plan? What is the documented RTO/RPO?",
+        "How are backup media and copies protected from unauthorized access or loss?",
+    ],
+    "IA": [
+        "What authentication mechanism(s) does {sys} use for organizational users (e.g., password, MFA, PIV/CAC, certificate)?",
+        "How are authenticators (passwords, tokens, keys, certificates) managed, rotated, and revoked when a user separates?",
+        "How are non-human/service accounts and shared credentials managed? Are they unique and rotatable?",
+        "Describe how {sys} handles authentication failures: lockout thresholds, alerting, and recovery procedures.",
+    ],
+    "IR": [
+        "Does {sys} have a documented incident response plan that is current and tested?",
+        "How are security incidents involving {sys} detected, triaged, and escalated to the IR team?",
+        "What is the process for preserving forensic evidence when an incident is declared in {sys}?",
+        "How are lessons-learned from past incidents incorporated into {sys} security controls?",
+    ],
+    "MA": [
+        "How is maintenance on {sys} hardware and software scheduled, authorized, and recorded?",
+        "How is remote maintenance access to {sys} controlled and logged? Are remote sessions terminated when complete?",
+        "How are maintenance tools inspected or controlled to prevent introduction of malware?",
+    ],
+    "MP": [
+        "How is media containing {sys} data (digital and physical) inventoried and classified?",
+        "What controls exist for the transport, storage, and disposal of media containing {sys} data?",
+        "How is media sanitized before reuse or disposal? What standard is followed (e.g., NIST 800-88)?",
+    ],
+    "PE": [
+        "Who controls physical access to the facility or data center hosting {sys}?",
+        "How is physical access to {sys} equipment logged and reviewed?",
+        "What environmental controls (temperature, humidity, fire suppression, power) protect {sys} hardware?",
+        "How are physical access attempts by unauthorized individuals detected and responded to?",
+    ],
+    "PL": [
+        "Is there a current System Security Plan (SSP) for {sys}? When was it last reviewed and updated?",
+        "How are security roles and responsibilities defined and communicated to {sys} personnel?",
+        "How is the rules of behavior for {sys} enforced and acknowledged by users?",
+    ],
+    "PM": [
+        "Describe the information security program structure for {sys}: who has program management accountability?",
+        "How are information security resources (budget, personnel, tools) allocated for {sys}?",
+        "How does the organization identify, track, and report information security risk at the program level for {sys}?",
+    ],
+    "PS": [
+        "What personnel security screening is required before granting access to {sys}?",
+        "How is access to {sys} terminated when an employee transfers, separates, or is removed? What is the offboarding timeline?",
+        "How are personnel with privileged access to {sys} screened differently from standard users?",
+    ],
+    "RA": [
+        "When was the last risk assessment conducted for {sys} and what methodology was used?",
+        "How are vulnerabilities in {sys} identified, scored, and tracked (e.g., scan cadence, CVE monitoring)?",
+        "How does {sys} integrate threat intelligence into risk management decisions?",
+        "What is the process for escalating high-severity vulnerabilities to the AO?",
+    ],
+    "SA": [
+        "How are security requirements incorporated into the procurement and development lifecycle for {sys} components?",
+        "How are third-party software components reviewed for security (e.g., SCA scans, vendor attestations)?",
+        "How is the software development environment for {sys} secured and separated from production?",
+        "Describe developer security training requirements for personnel building or maintaining {sys}.",
+    ],
+    "SC": [
+        "How does {sys} enforce boundary protection — what separates it from other systems and the internet?",
+        "How is data in transit protected within and between {sys} components (encryption protocols, certificate management)?",
+        "How are network connections to {sys} from external systems or partners established and controlled?",
+        "How does {sys} protect against denial of service attacks or resource exhaustion?",
+    ],
+    "SI": [
+        "How is malicious code protection implemented on {sys} endpoints and servers?",
+        "How does {sys} handle software flaws and patches — what is the patch cadence for critical, high, and medium findings?",
+        "How does {sys} detect and alert on unauthorized changes to software, firmware, or configuration?",
+        "How are security alerts from {sys} components monitored, correlated, and acted on?",
+    ],
+    "SR": [
+        "How does the organization identify and manage supply chain risk for {sys} components and services?",
+        "How are vendors and suppliers for {sys} assessed for security posture?",
+        "What tamper protection or provenance verification exists for hardware and software components of {sys}?",
+    ],
+}
+
+# Structured per-control questions (prepended before narrative questions)
+_IMPL_STATUS_OPTIONS = [
+    "Fully Implemented",
+    "Partially Implemented",
+    "Planned / In Progress",
+    "Not Implemented",
+    "Not Applicable",
+]
+
+_RESPONSIBLE_ROLE_OPTIONS = [
+    "System Owner (SO)",
+    "ISSO",
+    "ISSM",
+    "Authorizing Official (AO)",
+    "System Administrator",
+    "DevOps / Engineering Team",
+    "Security Team",
+    "Help Desk / Operations",
+    "Vendor / Third-Party",
+    "Shared / Multiple Parties",
+    "Other (specify below)",
+]
+
+# Universal questions asked for every control (always included) — 2 condensed from 4
+_UNIVERSAL_QUESTIONS: list[str] = [
+    "Describe how {sys} implements {ctrl_title} ({ctrl_id}) — include the specific tools, configurations, processes, or procedures in place, and identify the person or team responsible for maintaining this control (name and role).",
+    "What artifacts or evidence demonstrate this control is operating effectively (e.g., screenshots, logs, policies, scan reports)? Note any known gaps, exceptions, or active POA&M items.",
+]
+
+
+def _generate_questions_for_controls(
+    controls: list[dict],   # each dict: {control_id, control_family, control_title}
+    system_name: str,
+    stakeholder_type: str,
+) -> list[dict]:
+    """
+    Generate interview questions for a list of controls.
+    Returns list of dicts: {control_id, control_family, control_title, question_number, question_text, sort_order}
+    """
+    allowed_families = _STAKEHOLDER_FAMILIES.get(stakeholder_type)
+    results = []
+    sort_order = 0
+
+    for ctrl in controls:
+        ctrl_id = ctrl["control_id"]
+        family  = (ctrl.get("control_family") or ctrl_id.split("-")[0].upper())
+        title   = ctrl.get("control_title") or ctrl_id.upper()
+
+        # Filter by stakeholder family if not "all"/"sca"
+        if allowed_families is not None and family not in allowed_families:
+            continue
+
+        substitutions = {"sys": system_name, "ctrl_id": ctrl_id.upper(), "ctrl_title": title}
+
+        q_num = 1
+
+        # ── Structured Q1: Implementation Status ────────────────────────────
+        results.append({
+            "control_id":        ctrl_id,
+            "control_family":    family,
+            "control_title":     title,
+            "question_number":   q_num,
+            "question_text":     f"What is the current implementation status of {ctrl_id.upper()} ({title}) on {system_name}?",
+            "stakeholder_target": stakeholder_type,
+            "sort_order":        sort_order,
+            "question_type":     "impl_status",
+            "question_options":  json.dumps(_IMPL_STATUS_OPTIONS),
+        })
+        q_num += 1
+        sort_order += 1
+
+        # ── Structured Q2: Responsible Party ────────────────────────────────
+        results.append({
+            "control_id":        ctrl_id,
+            "control_family":    family,
+            "control_title":     title,
+            "question_number":   q_num,
+            "question_text":     f"Who is the primary owner / responsible party for {ctrl_id.upper()} on {system_name}?",
+            "stakeholder_target": stakeholder_type,
+            "sort_order":        sort_order,
+            "question_type":     "responsible_role",
+            "question_options":  json.dumps(_RESPONSIBLE_ROLE_OPTIONS),
+        })
+        q_num += 1
+        sort_order += 1
+
+        # Universal narrative questions
+        for q_template in _UNIVERSAL_QUESTIONS:
+            q_text = q_template.format(**substitutions)
+            results.append({
+                "control_id":       ctrl_id,
+                "control_family":   family,
+                "control_title":    title,
+                "question_number":  q_num,
+                "question_text":    q_text,
+                "stakeholder_target": stakeholder_type,
+                "sort_order":       sort_order,
+            })
+            q_num += 1
+            sort_order += 1
+
+        # Family-specific questions (up to 2)
+        family_qs = _FAMILY_QUESTIONS.get(family, [])
+        for q_template in family_qs[:2]:
+            q_text = q_template.format(**substitutions)
+            results.append({
+                "control_id":       ctrl_id,
+                "control_family":   family,
+                "control_title":    title,
+                "question_number":  q_num,
+                "question_text":    q_text,
+                "stakeholder_target": stakeholder_type,
+                "sort_order":       sort_order,
+            })
+            q_num += 1
+            sort_order += 1
+
+    return results
+
+
+# ── Daily Operations Log — role-specific task questions ──────────────────────
+
+_DAILY_TASK_QUESTIONS: dict[str, list[str]] = {
+    "isso": [
+        "Review today's audit log alerts or SIEM dashboard for {sys}. Were there any anomalies, false positives, or events requiring follow-up? Summarize your findings and any actions taken.",
+        "Review the current POA&M list for {sys}. Are there items approaching their scheduled completion date or requiring a status update today? Document current status for each.",
+        "Have new vulnerability scan results been received since your last review? List any new high/critical findings and their planned disposition (remediate, accept, defer).",
+        "Verify {sys} availability and check for any active outages, degraded performance, or maintenance windows. Document current system status and any issues noted.",
+        "Are there pending access requests, account changes, or permission modifications requiring your review today? Document each request and your approval decision with rationale.",
+        "Review CISA KEV, vendor security bulletins, or threat intelligence feeds relevant to {sys}. Note any advisories requiring action and the planned response.",
+        "Are there any open incident response activities or security tickets for {sys} requiring action today? Provide current status and next steps for each.",
+    ],
+    "sca": [
+        "Which controls are you actively assessing today for {sys}? List the control IDs and the assessment method planned (examine, interview, or test) for each.",
+        "Document findings from today's assessment activities. For each control tested: was it Satisfied, Other Than Satisfied, or Not Applicable? Describe any deficiencies noted.",
+        "Have any previously-satisfied controls been flagged for re-assessment due to system changes? Document the change trigger, scope of re-assessment, and preliminary findings.",
+        "Review new evidence submissions for open controls. Were the artifacts sufficient to satisfy the control requirement? Note specific gaps or missing evidence.",
+        "Are there open assessment findings requiring discussion with the ISSO or System Owner today? Summarize the finding, its risk rating, and the planned resolution path.",
+        "Document your assessment progress: controls assessed to date, controls remaining, any scheduling constraints, and whether the assessment timeline is on track.",
+    ],
+    "issm": [
+        "Review the overall security posture for {sys}. Are there new high or critical risks, open incidents, or threshold violations requiring immediate direction or escalation?",
+        "Review POA&M items requiring ISSM approval, escalation, or risk acceptance today. Document your decision and rationale for each item reviewed.",
+        "Review the ATO or authorization status for {sys}. Are there expiring authorizations, ongoing CAA activities, or pending AO decisions? Note any required actions.",
+        "Have there been security incidents since the last ISSM review? Document current containment status, remediation progress, and whether external reporting is required.",
+        "Review personnel changes (new hires, separations, transfers, role changes) affecting {sys} access. Were access modifications completed within required timeframes?",
+        "Review continuous monitoring results for {sys}. Were all scheduled scans, reviews, and compliance checks completed? Note any missed activities and corrective actions.",
+        "Are there resource, staffing, or tool gaps impacting the security program for {sys} that require action, budget request, or escalation today?",
+    ],
+}
+
+_DAILY_TASK_LABELS: dict[str, str] = {
+    "isso": "ISSO Daily Operations Log",
+    "sca":  "SCA Assessment Log",
+    "issm": "ISSM Security Review Log",
+}
+
+
+def _generate_daily_tasks(role: str, system_name: str) -> list[dict]:
+    """Generate daily ops task questions for ISSO/SCA/ISSM role."""
+    task_qs = _DAILY_TASK_QUESTIONS.get(role, [])
+    results = []
+    for i, q_template in enumerate(task_qs, start=1):
+        results.append({
+            "control_id":       "DAILY",
+            "control_family":   "OPS",
+            "control_title":    "",
+            "question_number":  i,
+            "question_text":    q_template.format(sys=system_name),
+            "stakeholder_target": role,
+            "sort_order":       i - 1,
+        })
+    return results
+
 
 @app.get("/")
 async def index(request: Request):
@@ -12498,6 +12937,12 @@ Generated by BLACKSITE GRC Platform — {now.strftime('%Y-%m-%d %H:%M UTC')}
 # ── RSS / Advisory Feed ────────────────────────────────────────────────────────
 
 from app.rss_feed import get_feed_items, get_all_feed_items, fetch_one_for_test, _get_cached
+from app.connectors import (
+    CONNECTORS, connector_status, all_connector_statuses,
+    fetch_kev, fetch_hn_security, fetch_federal_register,
+    fetch_github_advisories, fetch_cisa_ransomware,
+    kev_to_feed_items, kev_match_inventory,
+)
 
 @app.get("/api/notifications")
 async def api_notifications(request: Request, limit: int = 20, unread_only: bool = False):
@@ -14992,6 +15437,162 @@ async def admin_feeds_reorder(request: Request):
                     src.sort_order = int(order)
         await session.commit()
     return JSONResponse({"ok": True})
+
+
+# ── Public Data Connectors ─────────────────────────────────────────────────────
+
+@app.get("/admin/connectors", response_class=HTMLResponse)
+async def admin_connectors(request: Request):
+    """Connector hub: status dashboard for all public data connectors."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+    statuses = await all_connector_statuses()
+    return templates.TemplateResponse("admin_connectors.html", {
+        "request":    request,
+        "connectors": CONNECTORS,
+        "statuses":   statuses,
+        **_tpl_ctx(request),
+    })
+
+
+@app.post("/admin/connectors/{key}/sync")
+async def admin_connectors_sync(request: Request, key: str):
+    """Trigger a fresh sync for a named connector. Returns item count."""
+    if not _is_admin(request):
+        raise HTTPException(status_code=403)
+    if key not in CONNECTORS:
+        raise HTTPException(status_code=404, detail=f"Unknown connector: {key}")
+
+    try:
+        fetcher = CONNECTORS[key]["fetcher"]
+        result  = await fetcher()
+
+        # For KEV: also persist entries to DB for cross-reference queries
+        if key == "cisa_kev":
+            vulns = result.get("vulnerabilities", []) if isinstance(result, dict) else result
+            async with SessionLocal() as session:
+                now_utc = datetime.now(timezone.utc)
+                for v in vulns:
+                    cve_id = v.get("cveID", "")
+                    if not cve_id:
+                        continue
+                    existing = (await session.execute(
+                        select(CisaKevEntry).where(CisaKevEntry.cve_id == cve_id)
+                    )).scalar_one_or_none()
+                    if existing:
+                        existing.vendor_project      = v.get("vendorProject")
+                        existing.product             = v.get("product")
+                        existing.vulnerability_name  = v.get("vulnerabilityName")
+                        existing.short_description   = v.get("shortDescription")
+                        existing.date_added          = v.get("dateAdded")
+                        existing.due_date            = v.get("dueDate")
+                        existing.required_action     = v.get("requiredAction")
+                        existing.ransomware_use      = v.get("knownRansomwareCampaignUse")
+                        existing.notes               = v.get("notes")
+                        existing.last_synced         = now_utc
+                    else:
+                        session.add(CisaKevEntry(
+                            cve_id             = cve_id,
+                            vendor_project     = v.get("vendorProject"),
+                            product            = v.get("product"),
+                            vulnerability_name = v.get("vulnerabilityName"),
+                            short_description  = v.get("shortDescription"),
+                            date_added         = v.get("dateAdded"),
+                            due_date           = v.get("dueDate"),
+                            required_action    = v.get("requiredAction"),
+                            ransomware_use     = v.get("knownRansomwareCampaignUse"),
+                            notes              = v.get("notes"),
+                            last_synced        = now_utc,
+                        ))
+                await session.commit()
+            item_count = len(vulns)
+        else:
+            item_count = len(result) if isinstance(result, list) else len(result.get("items", []))
+
+        status = await connector_status(key)
+        return JSONResponse({"ok": True, "key": key, "item_count": item_count, "status": status})
+    except Exception as exc:
+        log.exception("Connector sync failed for %s", key)
+        return JSONResponse({"ok": False, "key": key, "error": str(exc)}, status_code=500)
+
+
+@app.get("/api/connectors/{key}/items")
+async def api_connector_items(request: Request, key: str, limit: int = 40):
+    """Return cached items for a connector as JSON."""
+    _require_user(request)
+    if key not in CONNECTORS:
+        raise HTTPException(status_code=404)
+    fetcher = CONNECTORS[key]["fetcher"]
+    result  = await fetcher()
+    if isinstance(result, dict):
+        items = result.get("vulnerabilities", result.get("items", []))
+        if key == "cisa_kev":
+            items = kev_to_feed_items(items, limit=limit)
+    else:
+        items = result[:limit]
+    return JSONResponse({"key": key, "items": items, "count": len(items)})
+
+
+@app.get("/api/connectors/kev/match/{system_id}")
+async def api_kev_match(request: Request, system_id: str):
+    """
+    Cross-reference CISA KEV catalog against the inventory of a specific system.
+    Returns KEV entries where vendor or product appears in any inventory item name.
+    """
+    _require_user(request)
+    async with SessionLocal() as session:
+        sys_row = (await session.execute(select(System).where(System.id == system_id))).scalar_one_or_none()
+        if not sys_row or not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=404)
+        inventory = (await session.execute(
+            select(InventoryItem).where(InventoryItem.system_id == system_id)
+        )).scalars().all()
+
+    kev_data = await fetch_kev()
+    vulns    = kev_data.get("vulnerabilities", [])
+    hits     = kev_match_inventory(vulns, inventory)
+    return JSONResponse({
+        "system_id":    system_id,
+        "inventory_count": len(inventory),
+        "kev_total":    len(vulns),
+        "matches":      hits[:100],
+        "match_count":  len(hits),
+    })
+
+
+@app.get("/api/connectors/kev/check/{cve_id}")
+async def api_kev_check(request: Request, cve_id: str):
+    """Quick lookup: is this CVE in the CISA KEV catalog?"""
+    _require_user(request)
+    async with SessionLocal() as session:
+        entry = (await session.execute(
+            select(CisaKevEntry).where(CisaKevEntry.cve_id == cve_id.upper())
+        )).scalar_one_or_none()
+    if entry:
+        return JSONResponse({
+            "in_kev":      True,
+            "cve_id":      entry.cve_id,
+            "vendor":      entry.vendor_project,
+            "product":     entry.product,
+            "due_date":    entry.due_date,
+            "ransomware":  entry.ransomware_use,
+            "date_added":  entry.date_added,
+        })
+    return JSONResponse({"in_kev": False, "cve_id": cve_id.upper()})
+
+
+@app.get("/api/systems/list")
+async def api_systems_list(request: Request):
+    """Return minimal system list for connector UI dropdowns."""
+    user = _require_user(request)
+    async with SessionLocal() as session:
+        system_ids = await _user_system_ids(user, session)
+        rows = (await session.execute(
+            select(System.id, System.name)
+            .where(System.id.in_(system_ids), System.deleted_at.is_(None))
+            .order_by(System.name)
+        )).fetchall()
+    return JSONResponse({"systems": [{"id": r.id, "name": r.name} for r in rows]})
 
 
 @app.get("/admin/ssp", response_class=HTMLResponse)
@@ -24601,3 +25202,602 @@ async def system_report_from_template(
 
     background_tasks.add_task(_render_docx_template, rpt_id, system_id, template_id, user)
     return RedirectResponse(f"/systems/{system_id}/reports", status_code=303)
+
+
+# ── Control Interview Questionnaire ─────────────────────────────────────────
+
+@app.get("/systems/{system_id}/interview", response_class=HTMLResponse)
+async def interview_list(request: Request, system_id: str):
+    user = _require_user(request)
+    async with SessionLocal() as session:
+        sys_row = await session.execute(select(System).where(System.id == system_id))
+        sys = sys_row.scalar_one_or_none()
+        if not sys or not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=404)
+        sessions_rows = (await session.execute(
+            text("SELECT * FROM interview_sessions WHERE system_id=:sid ORDER BY created_at DESC"),
+            {"sid": system_id}
+        )).mappings().fetchall()
+        ctx = await _full_ctx(request, session)
+    return templates.TemplateResponse("interview_list.html", {
+        "request": request, **ctx, "system": sys,
+        "interview_sessions": sessions_rows,
+        "stakeholder_labels": _STAKEHOLDER_LABELS,
+        "daily_task_labels": _DAILY_TASK_LABELS,
+    })
+
+
+@app.post("/systems/{system_id}/interview", response_class=HTMLResponse)
+async def interview_create(request: Request, system_id: str):
+    user = _require_user(request)
+    form = await request.form()
+    stakeholder_type = (form.get("stakeholder_type") or "all").strip()
+    stakeholder_name = (form.get("stakeholder_name") or "").strip()
+    title = (form.get("title") or "").strip()
+    session_type = (form.get("session_type") or "control_interview").strip()
+    if session_type not in ("control_interview", "daily_ops"):
+        session_type = "control_interview"
+
+    async with SessionLocal() as session:
+        sys_row = await session.execute(select(System).where(System.id == system_id))
+        sys = sys_row.scalar_one_or_none()
+        if not sys or not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=404)
+
+        if session_type == "daily_ops":
+            # Daily ops: role is encoded in stakeholder_type field
+            role = stakeholder_type if stakeholder_type in _DAILY_TASK_QUESTIONS else "isso"
+            questions = _generate_daily_tasks(role, sys.name)
+            if not questions:
+                raise HTTPException(status_code=400, detail="No daily tasks defined for this role.")
+        else:
+            # Load system controls with catalog descriptions
+            controls_rows = (await session.execute(
+                text("""
+                    SELECT sc.control_id, sc.control_family, sc.source_catalog,
+                           COALESCE(cc.title, sc.control_title) AS control_title
+                    FROM system_controls sc
+                    LEFT JOIN catalog_controls cc
+                        ON LOWER(cc.control_id) = LOWER(sc.control_id)
+                        AND cc.framework_id = (
+                            SELECT id FROM compliance_frameworks
+                            WHERE short_name = sc.source_catalog LIMIT 1)
+                    WHERE sc.system_id = :sid
+                      AND sc.hidden_post_build = 0
+                    ORDER BY sc.control_family, sc.control_id
+                """),
+                {"sid": system_id}
+            )).mappings().fetchall()
+
+            controls = [dict(r) for r in controls_rows]
+            if not controls:
+                raise HTTPException(status_code=400, detail="System has no assigned controls.")
+
+            # Separate base controls from overlay controls (FR-* prefix = FedRAMP additional)
+            ctrl_source_catalog = {r["control_id"].upper(): r.get("source_catalog", "") for r in controls}
+            base_controls    = [c for c in controls if not c["control_id"].upper().startswith("FR-")]
+            overlay_controls = [c for c in controls if c["control_id"].upper().startswith("FR-")]
+
+            questions = _generate_questions_for_controls(base_controls, sys.name, stakeholder_type)
+            if not questions:
+                raise HTTPException(status_code=400, detail="No controls match the selected stakeholder type.")
+
+            # ── Overlay question generation ──────────────────────────────────
+            # Source 1: explicit FR-* controls in system_controls (legacy/explicit overlays)
+            # Source 2: system_frameworks — auto-generate for every framework the system
+            #   is assigned to, covering all base controls in that framework's catalog.
+            #   This ensures a FedRAMP-ingested system always gets FedRAMP overlay
+            #   questions without needing FR-* entries in system_controls.
+
+            ov_sort = (questions[-1]["sort_order"] + 1) if questions else 0
+
+            # Track (base_ctrl_id, fw_sn) pairs already generated to avoid duplicates
+            already_overlaid: set = set()
+
+            # Source 1: explicit FR-* controls
+            for ov_ctrl in overlay_controls:
+                ov_id      = ov_ctrl["control_id"].upper()
+                base_id    = ov_id[3:]
+                fw_sn      = ctrl_source_catalog.get(ov_id, "fedramp_high")
+                family     = (ov_ctrl.get("control_family") or base_id.split("-")[0].upper())
+                family     = _FAMILY_ABBREV.get(family, family)
+                base_title = next(
+                    (c.get("control_title") or base_id for c in base_controls
+                     if c["control_id"].upper() == base_id),
+                    ov_ctrl.get("control_title") or base_id
+                )
+                questions.append({
+                    "control_id":        base_id,
+                    "control_family":    family,
+                    "control_title":     base_title,
+                    "question_number":   99,
+                    "question_text":     _build_overlay_question_text(base_id, fw_sn, sys.name),
+                    "stakeholder_target": stakeholder_type,
+                    "sort_order":        ov_sort,
+                    "overlay_framework": fw_sn,
+                    "parent_control_id": base_id,
+                })
+                already_overlaid.add((base_id, fw_sn))
+                ov_sort += 1
+
+            # Source 2: system_frameworks — fill in any framework not covered above
+            sys_fw_rows = (await session.execute(
+                text("""
+                    SELECT cf.short_name, cf.name
+                    FROM system_frameworks sf
+                    JOIN compliance_frameworks cf ON cf.id = sf.framework_id
+                    WHERE sf.system_id = :sid
+                      AND cf.kind IN ('baseline', 'overlay')
+                """),
+                {"sid": system_id}
+            )).fetchall()
+
+            for fw_sn, fw_name in sys_fw_rows:
+                catalog = _get_overlay_catalog(fw_sn)
+                for ctrl in base_controls:
+                    base_id = ctrl["control_id"].upper()
+                    if (base_id, fw_sn) in already_overlaid:
+                        continue
+                    # If we have a catalog, only generate for controls it covers;
+                    # if catalog is empty/unknown, generate for all base controls.
+                    if catalog and base_id.lower() not in catalog:
+                        continue
+                    family = (ctrl.get("control_family") or base_id.split("-")[0].upper())
+                    family = _FAMILY_ABBREV.get(family, family)
+                    title  = ctrl.get("control_title") or base_id
+                    questions.append({
+                        "control_id":        base_id,
+                        "control_family":    family,
+                        "control_title":     title,
+                        "question_number":   99,
+                        "question_text":     _build_overlay_question_text(base_id, fw_sn, sys.name),
+                        "stakeholder_target": stakeholder_type,
+                        "sort_order":        ov_sort,
+                        "overlay_framework": fw_sn,
+                        "parent_control_id": base_id,
+                    })
+                    already_overlaid.add((base_id, fw_sn))
+                    ov_sort += 1
+
+        if not title:
+            if session_type == "daily_ops":
+                label = _DAILY_TASK_LABELS.get(stakeholder_type, stakeholder_type)
+            else:
+                label = _STAKEHOLDER_LABELS.get(stakeholder_type, stakeholder_type)
+            title = f"{label} — {datetime.utcnow().strftime('%Y-%m-%d')}"
+
+        # Create session record
+        new_session = InterviewSession(
+            system_id=system_id, created_by=user,
+            title=title, stakeholder_type=stakeholder_type,
+            stakeholder_name=stakeholder_name, status="open",
+            session_type=session_type,
+        )
+        session.add(new_session)
+        await session.flush()
+
+        # Insert questions
+        for q in questions:
+            iq = InterviewQuestion(
+                session_id=new_session.id,
+                control_id=q["control_id"],
+                control_family=q["control_family"],
+                control_title=q["control_title"],
+                question_number=q["question_number"],
+                question_text=q["question_text"],
+                stakeholder_target=q.get("stakeholder_target"),
+                sort_order=q["sort_order"],
+                overlay_framework=q.get("overlay_framework"),
+                parent_control_id=q.get("parent_control_id"),
+                question_type=q.get("question_type", "text"),
+                question_options=q.get("question_options"),
+            )
+            session.add(iq)
+        await session.flush()
+
+        # Create blank response records for each question
+        q_ids_rows = (await session.execute(
+            text("SELECT id FROM interview_questions WHERE session_id=:sid ORDER BY sort_order"),
+            {"sid": new_session.id}
+        )).fetchall()
+        for (qid,) in q_ids_rows:
+            session.add(InterviewResponse(session_id=new_session.id, question_id=qid))
+
+        # Log audit event
+        session.add(AuditLog(
+            remote_user=user, action="CREATE", resource_type="interview_session",
+            resource_id=str(new_session.id),
+            details=f"Created interview session for system {system_id}, stakeholder={stakeholder_type}",
+            remote_ip=request.headers.get("X-Real-IP", request.client.host if request.client else ""),
+            outcome="ok",
+        ))
+        await session.commit()
+        sid = new_session.id
+
+    return RedirectResponse(f"/systems/{system_id}/interview/{sid}", status_code=303)
+
+
+@app.get("/systems/{system_id}/interview/{session_id}", response_class=HTMLResponse)
+async def interview_form(request: Request, system_id: str, session_id: int):
+    user = _require_user(request)
+    async with SessionLocal() as session:
+        sys_row = await session.execute(select(System).where(System.id == system_id))
+        sys = sys_row.scalar_one_or_none()
+        if not sys or not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=404)
+
+        iv_session = (await session.execute(
+            select(InterviewSession).where(
+                InterviewSession.id == session_id,
+                InterviewSession.system_id == system_id)
+        )).scalar_one_or_none()
+        if not iv_session:
+            raise HTTPException(status_code=404)
+
+        questions = _normalize_questions((await session.execute(
+            text("SELECT * FROM interview_questions WHERE session_id=:sid ORDER BY sort_order"),
+            {"sid": session_id}
+        )).mappings().fetchall())
+
+        responses_rows = (await session.execute(
+            text("SELECT * FROM interview_responses WHERE session_id=:sid"),
+            {"sid": session_id}
+        )).mappings().fetchall()
+        responses = {r["question_id"]: dict(r) for r in responses_rows}
+
+        # Query system's active overlay/baseline frameworks for pre-check logic
+        fw_rows = (await session.execute(
+            text("""
+                SELECT cf.short_name, cf.name
+                FROM system_frameworks sf
+                JOIN compliance_frameworks cf ON cf.id = sf.framework_id
+                WHERE sf.system_id = :sid AND cf.kind IN ('baseline', 'overlay')
+            """),
+            {"sid": system_id}
+        )).fetchall()
+        system_fw_labels = {r[0]: r[1] for r in fw_rows}
+
+        # Log load event
+        session.add(InterviewAuditEvent(
+            session_id=session_id, remote_user=user,
+            event_type="load",
+            event_data=f'{{"session_id":{session_id},"user":"{user}"}}',
+        ))
+        await session.commit()
+        ctx = await _full_ctx(request, session)
+
+    return templates.TemplateResponse("interview_form.html", {
+        "request": request, **ctx, "system": sys,
+        "iv_session": iv_session, "questions": questions,
+        "responses": responses,
+        "control_groups": _build_control_groups(questions, system_fw_labels),
+        "system_fw_labels": system_fw_labels,
+        "system_fw_sns": set(system_fw_labels.keys()),
+        "stakeholder_label": _STAKEHOLDER_LABELS.get(iv_session.stakeholder_type, iv_session.stakeholder_type),
+        "session_type": iv_session.session_type or "control_interview",
+    })
+
+
+@app.post("/systems/{system_id}/interview/{session_id}/event")
+async def interview_log_event(request: Request, system_id: str, session_id: int):
+    """AJAX: log a typing/paste/focus/blur event for the audit trail."""
+    user = _require_user(request)
+    body = await request.json()
+    event_type = str(body.get("event_type", "unknown"))[:64]
+    question_id = body.get("question_id")
+    event_data_raw = body.get("event_data", {})
+    import json as _json
+    event_data = _json.dumps(event_data_raw)[:2048]
+
+    async with SessionLocal() as session:
+        # Verify session belongs to system
+        iv = (await session.execute(
+            select(InterviewSession).where(
+                InterviewSession.id == session_id,
+                InterviewSession.system_id == system_id)
+        )).scalar_one_or_none()
+        if not iv:
+            raise HTTPException(status_code=404)
+
+        session.add(InterviewAuditEvent(
+            session_id=session_id,
+            question_id=int(question_id) if question_id else None,
+            remote_user=user,
+            event_type=event_type,
+            event_data=event_data,
+        ))
+
+        # Update response record aggregate stats
+        if question_id and event_type in ("keystroke_burst", "first_keystroke", "blur"):
+            resp_row = (await session.execute(
+                select(InterviewResponse).where(
+                    InterviewResponse.session_id == session_id,
+                    InterviewResponse.question_id == int(question_id))
+            )).scalar_one_or_none()
+            if resp_row:
+                if event_type == "first_keystroke" and not resp_row.first_keystroke_at:
+                    resp_row.first_keystroke_at = datetime.utcnow()
+                if event_type in ("keystroke_burst", "first_keystroke"):
+                    resp_row.keystroke_count = (resp_row.keystroke_count or 0) + int(event_data_raw.get("delta_keystrokes", 1))
+                    resp_row.char_count = int(event_data_raw.get("char_count", resp_row.char_count or 0))
+                    resp_row.last_keystroke_at = datetime.utcnow()
+                if event_type == "blur":
+                    resp_row.focus_count = (resp_row.focus_count or 0) + 1
+                    elapsed = float(event_data_raw.get("time_on_field_s", 0))
+                    resp_row.time_on_field_s = (resp_row.time_on_field_s or 0) + elapsed
+
+        if question_id and event_type == "paste_attempt":
+            resp_row = (await session.execute(
+                select(InterviewResponse).where(
+                    InterviewResponse.session_id == session_id,
+                    InterviewResponse.question_id == int(question_id))
+            )).scalar_one_or_none()
+            if resp_row:
+                resp_row.paste_attempts = (resp_row.paste_attempts or 0) + 1
+
+        await session.commit()
+    return {"ok": True}
+
+
+@app.post("/systems/{system_id}/interview/{session_id}/save")
+async def interview_save_response(request: Request, system_id: str, session_id: int):
+    """AJAX: autosave a single response field."""
+    user = _require_user(request)
+    body = await request.json()
+    question_id = int(body.get("question_id", 0))
+    response_text = str(body.get("response_text", ""))[:20000]
+
+    async with SessionLocal() as session:
+        iv = (await session.execute(
+            select(InterviewSession).where(
+                InterviewSession.id == session_id,
+                InterviewSession.system_id == system_id,
+                InterviewSession.status == "open")
+        )).scalar_one_or_none()
+        if not iv:
+            raise HTTPException(status_code=403, detail="Session is not open.")
+
+        resp_row = (await session.execute(
+            select(InterviewResponse).where(
+                InterviewResponse.session_id == session_id,
+                InterviewResponse.question_id == question_id)
+        )).scalar_one_or_none()
+        if not resp_row:
+            raise HTTPException(status_code=404)
+
+        resp_row.response_text = response_text
+        resp_row.char_count = len(response_text)
+        await session.commit()
+    return {"ok": True, "saved": len(response_text)}
+
+
+@app.get("/systems/{system_id}/interview/{session_id}/pre-submit", response_class=HTMLResponse)
+async def interview_presubmit(request: Request, system_id: str, session_id: int):
+    """Pre-submission attestation page — shows completion gaps before final submit."""
+    user = _require_user(request)
+    import json as _json
+    async with SessionLocal() as session:
+        sys_row = await session.get(System, system_id)
+        if not sys_row or not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=404)
+        iv = (await session.execute(
+            select(InterviewSession).where(
+                InterviewSession.id == session_id,
+                InterviewSession.system_id == system_id)
+        )).scalar_one_or_none()
+        if not iv:
+            raise HTTPException(status_code=404)
+        if iv.status != "open":
+            return RedirectResponse(
+                f"/systems/{system_id}/interview/{session_id}/review", status_code=303)
+
+        questions = _normalize_questions((await session.execute(
+            text("SELECT * FROM interview_questions WHERE session_id=:sid ORDER BY sort_order"),
+            {"sid": session_id}
+        )).mappings().fetchall())
+
+        responses_rows = (await session.execute(
+            text("SELECT * FROM interview_responses WHERE session_id=:sid"),
+            {"sid": session_id}
+        )).mappings().fetchall()
+        responses = {r["question_id"]: dict(r) for r in responses_rows}
+
+        # Build per-control completion map (ordered by first appearance)
+        ctrl_order: list[str] = []
+        ctrl_map: dict = {}
+        for q in questions:
+            cid = q.get("control_id") or "GENERAL"
+            if cid not in ctrl_map:
+                ctrl_order.append(cid)
+                ctrl_map[cid] = {
+                    "ctrl_id": cid,
+                    "ctrl_safe": cid.replace(".", "-"),
+                    "title": q.get("control_title") or "",
+                    "family": q.get("control_family") or "",
+                    "total": 0, "answered": 0,
+                }
+            ctrl_map[cid]["total"] += 1
+            resp_text = (responses.get(q.get("id"), {}).get("response_text") or "").strip()
+            qtype = q.get("question_type") or "text"
+            if qtype == "text":
+                ctrl_map[cid]["answered"] += (1 if len(resp_text) >= 20 else 0)
+            else:
+                ctrl_map[cid]["answered"] += (1 if resp_text else 0)
+
+        ctrl_list = [ctrl_map[c] for c in ctrl_order]
+        incomplete = [c for c in ctrl_list if c["answered"] < c["total"]]
+        total_ctrls = len(ctrl_list)
+        answered_ctrls = len([c for c in ctrl_list if c["answered"] == c["total"]])
+        total_qs = sum(c["total"] for c in ctrl_list)
+        answered_qs = sum(c["answered"] for c in ctrl_list)
+
+        # Log that the user reviewed the pre-submit summary
+        session.add(InterviewAuditEvent(
+            session_id=session_id, remote_user=user, event_type="pre_submit_review",
+            event_data=_json.dumps({
+                "total_controls": total_ctrls,
+                "complete_controls": answered_ctrls,
+                "incomplete_controls": [c["ctrl_id"] for c in incomplete],
+            })[:2048],
+        ))
+        await session.commit()
+        ctx = await _full_ctx(request, session)
+
+    return templates.TemplateResponse("interview_presubmit.html", {
+        "request": request, **ctx, "system": sys_row,
+        "iv_session": iv,
+        "stakeholder_label": _STAKEHOLDER_LABELS.get(iv.stakeholder_type, iv.stakeholder_type),
+        "session_type": iv.session_type or "control_interview",
+        "ctrl_list": ctrl_list,
+        "incomplete": incomplete,
+        "total_ctrls": total_ctrls,
+        "answered_ctrls": answered_ctrls,
+        "total_qs": total_qs,
+        "answered_qs": answered_qs,
+    })
+
+
+@app.post("/systems/{system_id}/interview/{session_id}/submit", response_class=HTMLResponse)
+async def interview_submit(request: Request, system_id: str, session_id: int):
+    """Finalize and lock the interview session — requires prior attestation via pre-submit page."""
+    user = _require_user(request)
+    import json as _json
+    async with SessionLocal() as session:
+        iv = (await session.execute(
+            select(InterviewSession).where(
+                InterviewSession.id == session_id,
+                InterviewSession.system_id == system_id)
+        )).scalar_one_or_none()
+        if not iv:
+            raise HTTPException(status_code=404)
+        if iv.status != "open":
+            return RedirectResponse(
+                f"/systems/{system_id}/interview/{session_id}/review", status_code=303)
+
+        form = await request.form()
+        # Require explicit attestation
+        if not form.get("attested"):
+            return RedirectResponse(
+                f"/systems/{system_id}/interview/{session_id}/pre-submit", status_code=303)
+
+        # Recompute unanswered controls to log them at submission time
+        questions = _normalize_questions((await session.execute(
+            text("SELECT * FROM interview_questions WHERE session_id=:sid ORDER BY sort_order"),
+            {"sid": session_id}
+        )).mappings().fetchall())
+        responses_rows = (await session.execute(
+            text("SELECT * FROM interview_responses WHERE session_id=:sid"),
+            {"sid": session_id}
+        )).mappings().fetchall()
+        resp_map = {r["question_id"]: dict(r) for r in responses_rows}
+
+        unanswered_ctrls: list[str] = []
+        seen: set[str] = set()
+        for q in questions:
+            cid = q.get("control_id") or "GENERAL"
+            if cid in seen:
+                continue
+            resp_text = (resp_map.get(q.get("id"), {}).get("response_text") or "").strip()
+            qtype = q.get("question_type") or "text"
+            is_answered = (len(resp_text) >= 20) if qtype == "text" else bool(resp_text)
+            if not is_answered:
+                unanswered_ctrls.append(cid)
+                seen.add(cid)
+
+        iv.status = "submitted"
+        iv.submitted_at = datetime.utcnow()
+
+        session.add(InterviewAuditEvent(
+            session_id=session_id, remote_user=user, event_type="submit",
+            event_data=_json.dumps({
+                "user": user,
+                "total_questions": len(questions),
+                "attested": True,
+                "unanswered_controls": unanswered_ctrls,
+            })[:2048],
+        ))
+        session.add(AuditLog(
+            remote_user=user, action="UPDATE", resource_type="interview_session",
+            resource_id=str(session_id),
+            details=f"Submitted interview session {session_id} for {system_id}; "
+                    f"{len(unanswered_ctrls)} incomplete control(s)",
+            remote_ip=request.headers.get("X-Real-IP", request.client.host if request.client else ""),
+            outcome="ok",
+        ))
+        await session.commit()
+
+    return RedirectResponse(f"/systems/{system_id}/interview/{session_id}/review", status_code=303)
+
+
+@app.get("/systems/{system_id}/interview/{session_id}/review", response_class=HTMLResponse)
+async def interview_review(request: Request, system_id: str, session_id: int):
+    user = _require_user(request)
+    async with SessionLocal() as session:
+        sys_row = await session.execute(select(System).where(System.id == system_id))
+        sys = sys_row.scalar_one_or_none()
+        if not sys or not await _can_access_system(system_id, request, session):
+            raise HTTPException(status_code=404)
+
+        iv = (await session.execute(
+            select(InterviewSession).where(
+                InterviewSession.id == session_id,
+                InterviewSession.system_id == system_id)
+        )).scalar_one_or_none()
+        if not iv:
+            raise HTTPException(status_code=404)
+
+        questions = _normalize_questions((await session.execute(
+            text("SELECT * FROM interview_questions WHERE session_id=:sid ORDER BY sort_order"),
+            {"sid": session_id}
+        )).mappings().fetchall())
+
+        responses_rows = (await session.execute(
+            text("SELECT * FROM interview_responses WHERE session_id=:sid"),
+            {"sid": session_id}
+        )).mappings().fetchall()
+        responses = {r["question_id"]: dict(r) for r in responses_rows}
+
+        audit_events = (await session.execute(
+            text("SELECT * FROM interview_audit_events WHERE session_id=:sid ORDER BY occurred_at"),
+            {"sid": session_id}
+        )).mappings().fetchall()
+
+        # Compute stats
+        total_q = len(questions)
+        answered = sum(1 for r in responses.values() if (r.get("response_text") or "").strip())
+        total_keystrokes = sum(r.get("keystroke_count") or 0 for r in responses.values())
+        total_paste_attempts = sum(r.get("paste_attempts") or 0 for r in responses.values())
+        ctx = await _full_ctx(request, session)
+
+    return templates.TemplateResponse("interview_review.html", {
+        "request": request, **ctx, "system": sys,
+        "iv_session": iv, "questions": questions,
+        "responses": responses, "audit_events": audit_events,
+        "stakeholder_label": _STAKEHOLDER_LABELS.get(iv.stakeholder_type, iv.stakeholder_type),
+        "session_type": iv.session_type or "control_interview",
+        "total_q": total_q, "answered": answered,
+        "total_keystrokes": total_keystrokes,
+        "total_paste_attempts": total_paste_attempts,
+    })
+
+
+@app.post("/systems/{system_id}/interview/{session_id}/reopen")
+async def interview_reopen(request: Request, system_id: str, session_id: int):
+    """Admin/ISSM: reopen a submitted session for corrections."""
+    user = _require_user(request)
+    async with SessionLocal() as session:
+        iv = (await session.execute(
+            select(InterviewSession).where(
+                InterviewSession.id == session_id,
+                InterviewSession.system_id == system_id)
+        )).scalar_one_or_none()
+        if not iv:
+            raise HTTPException(status_code=404)
+        iv.status = "open"
+        iv.submitted_at = None
+        session.add(InterviewAuditEvent(
+            session_id=session_id, remote_user=user, event_type="reopen",
+            event_data=f'{{"user":"{user}"}}',
+        ))
+        await session.commit()
+    return RedirectResponse(f"/systems/{system_id}/interview/{session_id}", status_code=303)

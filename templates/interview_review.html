@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Interview Review — {{ iv_session.title }}{% endblock %}
+
+{% block head %}
+<style>
+  /* ── Page layout ── */
+  .ivr-header { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:14px; margin-bottom:24px; }
+  .ivr-title  { font-size:1.2em; font-weight:700; color:var(--text); }
+  .ivr-sub    { font-size:0.82em; color:var(--muted); margin-top:4px; }
+  .ivr-link   { color:var(--cyan); text-decoration:none; }
+  .ivr-link:hover { text-decoration:underline; }
+
+  /* ── Stats panel ── */
+  .ivr-stats-grid {
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+    gap:12px; margin-bottom:28px;
+  }
+  .ivr-stat-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:7px;
+    padding:14px 16px;
+  }
+  .ivr-stat-label { font-size:0.68em; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+  .ivr-stat-value { font-size:1.55em; font-weight:700; font-family:var(--mono); }
+  .ivr-stat-value.cyan   { color:var(--cyan); }
+  .ivr-stat-value.green  { color:var(--green); }
+  .ivr-stat-value.yellow { color:var(--yellow); }
+  .ivr-stat-value.red    { color:var(--red); }
+  .ivr-stat-value.muted  { color:var(--muted); }
+
+  /* ── Session meta card ── */
+  .ivr-meta-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:7px;
+    padding:16px 20px; margin-bottom:28px; display:flex; gap:32px; flex-wrap:wrap;
+    font-size:0.83em;
+  }
+  .ivr-meta-item { display:flex; flex-direction:column; gap:3px; }
+  .ivr-meta-key  { font-size:0.72em; font-weight:700; letter-spacing:0.9px; text-transform:uppercase; color:var(--muted); }
+  .ivr-meta-val  { color:var(--text); }
+
+  /* ── Status badge ── */
+  .ivr-badge { display:inline-block; padding:2px 9px; border-radius:12px; font-size:0.74em; font-weight:700; letter-spacing:0.8px; text-transform:uppercase; }
+  .ivr-badge-open      { background:rgba(0,224,255,.12); color:var(--cyan); border:1px solid rgba(0,224,255,.25); }
+  .ivr-badge-submitted { background:rgba(0,255,100,.1);  color:var(--green); border:1px solid rgba(0,255,100,.25); }
+  .ivr-badge-reviewed  { background:rgba(120,120,160,.15); color:var(--muted); border:1px solid var(--border); }
+
+  /* ── Action buttons ── */
+  .ivr-actions { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:28px; }
+  .ivr-btn { padding:8px 18px; border-radius:5px; font-size:0.82em; font-weight:700; cursor:pointer; border:none; text-decoration:none; display:inline-block; }
+  .ivr-btn-reopen  { background:rgba(255,165,0,.15); color:var(--orange); border:1px solid rgba(255,165,0,.3); }
+  .ivr-btn-reopen:hover  { background:rgba(255,165,0,.25); }
+  .ivr-btn-back    { background:var(--surface); color:var(--text); border:1px solid var(--border); }
+  .ivr-btn-back:hover    { border-color:var(--cyan); color:var(--cyan); }
+
+  /* ── Control section ── */
+  .ivr-ctrl-section { margin-bottom:36px; }
+  .ivr-ctrl-header {
+    display:flex; align-items:baseline; gap:10px;
+    border-bottom:2px solid var(--border); padding-bottom:8px; margin-bottom:16px;
+  }
+  .ivr-ctrl-id    { font-family:var(--mono); font-size:0.82em; font-weight:700; color:var(--cyan); background:rgba(0,255,204,.08); padding:2px 8px; border-radius:4px; }
+  .ivr-ctrl-title { font-size:0.95em; font-weight:600; color:var(--text); }
+  .ivr-ctrl-family{ font-size:0.72em; color:var(--muted); margin-left:auto; }
+
+  /* ── Question record ── */
+  .ivr-record {
+    background:var(--surface); border:1px solid var(--border); border-radius:7px;
+    padding:16px 18px; margin-bottom:14px;
+  }
+  .ivr-record.answered { border-left:3px solid var(--green); }
+  .ivr-record.unanswered { border-left:3px solid rgba(100,100,120,.4); }
+  .ivr-q-num   { font-size:0.68em; font-weight:700; letter-spacing:1px; color:var(--muted); text-transform:uppercase; margin-bottom:5px; }
+  .ivr-q-text  { font-size:0.87em; color:var(--text); line-height:1.6; margin-bottom:12px; }
+  .ivr-response-box {
+    background:#0d0d1a; border:1px solid var(--border); border-radius:5px;
+    padding:12px 14px; font-size:0.86em; color:var(--text); line-height:1.65;
+    white-space:pre-wrap; word-break:break-word; margin-bottom:10px;
+    min-height:40px;
+  }
+  .ivr-response-empty { color:var(--muted); font-style:italic; font-size:0.85em; padding:8px 0; }
+
+  /* ── Audit metadata row ── */
+  .ivr-audit-meta {
+    display:flex; gap:18px; flex-wrap:wrap; font-size:0.73em;
+    padding-top:8px; border-top:1px solid rgba(50,50,80,.5);
+  }
+  .ivr-audit-chip { display:flex; gap:5px; align-items:center; }
+  .ivr-audit-chip .label { color:var(--muted); }
+  .ivr-audit-chip .val   { font-family:var(--mono); color:var(--text); }
+  .ivr-audit-chip .val.warn  { color:var(--yellow); }
+  .ivr-audit-chip .val.alert { color:var(--red); font-weight:700; }
+  .ivr-audit-chip .val.good  { color:var(--green); }
+
+  /* ── Raw audit event log ── */
+  .ivr-event-log details { margin-top:32px; }
+  .ivr-event-log summary {
+    cursor:pointer; font-size:0.75em; font-weight:700; letter-spacing:1.2px;
+    text-transform:uppercase; color:var(--muted); padding:8px 0;
+    user-select:none;
+  }
+  .ivr-event-log summary:hover { color:var(--cyan); }
+  .ivr-event-table { width:100%; border-collapse:collapse; margin-top:10px; font-size:0.78em; }
+  .ivr-event-table th {
+    background:var(--surface); padding:7px 10px; text-align:left;
+    font-size:0.7em; font-weight:700; letter-spacing:1.2px; text-transform:uppercase;
+    color:var(--muted); border-bottom:2px solid var(--border);
+  }
+  .ivr-event-table td { padding:6px 10px; border-bottom:1px solid rgba(30,30,48,.7); vertical-align:top; }
+  .ivr-event-table tr:hover td { background:rgba(255,255,255,.01); }
+  .ivr-event-type { font-family:var(--mono); font-size:0.88em; }
+  .ivr-event-type.first_keystroke { color:var(--cyan); }
+  .ivr-event-type.keystroke_burst { color:var(--text); }
+  .ivr-event-type.paste_attempt   { color:var(--red); font-weight:700; }
+  .ivr-event-type.submit          { color:var(--green); font-weight:700; }
+  .ivr-event-type.load            { color:var(--muted); }
+  .ivr-event-type.focus           { color:var(--muted); }
+  .ivr-event-type.blur            { color:var(--muted); }
+  .ivr-event-type.reopen          { color:var(--orange); }
+  .ivr-event-data { font-family:var(--mono); color:var(--muted); font-size:0.85em; word-break:break-all; }
+  .ivr-event-ts   { color:var(--muted); font-family:var(--mono); white-space:nowrap; }
+
+  /* ── Print helper ── */
+  @media print {
+    .ivr-actions, .ivr-event-log { display:none; }
+    .ivr-record { break-inside:avoid; }
+    .ivr-ctrl-section { break-before:page; }
+    .ivr-ctrl-section:first-child { break-before:auto; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ivr-header">
+  <div>
+    <div class="ivr-title">{{ iv_session.title }}</div>
+    <div class="ivr-sub">
+      <a href="/systems/{{ system.id }}" class="ivr-link">{{ system.name }}</a>
+      &rsaquo; <a href="/systems/{{ system.id }}/interview" class="ivr-link">Interviews</a>
+      &rsaquo; Review
+    </div>
+  </div>
+  <div>
+    {% if iv_session.status == 'submitted' %}
+      <span class="ivr-badge ivr-badge-submitted">Submitted</span>
+    {% elif iv_session.status == 'reviewed' %}
+      <span class="ivr-badge ivr-badge-reviewed">Reviewed</span>
+    {% else %}
+      <span class="ivr-badge ivr-badge-open">Open</span>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Session meta ─────────────────────────────────────────────────────────── #}
+<div class="ivr-meta-card">
+  <div class="ivr-meta-item">
+    <span class="ivr-meta-key">Session ID</span>
+    <span class="ivr-meta-val" style="font-family:var(--mono)">#{{ iv_session.id }}</span>
+  </div>
+  <div class="ivr-meta-item">
+    <span class="ivr-meta-key">Session Type</span>
+    <span class="ivr-meta-val">{{ 'Daily Ops Log' if session_type == 'daily_ops' else 'Control Interview' }}</span>
+  </div>
+  <div class="ivr-meta-item">
+    <span class="ivr-meta-key">Stakeholder Type</span>
+    <span class="ivr-meta-val">{{ stakeholder_label }}</span>
+  </div>
+  {% if iv_session.stakeholder_name %}
+  <div class="ivr-meta-item">
+    <span class="ivr-meta-key">Respondent</span>
+    <span class="ivr-meta-val">{{ iv_session.stakeholder_name }}</span>
+  </div>
+  {% endif %}
+  <div class="ivr-meta-item">
+    <span class="ivr-meta-key">System</span>
+    <span class="ivr-meta-val">{{ system.name }}</span>
+  </div>
+  <div class="ivr-meta-item">
+    <span class="ivr-meta-key">Created By</span>
+    <span class="ivr-meta-val">{{ iv_session.created_by }}</span>
+  </div>
+  <div class="ivr-meta-item">
+    <span class="ivr-meta-key">Created At</span>
+    <span class="ivr-meta-val" style="font-family:var(--mono)">{{ (iv_session.created_at | string)[:19] }}</span>
+  </div>
+  {% if iv_session.submitted_at %}
+  <div class="ivr-meta-item">
+    <span class="ivr-meta-key">Submitted At</span>
+    <span class="ivr-meta-val" style="font-family:var(--mono)">{{ (iv_session.submitted_at | string)[:19] }}</span>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Stats ────────────────────────────────────────────────────────────────── #}
+<div class="ivr-stats-grid">
+  <div class="ivr-stat-card">
+    <div class="ivr-stat-label">Total Questions</div>
+    <div class="ivr-stat-value cyan">{{ total_q }}</div>
+  </div>
+  <div class="ivr-stat-card">
+    <div class="ivr-stat-label">Answered</div>
+    <div class="ivr-stat-value {{ 'green' if answered == total_q else 'yellow' if answered > 0 else 'muted' }}">{{ answered }}</div>
+  </div>
+  <div class="ivr-stat-card">
+    <div class="ivr-stat-label">Unanswered</div>
+    <div class="ivr-stat-value {{ 'red' if (total_q - answered) > 0 else 'muted' }}">{{ total_q - answered }}</div>
+  </div>
+  <div class="ivr-stat-card">
+    <div class="ivr-stat-label">Total Keystrokes</div>
+    <div class="ivr-stat-value cyan">{{ total_keystrokes }}</div>
+  </div>
+  <div class="ivr-stat-card">
+    <div class="ivr-stat-label">Paste Attempts Blocked</div>
+    <div class="ivr-stat-value {{ 'red' if total_paste_attempts > 0 else 'muted' }}">{{ total_paste_attempts }}</div>
+  </div>
+  <div class="ivr-stat-card">
+    <div class="ivr-stat-label">Completion</div>
+    <div class="ivr-stat-value {{ 'green' if answered == total_q else 'yellow' }}">
+      {% if total_q > 0 %}{{ ((answered / total_q) * 100) | round(0) | int }}%{% else %}—{% endif %}
+    </div>
+  </div>
+</div>
+
+{# ── Actions ──────────────────────────────────────────────────────────────── #}
+<div class="ivr-actions">
+  <a href="/systems/{{ system.id }}/interview" class="ivr-btn ivr-btn-back">&larr; All Sessions</a>
+  {% if iv_session.status != 'open' %}
+  <form method="post" action="/systems/{{ system.id }}/interview/{{ iv_session.id }}/reopen" style="display:inline">
+    <button type="submit" class="ivr-btn ivr-btn-reopen" onclick="return confirm('Reopen this session for editing?')">&#9998; Reopen for Corrections</button>
+  </form>
+  {% else %}
+  <a href="/systems/{{ system.id }}/interview/{{ iv_session.id }}" class="ivr-btn" style="background:var(--surface);color:var(--cyan);border:1px solid var(--cyan)">&#9998; Continue Editing</a>
+  {% endif %}
+  <button onclick="window.print()" class="ivr-btn" style="background:var(--surface);color:var(--muted);border:1px solid var(--border)">&#128438; Print / Export PDF</button>
+</div>
+
+{# ── Question + response records grouped by control ───────────────────────── #}
+{% set ns = namespace(current_ctrl='') %}
+{% for q in questions %}
+  {% if q.control_id != ns.current_ctrl %}
+    {% if ns.current_ctrl != '' %}</div>{% endif %}
+    {% set ns.current_ctrl = q.control_id %}
+    <div class="ivr-ctrl-section">
+    <div class="ivr-ctrl-header">
+      <span class="ivr-ctrl-id">{{ q.control_id | upper }}</span>
+      <span class="ivr-ctrl-title">{{ q.control_title or '' }}</span>
+      <span class="ivr-ctrl-family">{{ q.control_family or '' }}</span>
+    </div>
+  {% endif %}
+
+  {% set resp = responses.get(q.id, {}) %}
+  {% set resp_text = resp.get('response_text') or '' %}
+  {% set has_response = resp_text.strip() | length > 0 %}
+  <div class="ivr-record {{ 'answered' if has_response else 'unanswered' }}">
+    <div class="ivr-q-num">{{ q.control_id | upper }} &mdash; Question {{ q.question_number }}</div>
+    <div class="ivr-q-text">{{ q.question_text }}</div>
+
+    {% if has_response %}
+      <div class="ivr-response-box">{{ resp_text }}</div>
+    {% else %}
+      <div class="ivr-response-empty">No response provided.</div>
+    {% endif %}
+
+    {# ── Per-response audit metadata ── #}
+    <div class="ivr-audit-meta">
+      <div class="ivr-audit-chip">
+        <span class="label">Keystrokes:</span>
+        <span class="val {{ 'good' if (resp.get('keystroke_count') or 0) > 10 else 'warn' if (resp.get('keystroke_count') or 0) > 0 else '' }}">{{ resp.get('keystroke_count') or 0 }}</span>
+      </div>
+      <div class="ivr-audit-chip">
+        <span class="label">Characters:</span>
+        <span class="val">{{ resp.get('char_count') or 0 }}</span>
+      </div>
+      <div class="ivr-audit-chip">
+        <span class="label">Paste attempts:</span>
+        <span class="val {{ 'alert' if (resp.get('paste_attempts') or 0) > 0 else '' }}">{{ resp.get('paste_attempts') or 0 }}</span>
+      </div>
+      <div class="ivr-audit-chip">
+        <span class="label">Focus events:</span>
+        <span class="val">{{ resp.get('focus_count') or 0 }}</span>
+      </div>
+      {% if resp.get('time_on_field_s') %}
+      <div class="ivr-audit-chip">
+        <span class="label">Time on field:</span>
+        <span class="val">{{ "%.0f" | format(resp.get('time_on_field_s') or 0) }}s</span>
+      </div>
+      {% endif %}
+      {% if resp.get('first_keystroke_at') %}
+      <div class="ivr-audit-chip">
+        <span class="label">First keystroke:</span>
+        <span class="val">{{ (resp.get('first_keystroke_at') | string)[:19] }}</span>
+      </div>
+      {% endif %}
+      {% if resp.get('last_keystroke_at') %}
+      <div class="ivr-audit-chip">
+        <span class="label">Last keystroke:</span>
+        <span class="val">{{ (resp.get('last_keystroke_at') | string)[:19] }}</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+{% endfor %}
+{% if questions %}</div>{% endif %}
+
+{# ── Raw audit event log (collapsible) ───────────────────────────────────── #}
+<div class="ivr-event-log">
+  <details>
+    <summary>&#9654; Raw Audit Event Log ({{ audit_events | length }} events)</summary>
+    {% if audit_events %}
+    <table class="ivr-event-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Timestamp (UTC)</th>
+          <th>User</th>
+          <th>Event Type</th>
+          <th>Question ID</th>
+          <th>Event Data</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ev in audit_events %}
+        <tr>
+          <td style="font-family:var(--mono);color:var(--muted)">{{ ev.id }}</td>
+          <td class="ivr-event-ts">{{ (ev.occurred_at | string)[:19] }}</td>
+          <td style="color:var(--muted)">{{ ev.remote_user or '' }}</td>
+          <td><span class="ivr-event-type {{ ev.event_type }}">{{ ev.event_type }}</span></td>
+          <td style="font-family:var(--mono);color:var(--muted)">{{ ev.question_id or '' }}</td>
+          <td class="ivr-event-data">{{ ev.event_data or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--muted);font-size:0.85em;padding:12px 0">No audit events recorded.</p>
+    {% endif %}
+  </details>
+</div>
+{% endblock %}

@@ -19,6 +19,131 @@ const AdminChat = (() => {
   let myStatus      = "online";
   let notifPermission = false;
 
+  // ── Chat window persistence ───────────────────────────────────────────────────
+  const SS_OPEN_ROOMS = "bsv-chat-open-rooms";
+
+  function _saveOpenRooms() {
+    const state = {};
+    Object.keys(openWindows).forEach(room => {
+      state[room] = openWindows[room].el.classList.contains("minimized") ? "minimized" : "open";
+    });
+    sessionStorage.setItem(SS_OPEN_ROOMS, JSON.stringify(state));
+  }
+
+  function _restoreOpenRooms() {
+    let state;
+    try { state = JSON.parse(sessionStorage.getItem(SS_OPEN_ROOMS) || "{}"); } catch { return; }
+    Object.entries(state).forEach(([room, vis]) => {
+      if (!openWindows[room]) openRoom(room, _roomTitle(room));
+      if (vis === "minimized" && openWindows[room]) {
+        openWindows[room].el.classList.add("minimized");
+      }
+    });
+  }
+
+  // ── Sound alerts ─────────────────────────────────────────────────────────────
+  const LS_SOUND  = "bsv-chat-sound";   // "on" | "off-session" | "off"
+  let _soundMutedSession = false;        // true = muted until page close
+  let _audioCtx = null;
+
+  function _getSoundPref() {
+    return localStorage.getItem(LS_SOUND) || "on";
+  }
+
+  function _soundEnabled() {
+    if (_soundMutedSession) return false;
+    return _getSoundPref() !== "off";
+  }
+
+  function _ding() {
+    if (!_soundEnabled()) return;
+    try {
+      if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const ctx = _audioCtx;
+      const now = ctx.currentTime;
+      // Two-tone soft chime: 880 Hz then 1108 Hz
+      [[880, now, 0.12], [1108, now + 0.11, 0.09]].forEach(([freq, start, peak]) => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(peak, start + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.45);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.46);
+      });
+    } catch {}
+  }
+
+  // ── Sound context menu ───────────────────────────────────────────────────────
+  let _soundCtxMenu = null;
+
+  function _removeSoundCtxMenu() {
+    if (_soundCtxMenu) { _soundCtxMenu.remove(); _soundCtxMenu = null; }
+  }
+
+  function _showSoundCtxMenu(x, y) {
+    _removeSoundCtxMenu();
+    const pref  = _getSoundPref();
+    const muted = !_soundEnabled();
+
+    const menu = document.createElement("div");
+    menu.id = "chat-sound-ctx";
+    menu.style.cssText = `position:fixed;z-index:99999;background:var(--card,#1a1a2e);
+      border:1px solid rgba(0,255,204,0.2);border-radius:6px;padding:4px 0;
+      box-shadow:0 6px 24px rgba(0,0,0,0.6);font-size:0.82em;min-width:210px;
+      user-select:none;`;
+    menu.style.left = Math.min(x, window.innerWidth  - 220) + "px";
+    menu.style.top  = Math.min(y, window.innerHeight - 130) + "px";
+
+    const label = document.createElement("div");
+    label.textContent = "🔔 Chat Sound Alerts";
+    label.style.cssText = "padding:6px 14px 4px;font-size:0.72em;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(0,255,204,0.5);cursor:default;";
+    menu.appendChild(label);
+
+    const sep = () => { const d = document.createElement("div"); d.style.cssText="height:1px;background:rgba(255,255,255,0.07);margin:4px 0;"; return d; };
+
+    const item = (icon, text, active, fn) => {
+      const el = document.createElement("div");
+      el.style.cssText = `padding:8px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;
+        color:${active ? "var(--cyan,#00ffcc)" : "var(--text,#e0e0e0)"};
+        font-weight:${active ? "700" : "400"};`;
+      el.innerHTML = `<span style="font-size:1.1em">${icon}</span>${text}${active ? ' <span style="margin-left:auto;font-size:0.75em;opacity:.6">✓</span>' : ""}`;
+      el.addEventListener("mouseenter", () => el.style.background = "rgba(0,255,204,0.07)");
+      el.addEventListener("mouseleave", () => el.style.background = "");
+      el.addEventListener("click", () => { _removeSoundCtxMenu(); fn(); });
+      return el;
+    };
+
+    menu.appendChild(item("🔔", "Alerts on",            pref === "on" && !_soundMutedSession, () => {
+      _soundMutedSession = false;
+      localStorage.setItem(LS_SOUND, "on");
+    }));
+    menu.appendChild(item("🔕", "Mute this session",    _soundMutedSession,                  () => {
+      _soundMutedSession = true;
+      localStorage.setItem(LS_SOUND, "on"); // restore perm after session ends
+    }));
+    menu.appendChild(sep());
+    menu.appendChild(item("🚫", "Mute permanently",     pref === "off" && !_soundMutedSession, () => {
+      _soundMutedSession = false;
+      localStorage.setItem(LS_SOUND, "off");
+    }));
+
+    document.body.appendChild(menu);
+    _soundCtxMenu = menu;
+
+    // Dismiss on next click / Escape
+    setTimeout(() => {
+      document.addEventListener("click", _removeSoundCtxMenu, { once: true, capture: true });
+      document.addEventListener("keydown", function esc(e) {
+        if (e.key === "Escape") { _removeSoundCtxMenu(); document.removeEventListener("keydown", esc); }
+      });
+    }, 0);
+  }
+
   const DEFAULT_COLORS = {
     myBubble:    "#002918",
     myText:      "#00ffcc",
@@ -363,6 +488,12 @@ const AdminChat = (() => {
     win.querySelector(".chat-header").addEventListener("click", e => {
       if (e.target.closest(".chat-close, .chat-gear, .chat-popout")) return;
       win.classList.toggle("minimized");
+      _saveOpenRooms();
+    });
+    // Right-click on header → sound alert menu
+    win.querySelector(".chat-header").addEventListener("contextmenu", e => {
+      e.preventDefault();
+      _showSoundCtxMenu(e.clientX, e.clientY);
     });
     win.querySelector(".chat-close").addEventListener("click", e => {
       e.stopPropagation();
@@ -462,6 +593,7 @@ const AdminChat = (() => {
 
     container.appendChild(win);
     openWindows[room] = {el: win, typingTimer: null, lastMsgId: 0};
+    _saveOpenRooms();
 
     // Mark read on focus
     textarea.addEventListener("focus", () => {
@@ -481,6 +613,7 @@ const AdminChat = (() => {
     if (!win) return;
     win.el.remove();
     delete openWindows[room];
+    _saveOpenRooms();
   }
 
   // ── History ───────────────────────────────────────────────────────────────────
@@ -582,6 +715,7 @@ const AdminChat = (() => {
       const cur = badge ? (parseInt(badge.textContent, 10) || 0) : 0;
       _setUnread(room, cur + 1);
       _notify(_roomTitle(room), `${msg.from_user}: ${msg.media_url ? "📎 Image" : msg.body}`);
+      _ding();
     }
   }
 
@@ -629,6 +763,7 @@ const AdminChat = (() => {
     clearTimeout(reconnectTimer);
     _connDot("open");
     _requestNotifPermission();
+    _restoreOpenRooms();
   }
 
   function onMessage(evt) {
@@ -666,6 +801,7 @@ const AdminChat = (() => {
         const cur = badge ? (parseInt(badge.textContent, 10) || 0) : 0;
         _setUnread(room, cur + 1);
         _notify(_roomTitle(room), `${data.from_user}: ${data.media_url ? "📎 Image" : data.body}`);
+        _ding();
       }
 
     } else if (data.type === "typing") {
@@ -735,6 +871,38 @@ const AdminChat = (() => {
     _wireSidebar();
     fetchAllUsers();   // load all admin users (offline + online) into sidebar
     connect();         // connect WS (will push live presence updates)
+
+    // ── Central attach function — always looks up container fresh ───────────────
+    function _reattachWindows() {
+      const c = document.getElementById("chatWindowContainer");
+      if (!c) return;
+      let attached = 0;
+      Object.keys(openWindows).forEach(room => {
+        const win = openWindows[room];
+        if (win && !c.contains(win.el)) { c.appendChild(win.el); attached++; }
+      });
+      // If nothing was in the registry, try sessionStorage (handles full reloads)
+      if (Object.keys(openWindows).length === 0) _restoreOpenRooms();
+    }
+
+    // Watch the container for window removal (uses fresh getElementById each callback)
+    const _containerObs = new MutationObserver(() => _reattachWindows());
+    const _startContainerObs = () => {
+      const c = document.getElementById("chatWindowContainer");
+      if (c) _containerObs.observe(c, {childList: true});
+    };
+    _startContainerObs();
+
+    // Watch body: if the container element itself is replaced/re-added, restart observer
+    new MutationObserver(() => {
+      _containerObs.disconnect();
+      _startContainerObs();
+      _reattachWindows();
+    }).observe(document.body, {childList: true, subtree: false});
+
+    // Re-attach after htmx navigations and history restores
+    document.addEventListener("htmx:afterSettle",    _reattachWindows);
+    document.addEventListener("htmx:historyRestore", () => setTimeout(_reattachWindows, 50));
   }
 
   return { init, setMyStatus, updateMyName };

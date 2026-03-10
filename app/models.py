@@ -1000,6 +1000,13 @@ async def _migrate_db(engine):
         # Chat image attachments
         ("admin_chat_messages", "media_path", "TEXT DEFAULT NULL"),
         ("admin_chat_messages", "media_mime", "TEXT DEFAULT NULL"),
+        # Interview session type (control_interview vs daily_ops)
+        ("interview_sessions", "session_type", "TEXT DEFAULT 'control_interview'"),
+        # Interview overlay framework tracking
+        ("interview_questions", "overlay_framework", "TEXT DEFAULT NULL"),
+        ("interview_questions", "parent_control_id",  "TEXT DEFAULT NULL"),
+        ("interview_questions", "question_type",    "TEXT DEFAULT 'text'"),
+        ("interview_questions", "question_options", "TEXT DEFAULT NULL"),
     ]
     # Performance indexes — CREATE INDEX IF NOT EXISTS is idempotent
     index_migrations = [
@@ -1969,6 +1976,29 @@ class NvdCve(Base):
     created_at        = Column(DateTime, default=_now)
 
 
+class CisaKevEntry(Base):
+    """
+    Persistent cache of CISA Known Exploited Vulnerabilities catalog.
+    Synced via POST /admin/connectors/kev/sync.  Used for cross-referencing
+    against system inventory items to surface relevant patching obligations.
+    """
+    __tablename__ = "cisa_kev_entries"
+
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    cve_id          = Column(String, nullable=False, unique=True, index=True)  # CVE-YYYY-NNNNN
+    vendor_project  = Column(String, nullable=True)
+    product         = Column(String, nullable=True)
+    vulnerability_name = Column(String, nullable=True)
+    short_description  = Column(Text, nullable=True)
+    date_added      = Column(String, nullable=True)   # ISO date YYYY-MM-DD
+    due_date        = Column(String, nullable=True)   # required remediation date
+    required_action = Column(Text, nullable=True)
+    ransomware_use  = Column(String, nullable=True)   # Known|Unknown
+    notes           = Column(Text, nullable=True)
+    last_synced     = Column(DateTime, default=_now)
+    created_at      = Column(DateTime, default=_now)
+
+
 class ControlParameter(Base):
     """
     Per-system baseline parameter tracking for NIST controls.
@@ -2059,6 +2089,19 @@ FEED_ALLOWLIST: dict = {
     "cso":         {"name": "CSO Online",                 "url": "https://www.csoonline.com/feed",                            "enabled": False, "sort_order": 12},
     "cisco":       {"name": "Cisco Security Blog",        "url": "https://blogs.cisco.com/security/feed",                     "enabled": False, "sort_order": 13},
     "secledger":   {"name": "The Security Ledger",        "url": "https://feeds.feedblitz.com/thesecurityledger",             "enabled": False, "sort_order": 14},
+    # Community & message boards (public RSS, no auth)
+    "r_netsec":    {"name": "Reddit /r/netsec",           "url": "https://www.reddit.com/r/netsec/.rss",                      "enabled": True,  "sort_order": 15},
+    "r_cyber":     {"name": "Reddit /r/cybersecurity",    "url": "https://www.reddit.com/r/cybersecurity/.rss",               "enabled": False, "sort_order": 16},
+    "r_nist":      {"name": "Reddit /r/NISTControls",     "url": "https://www.reddit.com/r/NISTControls/.rss",                "enabled": True,  "sort_order": 17},
+    "r_devops":    {"name": "Reddit /r/devopssecurity",   "url": "https://www.reddit.com/r/devopssecurity/.rss",              "enabled": False, "sort_order": 18},
+    "fulldisclosure": {"name": "Full Disclosure",         "url": "https://seclists.org/rss/fulldisclosure.rss",               "enabled": True,  "sort_order": 19},
+    "packetstorm": {"name": "Packet Storm Security",      "url": "https://rss.packetstormsecurity.com/news/",                 "enabled": True,  "sort_order": 20},
+    "talos":       {"name": "Cisco Talos Intelligence",   "url": "https://blog.talosintelligence.com/feeds/posts/default",    "enabled": True,  "sort_order": 21},
+    "unit42":      {"name": "Palo Alto Unit 42",          "url": "https://unit42.paloaltonetworks.com/feed/",                 "enabled": False, "sort_order": 22},
+    "securelist":  {"name": "Securelist (Kaspersky)",     "url": "https://securelist.com/feed/",                              "enabled": False, "sort_order": 23},
+    "projectzero": {"name": "Google Project Zero",        "url": "https://googleprojectzero.blogspot.com/feeds/posts/default","enabled": False, "sort_order": 24},
+    "msrc":        {"name": "Microsoft Security Response","url": "https://msrc.microsoft.com/blog/feed",                     "enabled": True,  "sort_order": 25},
+    "schneier":    {"name": "Schneier on Security",       "url": "https://www.schneier.com/feed/atom",                        "enabled": True,  "sort_order": 26},
 }
 
 
@@ -2820,6 +2863,71 @@ class TrainingClick(Base):
     remote_user = Column(String, nullable=False, index=True)
     resource_id = Column(String, nullable=False)   # niccs | dod_cyber | sans_aces
     clicked_at  = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class InterviewSession(Base):
+    """Control interview session — one per stakeholder meeting."""
+    __tablename__ = "interview_sessions"
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    system_id        = Column(String, ForeignKey("systems.id"), nullable=False, index=True)
+    created_by       = Column(String, nullable=False)
+    title            = Column(String, nullable=True)
+    stakeholder_type = Column(String, nullable=True)   # dev|ops|program_office|system_owner|facilities|hr|bcdr|sca|all
+    stakeholder_name = Column(String, nullable=True)   # name of person/team interviewed
+    status           = Column(String, default="open")  # open|submitted|reviewed
+    session_type     = Column(String, default="control_interview")
+    created_at       = Column(DateTime, default=_now, index=True)
+    submitted_at     = Column(DateTime, nullable=True)
+    reviewed_by      = Column(String, nullable=True)
+    reviewed_at      = Column(DateTime, nullable=True)
+    notes            = Column(Text, nullable=True)
+
+
+class InterviewQuestion(Base):
+    """Auto-generated question within an interview session."""
+    __tablename__ = "interview_questions"
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    session_id       = Column(Integer, ForeignKey("interview_sessions.id"), nullable=False, index=True)
+    control_id       = Column(String, nullable=False)
+    control_family   = Column(String, nullable=True)
+    control_title    = Column(String, nullable=True)
+    question_number  = Column(Integer, nullable=False)   # 1-based within this control
+    question_text    = Column(Text, nullable=False)
+    stakeholder_target = Column(String, nullable=True)   # who this Q targets
+    sort_order       = Column(Integer, default=0)
+    overlay_framework  = Column(String, nullable=True)   # e.g. "fedramp_high"; NULL for base qs
+    parent_control_id  = Column(String, nullable=True)   # e.g. "AC-7" when overlay_framework set
+    question_type      = Column(String, nullable=True, default="text")   # "text"|"impl_status"|"responsible_role"
+    question_options   = Column(Text,   nullable=True)                    # JSON array of option strings
+
+
+class InterviewResponse(Base):
+    """Response to a single interview question, with full typing audit data."""
+    __tablename__ = "interview_responses"
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    session_id       = Column(Integer, ForeignKey("interview_sessions.id"), nullable=False, index=True)
+    question_id      = Column(Integer, ForeignKey("interview_questions.id"), nullable=False)
+    response_text    = Column(Text, nullable=True)
+    first_keystroke_at = Column(DateTime, nullable=True)
+    last_keystroke_at  = Column(DateTime, nullable=True)
+    keystroke_count  = Column(Integer, default=0)
+    char_count       = Column(Integer, default=0)
+    paste_attempts   = Column(Integer, default=0)
+    focus_count      = Column(Integer, default=0)
+    time_on_field_s  = Column(Float, nullable=True)
+    submitted_at     = Column(DateTime, nullable=True)
+
+
+class InterviewAuditEvent(Base):
+    """Fine-grained audit trail: every keystroke burst, paste attempt, focus/blur, submit."""
+    __tablename__ = "interview_audit_events"
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    session_id   = Column(Integer, ForeignKey("interview_sessions.id"), nullable=False, index=True)
+    question_id  = Column(Integer, nullable=True)
+    remote_user  = Column(String, nullable=True)
+    event_type   = Column(String, nullable=False)   # first_keystroke|keystroke_burst|paste_attempt|focus|blur|submit|load
+    event_data   = Column(Text, nullable=True)      # JSON: char_count, delta, field_id, etc.
+    occurred_at  = Column(DateTime, default=_now, index=True)
 
 
 async def init_db(engine):

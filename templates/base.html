@@ -7,6 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+  <!-- Blocking theme restoration — must run before CSS is applied to prevent flash -->
+  <script>(function(){var t=localStorage.getItem('bsv-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
   <style>
     :root {
       --bg:          #060608;
@@ -175,7 +177,7 @@
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
+    html { scroll-behavior: smooth; scrollbar-gutter: stable; }
     body {
       background: var(--bg);
       background-image:
@@ -2948,6 +2950,28 @@ document.body.addEventListener('htmx:afterSettle', function() {
   var ctxEl = document.getElementById('aipCtx');
   var hist  = [];
   var busy  = false;
+  var LS_KEY = 'bsv-aip-open';
+
+  function _setOpen(open, animate) {
+    if (!animate) panel.style.transition = 'none';
+    if (open) {
+      panel.classList.remove('hidden');
+      updateCtx();
+      localStorage.setItem(LS_KEY, '1');
+    } else {
+      panel.classList.add('hidden');
+      localStorage.removeItem(LS_KEY);
+    }
+    if (!animate) requestAnimationFrame(function(){ panel.style.transition = ''; });
+  }
+
+  // Restore open state immediately on load (no animation)
+  if (localStorage.getItem(LS_KEY) === '1') _setOpen(true, false);
+
+  // Update context label after htmx navigation
+  document.addEventListener('htmx:afterSettle', function() {
+    if (!panel.classList.contains('hidden')) updateCtx();
+  });
 
   function pageCtx() {
     var path  = window.location.pathname;
@@ -2964,18 +2988,12 @@ document.body.addEventListener('htmx:afterSettle', function() {
 
   btn.addEventListener('click', function(){
     var hidden = panel.classList.contains('hidden');
-    if (hidden) {
-      panel.classList.remove('hidden');
-      updateCtx();
-      inp.focus();
-      btn.classList.remove('has-unread');
-    } else {
-      panel.classList.add('hidden');
-    }
+    _setOpen(hidden, true);
+    if (hidden) { inp.focus(); btn.classList.remove('has-unread'); }
   });
-  close.addEventListener('click', function(){ panel.classList.add('hidden'); });
+  close.addEventListener('click', function(){ _setOpen(false, true); });
   document.addEventListener('keydown', function(e){
-    if (e.key==='Escape' && !panel.classList.contains('hidden')) panel.classList.add('hidden');
+    if (e.key==='Escape' && !panel.classList.contains('hidden')) _setOpen(false, true);
   });
 
   function md(t) {

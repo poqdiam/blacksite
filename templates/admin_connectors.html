@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Data Connectors{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="/admin">Admin</a>
+  <span class="sep">/</span>
+  <span>Data Connectors</span>
+</div>
+
+<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div style="font-size:0.72em;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Admin Tools</div>
+    <h1 style="margin:0;font-size:1.4em;letter-spacing:1px">Public Data Connectors</h1>
+    <p style="margin:6px 0 0;color:var(--muted);font-size:0.82em;max-width:640px">
+      Free, publicly accessible data sources ingested directly into Blacksite.
+      No API keys required. Each connector caches locally and re-fetches on a TTL schedule.
+      Sync manually or let the hourly background refresh handle it.
+    </p>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <button class="btn btn-ghost btn-sm" onclick="syncAll()">↻ Sync All</button>
+    <a href="/admin/feeds" class="btn btn-ghost btn-sm">RSS Feeds →</a>
+    <a href="/admin" class="btn btn-ghost btn-sm">← Admin</a>
+  </div>
+</div>
+
+{# ── Status summary bar ───────────────────────────────────────────────────── #}
+{% set fresh_count = statuses.values() | selectattr('status', 'equalto', 'fresh') | list | length %}
+{% set stale_count = statuses.values() | selectattr('status', 'equalto', 'stale') | list | length %}
+{% set never_count = statuses.values() | selectattr('status', 'equalto', 'never_synced') | list | length %}
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
+  <div class="stat" style="min-width:100px">
+    <div class="stat-label">Connectors</div>
+    <div class="stat-value">{{ connectors | length }}</div>
+  </div>
+  <div class="stat" style="min-width:100px">
+    <div class="stat-label">Fresh</div>
+    <div class="stat-value" style="color:var(--green)">{{ fresh_count }}</div>
+  </div>
+  <div class="stat" style="min-width:100px">
+    <div class="stat-label">Stale</div>
+    <div class="stat-value" style="color:var(--yellow)">{{ stale_count }}</div>
+  </div>
+  <div class="stat" style="min-width:100px">
+    <div class="stat-label">Never Synced</div>
+    <div class="stat-value" style="color:var(--muted)">{{ never_count }}</div>
+  </div>
+</div>
+
+{# ── Connector cards ──────────────────────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(480px,1fr));gap:18px;margin-bottom:36px">
+{% for key, info in connectors.items() %}
+{% set st = statuses.get(key, {}) %}
+{% set status_color = 'var(--green)' if st.status == 'fresh' else ('var(--yellow)' if st.status == 'stale' else 'var(--muted)') %}
+{% set priority_color = 'var(--red)' if info.priority == 'critical' else ('var(--yellow)' if info.priority == 'high' else ('var(--cyan)' if info.priority == 'medium' else 'var(--muted)')) %}
+
+<div class="card" id="card-{{ key }}" style="padding:20px 22px">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px">
+    <div>
+      <div style="font-size:0.68em;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:{{ priority_color }};margin-bottom:4px">
+        {{ info.priority | upper }} PRIORITY &middot; {{ info.type | replace('_',' ') | upper }}
+      </div>
+      <div style="font-size:1em;font-weight:700;color:var(--text)">{{ info.name }}</div>
+    </div>
+    <div style="text-align:right;flex-shrink:0">
+      <span id="status-badge-{{ key }}" style="font-size:0.7em;font-family:var(--mono);padding:3px 8px;border-radius:3px;border:1px solid {{ status_color }};color:{{ status_color }}">
+        {{ st.status | upper | replace('_',' ') }}
+      </span>
+    </div>
+  </div>
+
+  <p style="font-size:0.82em;color:var(--muted);margin:0 0 14px;line-height:1.55">{{ info.description }}</p>
+
+  <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:0.75em;color:var(--muted);margin-bottom:14px">
+    <span id="count-{{ key }}">
+      {% if st.item_count %}&#x23; {{ st.item_count }} items{% else %}—{% endif %}
+    </span>
+    <span id="age-{{ key }}">
+      {% if st.last_fetched %}Last sync: {{ st.last_fetched }}{% else %}Never synced{% endif %}
+    </span>
+    <span>TTL: {{ (info.ttl // 60) if info.ttl else '—' }}m</span>
+    <a href="{{ info.source_url }}" target="_blank" rel="noopener"
+       style="color:var(--cyan);text-decoration:none;margin-left:auto">
+      Source ↗
+    </a>
+  </div>
+
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+    {% for tag in info.tags %}
+    <span style="font-size:0.68em;padding:2px 7px;border-radius:3px;background:rgba(0,255,204,.07);border:1px solid rgba(0,255,204,.15);color:var(--cyan);font-family:var(--mono)">{{ tag }}</span>
+    {% endfor %}
+  </div>
+
+  <div style="display:flex;gap:8px;align-items:center">
+    <button class="btn btn-sm"
+            onclick="syncConnector('{{ key }}')"
+            id="sync-btn-{{ key }}"
+            style="background:rgba(0,255,204,.1);border-color:var(--cyan);color:var(--cyan)">
+      ↻ Sync Now
+    </button>
+    <button class="btn btn-ghost btn-sm"
+            onclick="previewItems('{{ key }}')"
+            id="preview-btn-{{ key }}">
+      Preview Items
+    </button>
+    {% if key == 'cisa_kev' %}
+    <a href="/api/connectors/kev/match/{{ request.state.system_id if request.state.system_id is defined else '' }}"
+       class="btn btn-ghost btn-sm" style="margin-left:auto">
+      Check Inventory →
+    </a>
+    {% endif %}
+    <span id="sync-msg-{{ key }}" style="font-size:0.76em;color:var(--muted);margin-left:4px"></span>
+  </div>
+
+  {# Inline item preview (hidden until "Preview Items" clicked) #}
+  <div id="preview-{{ key }}" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px"></div>
+</div>
+{% endfor %}
+</div>
+
+{# ── CISA KEV inventory cross-reference panel ─────────────────────────────── #}
+<div class="card" style="padding:20px 22px;margin-bottom:24px">
+  <div style="font-size:0.72em;letter-spacing:2px;text-transform:uppercase;color:var(--red);margin-bottom:8px;font-weight:700">
+    KEV ✕ Inventory Cross-Reference
+  </div>
+  <p style="font-size:0.82em;color:var(--muted);margin:0 0 14px">
+    Select a system to scan its inventory against the CISA KEV catalog.
+    Matches indicate software that is known to be actively exploited and subject to federal patching mandates.
+  </p>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <select id="kev-system-select" class="form-select" style="min-width:280px;max-width:420px">
+      <option value="">— Select a system —</option>
+      {# Systems are available via _tpl_ctx; fall back to fetch via JS if not #}
+    </select>
+    <button class="btn btn-sm" onclick="runKevMatch()"
+            style="background:rgba(255,50,50,.1);border-color:var(--red);color:var(--red)">
+      Run Match
+    </button>
+  </div>
+  <div id="kev-match-results" style="margin-top:16px"></div>
+</div>
+
+{# ── Community sources notice ─────────────────────────────────────────────── #}
+<div style="background:rgba(0,255,204,.04);border:1px solid rgba(0,255,204,.12);border-radius:6px;padding:16px 20px;margin-bottom:24px;font-size:0.82em;color:var(--muted)">
+  <strong style="color:var(--cyan)">Community RSS feeds</strong> (Reddit, Full Disclosure, Packet Storm, Talos, MSRC, Schneier) are managed on the
+  <a href="/admin/feeds" style="color:var(--cyan)">RSS Feed Sources</a> page — they use the same fetch/cache pipeline as the other advisory feeds.
+  12 new public community sources have been added to the allowlist and can be enabled there.
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const API = '/api/connectors';
+const ADMIN_API = '/admin/connectors';
+
+async function syncConnector(key) {
+  const btn = document.getElementById(`sync-btn-${key}`);
+  const msg = document.getElementById(`sync-msg-${key}`);
+  if (btn) { btn.disabled = true; btn.textContent = '…syncing'; }
+  if (msg) msg.textContent = '';
+  try {
+    const r  = await fetch(`${ADMIN_API}/${key}/sync`, { method: 'POST' });
+    const d  = await r.json();
+    if (d.ok) {
+      updateCard(key, d);
+      if (msg) { msg.style.color = 'var(--green)'; msg.textContent = `✓ ${d.item_count} items`; }
+    } else {
+      if (msg) { msg.style.color = 'var(--red)'; msg.textContent = `✗ ${d.error || 'error'}`; }
+    }
+  } catch(e) {
+    if (msg) { msg.style.color = 'var(--red)'; msg.textContent = `✗ network error`; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Sync Now'; }
+    setTimeout(() => { if (msg) msg.textContent = ''; }, 6000);
+  }
+}
+
+async function syncAll() {
+  const keys = {{ connectors.keys() | list | tojson }};
+  for (const k of keys) await syncConnector(k);
+}
+
+function updateCard(key, data) {
+  const st = data.status || {};
+  const badge = document.getElementById(`status-badge-${key}`);
+  const count = document.getElementById(`count-${key}`);
+  const age   = document.getElementById(`age-${key}`);
+  if (badge) {
+    const fresh = st.status === 'fresh';
+    badge.textContent = (st.status || 'synced').toUpperCase().replace('_',' ');
+    badge.style.color = fresh ? 'var(--green)' : 'var(--yellow)';
+    badge.style.borderColor = fresh ? 'var(--green)' : 'var(--yellow)';
+  }
+  if (count && st.item_count != null) count.textContent = `# ${st.item_count} items`;
+  if (age   && st.last_fetched)       age.textContent   = `Last sync: ${st.last_fetched}`;
+}
+
+async function previewItems(key) {
+  const panel = document.getElementById(`preview-${key}`);
+  const btn   = document.getElementById(`preview-btn-${key}`);
+  if (!panel) return;
+  if (panel.style.display !== 'none') { panel.style.display = 'none'; if (btn) btn.textContent = 'Preview Items'; return; }
+  if (btn) btn.textContent = 'Loading…';
+  try {
+    const r = await fetch(`${API}/${key}/items?limit=8`);
+    const d = await r.json();
+    const items = d.items || [];
+    if (!items.length) { panel.innerHTML = '<em style="color:var(--muted);font-size:0.8em">No cached items. Sync first.</em>'; }
+    else {
+      panel.innerHTML = items.map(item => `
+        <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:0.82em;font-weight:600">
+            <a href="${item.link || '#'}" target="_blank" rel="noopener"
+               style="color:var(--text);text-decoration:none">${escHtml(item.title || '')}</a>
+          </div>
+          <div style="font-size:0.74em;color:var(--muted);margin-top:3px">${escHtml((item.desc || '').substring(0,140))}${(item.desc||'').length>140?'…':''}</div>
+          <div style="font-size:0.68em;color:var(--muted);margin-top:2px;font-family:var(--mono)">${item.source || ''} &middot; ${item.pub || ''}</div>
+        </div>
+      `).join('');
+    }
+    panel.style.display = 'block';
+    if (btn) btn.textContent = 'Hide Preview';
+  } catch(e) {
+    panel.innerHTML = `<em style="color:var(--red);font-size:0.8em">Error loading preview: ${e.message}</em>`;
+    panel.style.display = 'block';
+    if (btn) btn.textContent = 'Preview Items';
+  }
+}
+
+// ── KEV inventory cross-reference ─────────────────────────────────────────────
+async function loadSystems() {
+  const sel = document.getElementById('kev-system-select');
+  if (!sel) return;
+  try {
+    const r = await fetch('/api/systems/list');
+    if (!r.ok) return;
+    const d = await r.json();
+    (d.systems || d || []).forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.name;
+      sel.appendChild(opt);
+    });
+  } catch(e) {}
+}
+
+async function runKevMatch() {
+  const sel     = document.getElementById('kev-system-select');
+  const results = document.getElementById('kev-match-results');
+  if (!sel || !sel.value) { if (results) results.innerHTML = '<em style="color:var(--yellow);font-size:0.8em">Select a system first.</em>'; return; }
+  if (results) results.innerHTML = '<em style="color:var(--muted);font-size:0.8em">Scanning…</em>';
+  try {
+    const r = await fetch(`/api/connectors/kev/match/${sel.value}`);
+    const d = await r.json();
+    if (!d.matches || !d.matches.length) {
+      results.innerHTML = `
+        <div style="font-size:0.82em;color:var(--green)">
+          ✓ No KEV matches found in inventory (${d.inventory_count} items checked against ${d.kev_total} KEV entries).
+        </div>`;
+      return;
+    }
+    results.innerHTML = `
+      <div style="font-size:0.8em;color:var(--yellow);margin-bottom:10px;font-weight:700">
+        ⚠ ${d.match_count} potential KEV match${d.match_count !== 1 ? 'es' : ''} found in ${d.inventory_count}-item inventory
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:0.78em">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);color:var(--muted);font-size:0.85em">
+            <th style="text-align:left;padding:6px 8px">CVE</th>
+            <th style="text-align:left;padding:6px 8px">Vendor / Product</th>
+            <th style="text-align:left;padding:6px 8px">Due Date</th>
+            <th style="text-align:left;padding:6px 8px">Ransomware</th>
+            <th style="text-align:left;padding:6px 8px">Matched Asset</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${d.matches.slice(0, 50).map(m => `
+            <tr style="border-bottom:1px solid rgba(255,255,255,.04)">
+              <td style="padding:6px 8px;font-family:var(--mono);color:var(--cyan)">${escHtml(m.cveID || '')}</td>
+              <td style="padding:6px 8px;color:var(--text)">${escHtml(m.vendorProject || '')} / ${escHtml(m.product || '')}</td>
+              <td style="padding:6px 8px;color:var(--yellow)">${escHtml(m.dueDate || 'N/A')}</td>
+              <td style="padding:6px 8px;color:${m.knownRansomwareCampaignUse === 'Known' ? 'var(--red)' : 'var(--muted)'}">${escHtml(m.knownRansomwareCampaignUse || '')}</td>
+              <td style="padding:6px 8px;color:var(--muted)">${escHtml(m._matched_asset || '')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    if (results) results.innerHTML = `<em style="color:var(--red);font-size:0.8em">Error: ${escHtml(e.message)}</em>`;
+  }
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Load system list for KEV match selector
+loadSystems();
+</script>
+{% endblock %}

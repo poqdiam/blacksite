@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — Review & Submit — {{ iv_session.title }}{% endblock %}
+
+{% block head %}
+<style>
+  .ps-wrap   { max-width:860px; }
+  .ps-header { margin-bottom:24px; }
+  .ps-title  { font-size:1.15em; font-weight:700; margin-bottom:4px; }
+  .ps-meta   { font-size:0.8em; color:var(--muted); }
+  .ps-meta a { color:var(--cyan); text-decoration:none; }
+
+  /* Summary card */
+  .ps-summary { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:24px; }
+  .ps-stat-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    padding:18px 20px;
+  }
+  .ps-stat-label { font-size:0.7em; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:var(--muted); margin-bottom:8px; }
+  .ps-stat-val   { font-size:2em; font-weight:700; font-family:var(--mono); line-height:1; }
+  .ps-stat-sub   { font-size:0.78em; color:var(--muted); margin-top:4px; }
+  .ps-stat-card.good  { border-color:rgba(0,200,80,.3);  }
+  .ps-stat-card.good  .ps-stat-val { color:var(--green); }
+  .ps-stat-card.warn  { border-color:rgba(255,200,0,.3); }
+  .ps-stat-card.warn  .ps-stat-val { color:var(--yellow); }
+  .ps-stat-card.bad   { border-color:rgba(255,80,80,.3); }
+  .ps-stat-card.bad   .ps-stat-val { color:var(--red); }
+
+  /* Progress bar */
+  .ps-progress-wrap { margin-bottom:24px; }
+  .ps-progress-label { display:flex; justify-content:space-between; font-size:0.78em; color:var(--muted); margin-bottom:6px; }
+  .ps-progress-bar { height:8px; background:var(--surface); border-radius:4px; overflow:hidden; border:1px solid var(--border); }
+  .ps-progress-fill { height:100%; border-radius:4px; transition:width .4s; }
+  .ps-progress-fill.complete { background:var(--green); }
+  .ps-progress-fill.partial  { background:var(--yellow); }
+
+  /* Incomplete controls list */
+  .ps-incomplete-section { margin-bottom:28px; }
+  .ps-incomplete-header  { font-size:0.72em; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:var(--yellow); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+  .ps-ctrl-row { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:12px 16px; margin-bottom:8px; display:flex; align-items:center; gap:14px; }
+  .ps-ctrl-id  { font-family:var(--mono); font-size:0.78em; color:var(--cyan); background:rgba(0,255,204,.07); padding:2px 8px; border-radius:3px; white-space:nowrap; }
+  .ps-ctrl-title { font-size:0.88em; color:var(--text); flex:1; }
+  .ps-ctrl-fam  { font-size:0.72em; color:var(--muted); }
+  .ps-ctrl-count { font-size:0.76em; font-family:var(--mono); color:var(--yellow); white-space:nowrap; }
+  .ps-ctrl-link  { font-size:0.78em; color:var(--cyan); text-decoration:none; white-space:nowrap; }
+  .ps-ctrl-link:hover { text-decoration:underline; }
+
+  /* All complete banner */
+  .ps-all-good { background:rgba(0,200,80,.07); border:1px solid rgba(0,200,80,.25); border-radius:8px; padding:18px 20px; text-align:center; color:var(--green); font-weight:600; margin-bottom:24px; font-size:0.95em; }
+
+  /* Attestation */
+  .ps-attest { background:rgba(255,200,0,.05); border:1px solid rgba(255,200,0,.2); border-radius:8px; padding:20px 22px; margin-bottom:24px; }
+  .ps-attest-title { font-size:0.72em; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:var(--yellow); margin-bottom:14px; }
+  .ps-attest-text { font-size:0.88em; color:var(--text); line-height:1.6; margin-bottom:16px; }
+  .ps-attest-label { display:flex; align-items:flex-start; gap:10px; cursor:pointer; font-size:0.88em; line-height:1.5; color:var(--text); user-select:none; }
+  .ps-attest-label input[type="checkbox"] { accent-color:var(--cyan); width:16px; height:16px; margin-top:2px; cursor:pointer; flex-shrink:0; }
+
+  /* Action bar */
+  .ps-actions { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .ps-btn-back { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:10px 22px; border-radius:5px; cursor:pointer; font-size:0.88em; text-decoration:none; display:inline-block; }
+  .ps-btn-back:hover { border-color:var(--cyan); color:var(--cyan); }
+  .ps-btn-submit { background:var(--green); color:#000; font-weight:700; font-size:0.9em; padding:11px 28px; border:none; border-radius:5px; cursor:pointer; }
+  .ps-btn-submit:disabled { background:var(--muted); cursor:not-allowed; opacity:0.5; }
+  .ps-btn-submit:not(:disabled):hover { opacity:0.85; }
+  .ps-warning-note { font-size:0.76em; color:var(--muted); margin-top:6px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ps-wrap">
+
+  <div class="ps-header">
+    <div class="ps-title">Review &amp; Submit — {{ iv_session.title }}</div>
+    <div class="ps-meta">
+      <a href="/systems/{{ system.id }}">{{ system.name }}</a>
+      &rsaquo; <a href="/systems/{{ system.id }}/interview">Interviews</a>
+      &rsaquo; <a href="/systems/{{ system.id }}/interview/{{ iv_session.id }}">{{ iv_session.title }}</a>
+      &rsaquo; Review
+    </div>
+  </div>
+
+  {# ── Completion summary ───────────────────────────────────────────────────── #}
+  <div class="ps-summary">
+    <div class="ps-stat-card {% if answered_ctrls == total_ctrls %}good{% elif incomplete | length <= total_ctrls // 4 %}warn{% else %}bad{% endif %}">
+      <div class="ps-stat-label">Controls Complete</div>
+      <div class="ps-stat-val">{{ answered_ctrls }}<span style="font-size:0.45em;color:var(--muted)">/{{ total_ctrls }}</span></div>
+      <div class="ps-stat-sub">{{ incomplete | length }} control{{ 's' if incomplete | length != 1 }} with gaps</div>
+    </div>
+    <div class="ps-stat-card {% if answered_qs == total_qs %}good{% elif answered_qs >= total_qs * 0.75 %}warn{% else %}bad{% endif %}">
+      <div class="ps-stat-label">Questions Answered</div>
+      <div class="ps-stat-val">{{ answered_qs }}<span style="font-size:0.45em;color:var(--muted)">/{{ total_qs }}</span></div>
+      <div class="ps-stat-sub">{{ total_qs - answered_qs }} question{{ 's' if (total_qs - answered_qs) != 1 }} unanswered</div>
+    </div>
+  </div>
+
+  <div class="ps-progress-wrap">
+    <div class="ps-progress-label">
+      <span>Overall Completion</span>
+      <span>{{ ((answered_qs / total_qs * 100) | round(1)) if total_qs else 0 }}%</span>
+    </div>
+    <div class="ps-progress-bar">
+      <div class="ps-progress-fill {% if answered_qs == total_qs %}complete{% else %}partial{% endif %}"
+           style="width:{{ ((answered_qs / total_qs * 100) | round(1)) if total_qs else 0 }}%"></div>
+    </div>
+  </div>
+
+  {# ── Incomplete controls list ─────────────────────────────────────────────── #}
+  {% if incomplete %}
+  <div class="ps-incomplete-section">
+    <div class="ps-incomplete-header">
+      &#9888; {{ incomplete | length }} Control{{ 's' if incomplete | length != 1 }} Incomplete
+      &nbsp;<span style="font-weight:400;color:var(--muted);font-size:0.9em;text-transform:none;letter-spacing:0">— These will be logged in the session record</span>
+    </div>
+    {% for c in incomplete %}
+    <div class="ps-ctrl-row">
+      <span class="ps-ctrl-id">{{ c.ctrl_id }}</span>
+      <span class="ps-ctrl-title">{{ c.title or '' }}</span>
+      <span class="ps-ctrl-fam">{{ c.family or '' }}</span>
+      <span class="ps-ctrl-count">{{ c.answered }}/{{ c.total }} answered</span>
+      <a class="ps-ctrl-link"
+         href="/systems/{{ system.id }}/interview/{{ iv_session.id }}?highlight={{ c.ctrl_id }}#ctrl-{{ c.ctrl_safe }}">
+        Edit &rarr;
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="ps-all-good">&#10003; All controls have been answered — great work!</div>
+  {% endif %}
+
+  {# ── Attestation ──────────────────────────────────────────────────────────── #}
+  <form method="post" action="/systems/{{ system.id }}/interview/{{ iv_session.id }}/submit" id="submit-form">
+    <input type="hidden" name="attested" value="true">
+    <div class="ps-attest">
+      <div class="ps-attest-title">&#9632; Respondent Attestation</div>
+      <div class="ps-attest-text">
+        By submitting this questionnaire, you confirm that all responses reflect your
+        best knowledge of how the described controls are implemented in
+        <strong>{{ system.name }}</strong>. You understand that:
+        <ul style="margin:10px 0 0 18px;line-height:1.9">
+          <li>Your responses will be used to assess control implementation status</li>
+          <li>Unanswered or incomplete controls will be flagged in the session record</li>
+          <li>Once submitted, the session is locked — corrections require a reviewer to reopen it</li>
+          <li>Your identity, typing patterns, and response timestamps are logged for audit purposes</li>
+        </ul>
+      </div>
+      <label class="ps-attest-label" for="attest-cb">
+        <input type="checkbox" id="attest-cb" onchange="toggleSubmit(this)">
+        I attest that I have responded to all applicable controls to the best of my knowledge and ability.
+      </label>
+    </div>
+
+    <div class="ps-actions">
+      <a class="ps-btn-back" href="/systems/{{ system.id }}/interview/{{ iv_session.id }}">&#8592; Back to Questions</a>
+      <button type="submit" class="ps-btn-submit" id="final-submit-btn" disabled>
+        Submit Package &#10003;
+      </button>
+    </div>
+    {% if incomplete %}
+    <div class="ps-warning-note">
+      Submitting with {{ incomplete | length }} incomplete control{{ 's' if incomplete | length != 1 }}.
+      These will be recorded in the audit log.
+    </div>
+    {% endif %}
+  </form>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleSubmit(cb) {
+  document.getElementById('final-submit-btn').disabled = !cb.checked;
+}
+
+document.getElementById('submit-form')?.addEventListener('submit', e => {
+  const btn = document.getElementById('final-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting\u2026'; }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,837 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — {{ 'Daily Log' if session_type == 'daily_ops' else 'Interview' }} — {{ iv_session.title }}{% endblock %}
+
+{% block head %}
+<style>
+  .ivf-header { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+  .ivf-title { font-size:1.15em; font-weight:700; }
+  .ivf-meta  { font-size:0.8em; color:var(--muted); margin-top:4px; }
+  .ivf-status-bar { background:#1a1a2e; border:1px solid var(--border); border-radius:6px; padding:10px 16px; margin-bottom:16px; display:flex; gap:20px; flex-wrap:wrap; font-size:0.8em; }
+  .ivf-stat  { color:var(--muted); }
+  .ivf-stat span { color:var(--cyan); font-weight:700; }
+
+  /* Family filter bar (control interviews only) */
+  .ivf-filter-bar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; align-items:center; }
+  .ivf-filter-label { font-size:0.72em; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+  .ivf-filter-select {
+    background:var(--surface); border:1px solid var(--border);
+    color:var(--text); padding:5px 10px; border-radius:4px;
+    font-size:0.8em; font-family:inherit; cursor:pointer; min-width:160px;
+  }
+  .ivf-filter-select:focus { outline:none; border-color:var(--cyan); }
+
+  /* Control section */
+  .ivf-ctrl-section { margin-bottom:28px; }
+  .ivf-ctrl-header { display:flex; align-items:baseline; gap:10px; border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:14px; }
+  .ivf-ctrl-id    { font-family:var(--mono); font-size:0.82em; font-weight:700; color:var(--cyan); background:rgba(0,255,204,.08); padding:2px 7px; border-radius:4px; }
+  .ivf-ctrl-title { font-size:0.95em; font-weight:600; color:var(--text); }
+  .ivf-ctrl-family{ font-size:0.72em; color:var(--muted); margin-left:auto; }
+  .ivf-ctrl-answered { font-size:0.72em; color:var(--muted); margin-left:8px; font-family:var(--mono); }
+  .ivf-ctrl-answered.all-done { color:var(--green); }
+
+  /* Question block */
+  .ivf-question { background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:16px 18px; margin-bottom:10px; }
+  .ivf-question:focus-within { border-color:rgba(0,255,204,.35); }
+  .ivf-q-num   { font-size:0.68em; font-weight:700; letter-spacing:1px; color:var(--muted); text-transform:uppercase; margin-bottom:6px; }
+  .ivf-q-text  { font-size:0.88em; color:var(--text); line-height:1.6; margin-bottom:10px; }
+  .ivf-textarea {
+    width:100%; min-height:100px; resize:vertical;
+    background:#0d0d1a; border:1px solid var(--border);
+    color:var(--text); padding:10px 12px; border-radius:5px;
+    font-size:0.87em; line-height:1.55; outline:none;
+    font-family:inherit; box-sizing:border-box;
+  }
+  .ivf-textarea:focus { border-color:var(--cyan); }
+  /* Structured question inputs */
+  .ivf-select-input {
+    width:100%; background:#0d0d1a; border:1px solid var(--border);
+    color:var(--text); padding:9px 12px; border-radius:5px;
+    font-size:0.87em; font-family:inherit; outline:none; cursor:pointer;
+    appearance:none; -webkit-appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23666' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 12px center;
+    padding-right:32px;
+  }
+  .ivf-select-input:focus { border-color:var(--cyan); }
+  .ivf-select-input.selected { border-color:rgba(0,255,100,.3); color:var(--text); }
+  .ivf-role-name-input {
+    width:100%; background:#0d0d1a; border:1px solid var(--border);
+    color:var(--text); padding:8px 12px; border-radius:5px;
+    font-size:0.84em; font-family:inherit; outline:none; margin-top:8px;
+  }
+  .ivf-role-name-input:focus { border-color:var(--cyan); }
+  .ivf-impl-badge {
+    display:inline-block; margin-top:6px; padding:3px 10px;
+    border-radius:4px; font-size:0.74em; font-weight:700;
+    font-family:var(--mono); letter-spacing:0.5px;
+  }
+  .ivf-impl-badge.fully   { background:rgba(0,200,80,.15);  color:#00c850; border:1px solid rgba(0,200,80,.3); }
+  .ivf-impl-badge.partial { background:rgba(255,200,0,.12); color:#ffc800; border:1px solid rgba(255,200,0,.25); }
+  .ivf-impl-badge.planned { background:rgba(0,150,255,.12); color:#0096ff; border:1px solid rgba(0,150,255,.25); }
+  .ivf-impl-badge.none    { background:rgba(255,80,80,.12); color:#ff5050; border:1px solid rgba(255,80,80,.25); }
+  .ivf-impl-badge.na      { background:rgba(120,120,120,.15); color:#888; border:1px solid rgba(120,120,120,.3); }
+  .ivf-textarea[data-status="saved"] { border-color:rgba(0,255,100,.25); }
+  .ivf-textarea[data-status="dirty"] { border-color:rgba(255,200,0,.25); }
+  .ivf-q-footer { display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:0.74em; }
+  .ivf-char-count { color:var(--muted); font-family:var(--mono); }
+  .ivf-char-count.warn { color:var(--yellow); }
+  .ivf-char-count.ok   { color:var(--green); }
+  .ivf-save-status { color:var(--muted); font-style:italic; }
+  .ivf-keystroke-counter { color:var(--muted); font-family:var(--mono); }
+
+  /* Paste-blocked toast */
+  #paste-toast { position:fixed; top:20px; right:20px; background:#2a0a0a; border:1px solid var(--red); color:var(--red); padding:10px 16px; border-radius:6px; font-size:0.82em; z-index:9999; display:none; }
+
+  /* Sticky submit bar */
+  .ivf-submit-bar {
+    position:sticky; bottom:0; left:0; right:0;
+    background:#10101e; border-top:1px solid var(--border);
+    padding:12px 20px; display:flex; align-items:center;
+    justify-content:space-between; gap:16px; z-index:100; flex-wrap:wrap;
+  }
+  .ivf-progress { font-size:0.8em; color:var(--muted); }
+  .ivf-progress strong { color:var(--cyan); }
+  .ivf-btn-submit { background:var(--green); color:#000; font-weight:700; font-size:0.88em; padding:10px 24px; border:none; border-radius:5px; cursor:pointer; }
+  .ivf-btn-submit:hover { opacity:0.85; }
+  .ivf-btn-submit:disabled { background:var(--muted); cursor:not-allowed; }
+  .ivf-autosave-notice { font-size:0.75em; color:var(--muted); }
+
+  /* Pagination nav */
+  .ivf-page-nav { display:flex; align-items:center; gap:10px; margin:10px 0 16px; flex-wrap:wrap; }
+  .ivf-page-btn  { background:var(--surface); border:1px solid var(--border); color:var(--cyan); padding:6px 14px; border-radius:4px; cursor:pointer; font-size:0.82em; font-family:inherit; transition:border-color .15s; }
+  .ivf-page-btn:hover:not(:disabled) { border-color:var(--cyan); }
+  .ivf-page-btn:disabled { color:var(--muted); cursor:not-allowed; opacity:0.45; }
+  .ivf-page-info { font-size:0.8em; color:var(--muted); flex:1; text-align:center; font-family:var(--mono); }
+  .ivf-page-jumper { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:5px 8px; border-radius:4px; font-size:0.8em; font-family:inherit; width:56px; text-align:center; outline:none; }
+  .ivf-page-jumper:focus { border-color:var(--cyan); }
+
+  /* Session-level framework toggle bar */
+  .ivf-fw-bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:16px; padding:10px 14px; background:rgba(0,200,255,.04); border:1px solid rgba(0,200,255,.15); border-radius:6px; }
+  .ivf-fw-bar-label { font-size:0.72em; color:var(--muted); text-transform:uppercase; letter-spacing:1px; white-space:nowrap; }
+  .ivf-fw-toggle { background:var(--surface); border:1px solid var(--border); color:var(--muted); padding:5px 12px; border-radius:4px; cursor:pointer; font-size:0.78em; font-family:inherit; transition:all .15s; }
+  .ivf-fw-toggle:hover { border-color:var(--cyan); color:var(--text); }
+  .ivf-fw-toggle.active { background:rgba(0,200,255,.1); border-color:var(--cyan); color:var(--cyan); font-weight:700; }
+
+  /* Overlay requirements panel */
+  .ivf-overlay-section { margin-top:14px; border-top:1px solid var(--border); padding-top:12px; }
+  .ivf-overlay-fw-badge { font-family:var(--mono); font-size:0.72em; background:rgba(0,200,255,.1); border:1px solid rgba(0,200,255,.25); padding:2px 7px; border-radius:3px; color:var(--cyan); }
+  .ivf-overlay-panel-header { font-size:0.78em; color:var(--muted); margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+  .ivf-overlay-panel { display:none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="paste-toast">&#9888; Paste is not permitted in this form. Please type your response.</div>
+
+<div class="ivf-header">
+  <div>
+    <div class="ivf-title">{{ iv_session.title }}</div>
+    <div class="ivf-meta">
+      <a href="/systems/{{ system.id }}" style="color:var(--cyan);text-decoration:none">{{ system.name }}</a>
+      &rsaquo; <a href="/systems/{{ system.id }}/interview" style="color:var(--cyan);text-decoration:none">Interviews</a>
+      &rsaquo; {{ stakeholder_label }}
+    </div>
+  </div>
+  <div style="font-size:0.78em;color:var(--muted);text-align:right">
+    Session #{{ iv_session.id }}<br>
+    Created {{ (iv_session.created_at | string)[:10] }} by {{ iv_session.created_by }}<br>
+  </div>
+</div>
+
+<div class="ivf-status-bar">
+  <div class="ivf-stat">Type: <span>{{ 'Daily Ops Log' if session_type == 'daily_ops' else 'Control Interview' }}</span></div>
+  <div class="ivf-stat">Stakeholder: <span>{{ stakeholder_label }}</span></div>
+  {% if iv_session.stakeholder_name %}
+  <div class="ivf-stat">Respondent: <span>{{ iv_session.stakeholder_name }}</span></div>
+  {% endif %}
+  <div class="ivf-stat">Questions: <span id="stat-total">{{ questions | length }}</span></div>
+  <div class="ivf-stat">Answered: <span id="stat-answered">0</span></div>
+  <div class="ivf-stat">Status: <span style="color:var(--cyan)">{{ iv_session.status | upper }}</span></div>
+</div>
+
+{# ── Family filter bar (control interviews only) ──────────────────────────── #}
+{% if session_type != 'daily_ops' %}
+{% set families = questions | map(attribute='control_family') | unique | sort | list %}
+{% if families | length > 1 %}
+
+{# Partition families by framework so each gets its own optgroup #}
+{% set _800_53 = ['AC','AT','AU','CA','CM','CP','IA','IR','MA','MP','PE','PL','PM','PS','PT','RA','SA','SC','SI','SR'] %}
+{% set _csf    = ['GOVERN','IDENTIFY','PROTECT','DETECT','RESPOND','RECOVER'] %}
+{% set ns = namespace(nist=[], csf=[], other=[]) %}
+{% for fam in families %}
+  {% if fam in _800_53 %}{% set ns.nist  = ns.nist  + [fam] %}
+  {% elif fam in _csf  %}{% set ns.csf   = ns.csf   + [fam] %}
+  {% else               %}{% set ns.other = ns.other + [fam] %}{% endif %}
+{% endfor %}
+
+<div class="ivf-filter-bar">
+  <span class="ivf-filter-label">Filter:</span>
+  <select class="ivf-filter-select" id="filter-family" onchange="applyFilter()">
+    <option value="ALL">All Families</option>
+    {% if ns.nist %}
+    <optgroup label="NIST SP 800-53">
+      {% for fam in ns.nist %}<option value="{{ fam }}">{{ fam }}</option>{% endfor %}
+    </optgroup>
+    {% endif %}
+    {% if ns.csf %}
+    <optgroup label="NIST CSF 2.0">
+      {% for fam in ns.csf %}<option value="{{ fam }}">{{ fam }}</option>{% endfor %}
+    </optgroup>
+    {% endif %}
+    {% if ns.other %}
+    <optgroup label="Other">
+      {% for fam in ns.other %}<option value="{{ fam }}">{{ fam }}</option>{% endfor %}
+    </optgroup>
+    {% endif %}
+  </select>
+  <select class="ivf-filter-select" id="filter-status" onchange="applyFilter()">
+    <option value="ALL">All Controls</option>
+    <option value="unanswered">Unanswered</option>
+    <option value="answered">Answered</option>
+  </select>
+  <span id="filter-count" style="font-size:0.76em;color:var(--muted)"></span>
+</div>
+{% endif %}
+{% endif %}
+
+{# ── Session-level overlay framework toggle bar ───────────────────────────── #}
+{% if session_type != 'daily_ops' and system_fw_labels %}
+<div class="ivf-fw-bar" id="fw-toggle-bar">
+  <span class="ivf-fw-bar-label">Overlay Frameworks:</span>
+  {% for fw_sn, fw_name in system_fw_labels.items() %}
+  <button type="button" class="ivf-fw-toggle{% if fw_sn in system_fw_sns %} active{% endif %}"
+          data-fw="{{ fw_sn }}"
+          onclick="toggleFramework('{{ fw_sn }}', this)">{{ fw_name }}</button>
+  {% endfor %}
+</div>
+{% endif %}
+
+<form id="interview-form" method="post" action="/systems/{{ system.id }}/interview/{{ iv_session.id }}/submit">
+
+{% if session_type == 'daily_ops' %}
+  {# ── Daily ops: flat numbered list ─────────────────────────────────────── #}
+  {% for q in questions %}
+  {% set resp = responses.get(q.id, {}) %}
+  <div class="ivf-question" id="block-{{ q.id }}">
+    <div class="ivf-q-num">Task {{ q.question_number }}</div>
+    <div class="ivf-q-text">{{ q.question_text }}</div>
+    <textarea
+      class="ivf-textarea"
+      name="response_{{ q.id }}"
+      id="ta-{{ q.id }}"
+      data-qid="{{ q.id }}"
+      data-status="{{ 'saved' if resp.get('response_text') else 'empty' }}"
+      data-keystrokes="{{ resp.get('keystroke_count', 0) }}"
+      data-paste-attempts="{{ resp.get('paste_attempts', 0) }}"
+      autocomplete="off" autocorrect="off" spellcheck="true"
+      placeholder="Type your response here…"
+      {% if iv_session.status != 'open' %}readonly{% endif %}
+    >{{ resp.get('response_text') or '' }}</textarea>
+    <div class="ivf-q-footer">
+      <div>
+        <span class="ivf-char-count" id="cc-{{ q.id }}">{{ (resp.get('response_text') or '') | length }} chars</span>
+      </div>
+      <span class="ivf-save-status" id="ss-{{ q.id }}">{% if resp.get('response_text') %}saved{% else %}&nbsp;{% endif %}</span>
+    </div>
+  </div>
+  {% endfor %}
+
+{% else %}
+  {# ── Control interview: grouped by control with overlay panels ───────────── #}
+
+
+  {% for group in control_groups %}
+  {% set ctrl_safe = group.ctrl_id | replace('.', '-') %}
+  <div class="ivf-ctrl-section" data-family="{{ group.family or '' }}" id="ctrl-{{ ctrl_safe }}">
+    <div class="ivf-ctrl-header">
+      <span class="ivf-ctrl-id">{{ group.ctrl_id | upper }}</span>
+      <span class="ivf-ctrl-title">{{ group.title or '' }}</span>
+      <span class="ivf-ctrl-answered" id="ctrl-ans-{{ ctrl_safe }}"></span>
+      <span class="ivf-ctrl-family">{{ group.family or '' }}</span>
+    </div>
+
+    <div class="ivf-base-qs" id="base-{{ ctrl_safe }}">
+    {% for q in group.base_qs %}
+    {% set resp = responses.get(q.id, {}) %}
+    {% set qtype = q.question_type if q.question_type else 'text' %}
+    <div class="ivf-question" id="block-{{ q.id }}"{% if qtype != 'text' %} style="background:rgba(0,200,255,.03);border-color:rgba(0,200,255,.15)"{% endif %}>
+      <div class="ivf-q-num">
+        {% if qtype == 'impl_status' %}&#9632; Implementation Status
+        {% elif qtype == 'responsible_role' %}&#9632; Responsible Party
+        {% else %}Question {{ q.question_number }}{% endif %}
+      </div>
+      <div class="ivf-q-text">{{ q.question_text }}</div>
+
+      {% if qtype == 'impl_status' %}
+        {# ── Implementation status select ── #}
+        <select
+          class="ivf-select-input{% if resp.get('response_text') %} selected{% endif %}"
+          id="ta-{{ q.id }}"
+          name="response_{{ q.id }}"
+          data-qid="{{ q.id }}"
+          data-ctrl="{{ ctrl_safe }}"
+          data-qtype="impl_status"
+          onchange="handleSelectChange({{ q.id }})"
+          {% if iv_session.status != 'open' %}disabled{% endif %}>
+          <option value="">— Select status —</option>
+          <option value="Fully Implemented"{% if resp.get('response_text') == 'Fully Implemented' %} selected{% endif %}>Fully Implemented</option>
+          <option value="Partially Implemented"{% if resp.get('response_text') == 'Partially Implemented' %} selected{% endif %}>Partially Implemented</option>
+          <option value="Planned / In Progress"{% if resp.get('response_text') == 'Planned / In Progress' %} selected{% endif %}>Planned / In Progress</option>
+          <option value="Not Implemented"{% if resp.get('response_text') == 'Not Implemented' %} selected{% endif %}>Not Implemented</option>
+          <option value="Not Applicable"{% if resp.get('response_text') == 'Not Applicable' %} selected{% endif %}>Not Applicable</option>
+        </select>
+        <div id="badge-{{ q.id }}">{% set _v = resp.get('response_text') or '' %}{% if _v %}
+          <span class="ivf-impl-badge {% if _v == 'Fully Implemented' %}fully{% elif _v.startswith('Partial') %}partial{% elif _v.startswith('Planned') %}planned{% elif _v == 'Not Applicable' %}na{% else %}none{% endif %}">{{ _v }}</span>
+        {% endif %}</div>
+        <div class="ivf-q-footer">
+          <span class="ivf-save-status" id="ss-{{ q.id }}">{% if resp.get('response_text') %}saved{% else %}&nbsp;{% endif %}</span>
+        </div>
+
+      {% elif qtype == 'responsible_role' %}
+        {# ── Responsible role select + name input ── #}
+        {% set _stored = resp.get('response_text') or '' %}
+        {% set _role = _stored.split(' | Name: ')[0].replace('Role: ', '') if ' | Name: ' in _stored else _stored %}
+        {% set _name = _stored.split(' | Name: ')[1] if ' | Name: ' in _stored else '' %}
+        <select
+          class="ivf-select-input{% if _role %} selected{% endif %}"
+          id="role-select-{{ q.id }}"
+          data-qid="{{ q.id }}"
+          data-ctrl="{{ ctrl_safe }}"
+          data-qtype="responsible_role"
+          onchange="handleRoleChange({{ q.id }})"
+          {% if iv_session.status != 'open' %}disabled{% endif %}>
+          <option value="">— Select role —</option>
+          <option value="System Owner (SO)"{% if _role == 'System Owner (SO)' %} selected{% endif %}>System Owner (SO)</option>
+          <option value="ISSO"{% if _role == 'ISSO' %} selected{% endif %}>ISSO</option>
+          <option value="ISSM"{% if _role == 'ISSM' %} selected{% endif %}>ISSM</option>
+          <option value="Authorizing Official (AO)"{% if _role == 'Authorizing Official (AO)' %} selected{% endif %}>Authorizing Official (AO)</option>
+          <option value="System Administrator"{% if _role == 'System Administrator' %} selected{% endif %}>System Administrator</option>
+          <option value="DevOps / Engineering Team"{% if _role == 'DevOps / Engineering Team' %} selected{% endif %}>DevOps / Engineering Team</option>
+          <option value="Security Team"{% if _role == 'Security Team' %} selected{% endif %}>Security Team</option>
+          <option value="Help Desk / Operations"{% if _role == 'Help Desk / Operations' %} selected{% endif %}>Help Desk / Operations</option>
+          <option value="Vendor / Third-Party"{% if _role == 'Vendor / Third-Party' %} selected{% endif %}>Vendor / Third-Party</option>
+          <option value="Shared / Multiple Parties"{% if _role == 'Shared / Multiple Parties' %} selected{% endif %}>Shared / Multiple Parties</option>
+          <option value="Other (specify below)"{% if _role == 'Other (specify below)' %} selected{% endif %}>Other (specify below)</option>
+        </select>
+        <input type="text"
+          class="ivf-role-name-input"
+          id="role-name-{{ q.id }}"
+          placeholder="Name or team (optional)"
+          value="{{ _name }}"
+          data-qid="{{ q.id }}"
+          oninput="handleRoleChange({{ q.id }})"
+          {% if iv_session.status != 'open' %}readonly{% endif %}>
+        {# Hidden field that holds the combined value for form POST #}
+        <input type="hidden" name="response_{{ q.id }}" id="ta-{{ q.id }}" value="{{ _stored }}">
+        <div class="ivf-q-footer">
+          <span class="ivf-save-status" id="ss-{{ q.id }}">{% if _stored %}saved{% else %}&nbsp;{% endif %}</span>
+        </div>
+
+      {% else %}
+        {# ── Standard textarea ── #}
+        <textarea
+          class="ivf-textarea"
+          name="response_{{ q.id }}"
+          id="ta-{{ q.id }}"
+          data-qid="{{ q.id }}"
+          data-ctrl="{{ ctrl_safe }}"
+          data-status="{{ 'saved' if resp.get('response_text') else 'empty' }}"
+          data-keystrokes="{{ resp.get('keystroke_count', 0) }}"
+          data-paste-attempts="{{ resp.get('paste_attempts', 0) }}"
+          autocomplete="off" autocorrect="off" spellcheck="true"
+          placeholder="Type your response here…"
+          {% if iv_session.status != 'open' %}readonly{% endif %}
+        >{{ resp.get('response_text') or '' }}</textarea>
+        <div class="ivf-q-footer">
+          <span class="ivf-char-count" id="cc-{{ q.id }}">{{ (resp.get('response_text') or '') | length }} chars</span>
+          <span class="ivf-save-status" id="ss-{{ q.id }}">{% if resp.get('response_text') %}saved{% else %}&nbsp;{% endif %}</span>
+        </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    </div>{# end ivf-base-qs #}
+
+    {# ── Overlay requirements panels (controlled by session-level toggle bar) ── #}
+    {% if group.overlays %}
+    <div class="ivf-overlay-section">
+      {% for fw_key, fw_data in group.overlays.items() %}
+      {% set panel_id = 'overlay-' ~ ctrl_safe ~ '-' ~ fw_key %}
+      <div class="ivf-overlay-panel" data-fw="{{ fw_key }}" id="{{ panel_id }}">
+        <div class="ivf-overlay-panel-header">
+          <span class="ivf-overlay-fw-badge">{{ fw_data.label }}</span>
+          <span>additional requirements for this control</span>
+        </div>
+        {% for q in fw_data.qs %}
+        {% set resp = responses.get(q.id, {}) %}
+        <div class="ivf-question" id="block-{{ q.id }}" style="border-color:rgba(0,200,255,.2)">
+          <div class="ivf-q-num" style="color:var(--cyan)">{{ fw_data.label }} — Overlay Requirement</div>
+          <div class="ivf-q-text">{{ q.question_text }}</div>
+          <textarea
+            class="ivf-textarea"
+            name="response_{{ q.id }}"
+            id="ta-{{ q.id }}"
+            data-qid="{{ q.id }}"
+            data-ctrl="{{ ctrl_safe }}"
+            data-status="{{ 'saved' if resp.get('response_text') else 'empty' }}"
+            data-keystrokes="{{ resp.get('keystroke_count', 0) }}"
+            data-paste-attempts="{{ resp.get('paste_attempts', 0) }}"
+            autocomplete="off" autocorrect="off" spellcheck="true"
+            placeholder="Type your response here…"
+            {% if iv_session.status != 'open' %}readonly{% endif %}
+          >{{ resp.get('response_text') or '' }}</textarea>
+          <div class="ivf-q-footer">
+            <span class="ivf-char-count" id="cc-{{ q.id }}">{{ (resp.get('response_text') or '') | length }} chars</span>
+            <span class="ivf-save-status" id="ss-{{ q.id }}">{% if resp.get('response_text') %}saved{% else %}&nbsp;{% endif %}</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {# ── Page nav (bottom) ───────────────────────────────────────────────────── #}
+  {% if control_groups | length > 0 %}
+  <div class="ivf-page-nav" id="page-nav-bottom">
+    <button class="ivf-page-btn ivf-page-prev" onclick="changePage(-1)" disabled>&larr; Prev</button>
+    <span class="ivf-page-info"></span>
+    <input class="ivf-page-jumper" type="number" min="1" id="page-jumper-bottom" title="Jump to page" placeholder="#"
+           onchange="jumpPage(this.value)" onkeydown="if(event.key==='Enter')jumpPage(this.value)">
+    <button class="ivf-page-btn ivf-page-next" onclick="changePage(1)">Next &rarr;</button>
+  </div>
+  {% endif %}
+{% endif %}
+
+  {% if iv_session.status == 'open' %}
+  <div class="ivf-submit-bar">
+    <div>
+      <div class="ivf-progress">Answered: <strong id="bar-answered">0</strong> / <strong>{{ questions | length }}</strong></div>
+      <div class="ivf-autosave-notice" id="autosave-notice">Autosaves every 30 seconds</div>
+    </div>
+    <button type="button" class="ivf-btn-submit" id="review-btn">Review &amp; Submit &rarr;</button>
+  </div>
+  {% else %}
+  <div class="ivf-submit-bar">
+    <div style="color:var(--muted);font-size:0.85em">This session has been submitted. <a href="/systems/{{ system.id }}/interview/{{ iv_session.id }}/review" style="color:var(--cyan)">View Review &rarr;</a></div>
+  </div>
+  {% endif %}
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SESSION_ID  = {{ iv_session.id }};
+const SYSTEM_ID   = "{{ system.id }}";
+const API_BASE    = `/systems/${SYSTEM_ID}/interview/${SESSION_ID}`;
+const IS_OPEN     = {{ 'true' if iv_session.status == 'open' else 'false' }};
+const SESSION_TYPE = "{{ session_type }}";
+
+// ── Per-field state ─────────────────────────────────────────────────────────
+const fieldState = {};
+document.querySelectorAll('.ivf-textarea').forEach(ta => {
+  const qid = parseInt(ta.dataset.qid);
+  fieldState[qid] = {
+    keystrokes:    parseInt(ta.dataset.keystrokes)    || 0,
+    pasteAttempts: parseInt(ta.dataset.pasteAttempts) || 0,
+    chars:         ta.value.length,
+    focusStart:    null,
+    dirty:         false,
+    firstKeystroke: (parseInt(ta.dataset.keystrokes) > 0),
+  };
+});
+
+// ── Control-level answered counter ──────────────────────────────────────────
+function updateCtrlAnswered() {
+  if (SESSION_TYPE === 'daily_ops') return;
+  const ctrlMap = {};
+  // Text areas
+  document.querySelectorAll('.ivf-textarea').forEach(ta => {
+    const ctrl = ta.dataset.ctrl;
+    if (!ctrl) return;
+    if (!ctrlMap[ctrl]) ctrlMap[ctrl] = { total: 0, answered: 0 };
+    ctrlMap[ctrl].total++;
+    if (ta.value.trim().length >= 20) ctrlMap[ctrl].answered++;
+  });
+  // Structured selects (impl_status)
+  document.querySelectorAll('.ivf-select-input[data-qtype]').forEach(sel => {
+    const ctrl = sel.dataset.ctrl;
+    if (!ctrl) return;
+    if (!ctrlMap[ctrl]) ctrlMap[ctrl] = { total: 0, answered: 0 };
+    ctrlMap[ctrl].total++;
+    if (sel.value) ctrlMap[ctrl].answered++;
+  });
+  // Role hidden inputs (responsible_role)
+  document.querySelectorAll('select[data-qtype="responsible_role"]').forEach(sel => {
+    const ctrl = sel.dataset.ctrl;
+    if (!ctrl) return;
+    if (!ctrlMap[ctrl]) ctrlMap[ctrl] = { total: 0, answered: 0 };
+    ctrlMap[ctrl].total++;
+    if (sel.value) ctrlMap[ctrl].answered++;
+  });
+  for (const [ctrl, counts] of Object.entries(ctrlMap)) {
+    const el = document.getElementById(`ctrl-ans-${ctrl}`);
+    if (el) {
+      el.textContent = `${counts.answered}/${counts.total}`;
+      el.className = 'ivf-ctrl-answered' + (counts.answered === counts.total ? ' all-done' : '');
+    }
+    const sec = document.getElementById(`ctrl-${ctrl}`);
+    if (sec) sec.dataset.answered = String(counts.answered === counts.total && counts.total > 0);
+  }
+}
+
+// ── Update counters ─────────────────────────────────────────────────────────
+function updateCounters(qid) {
+  const ta = document.getElementById(`ta-${qid}`);
+  const cc = document.getElementById(`cc-${qid}`);
+  if (!ta || !cc) return;
+  const len = ta.value.length;
+  cc.textContent = `${len} chars`;
+  cc.className = 'ivf-char-count' + (len >= 100 ? ' ok' : len >= 30 ? '' : len > 0 ? ' warn' : '');
+}
+
+function updateAnsweredCount() {
+  let answered = 0;
+  // Count text areas with sufficient content
+  document.querySelectorAll('.ivf-textarea').forEach(ta => {
+    if (ta.value.trim().length >= 20) answered++;
+  });
+  // Count structured selects that have a value selected
+  document.querySelectorAll('.ivf-select-input[data-qtype="impl_status"]').forEach(sel => {
+    if (sel.value) answered++;
+  });
+  // Count responsible role hidden inputs that have a value
+  document.querySelectorAll('input[id^="ta-"][type="hidden"]').forEach(inp => {
+    if (inp.value.trim()) answered++;
+  });
+  const el1 = document.getElementById('stat-answered');
+  const el2 = document.getElementById('bar-answered');
+  if (el1) el1.textContent = answered;
+  if (el2) el2.textContent = answered;
+  updateCtrlAnswered();
+}
+
+// ── Family filter + pagination ────────────────────────────────────────────────
+const FAMILY_NAMES = {
+  // NIST SP 800-53 families
+  AC:'Access Control', AT:'Awareness & Training', AU:'Audit & Accountability',
+  CA:'Assessment, Authorization & Monitoring', CM:'Configuration Management',
+  CP:'Contingency Planning', IA:'Identification & Authentication',
+  IR:'Incident Response', MA:'Maintenance', MP:'Media Protection',
+  PE:'Physical & Environmental Protection', PL:'Planning',
+  PM:'Program Management', PS:'Personnel Security', PT:'PII Processing & Transparency',
+  RA:'Risk Assessment', SA:'System & Services Acquisition',
+  SC:'System & Communications Protection', SI:'System & Information Integrity',
+  SR:'Supply Chain Risk Management',
+  // NIST CSF 2.0 functions
+  GOVERN:'Govern', IDENTIFY:'Identify', PROTECT:'Protect',
+  DETECT:'Detect', RESPOND:'Respond', RECOVER:'Recover',
+};
+
+function enhanceFamilySelect() {
+  const sel = document.getElementById('filter-family');
+  if (!sel) return;
+  sel.querySelectorAll('option[value]:not([value="ALL"])').forEach(opt => {
+    const fam = opt.value;
+    opt.textContent = FAMILY_NAMES[fam] ? `${fam} — ${FAMILY_NAMES[fam]}` : fam;
+  });
+}
+
+const PAGE_SIZE = 25;   // max questions (textareas) per page
+let currentPage = 1;
+
+function _getFilteredSections() {
+  const famVal  = document.getElementById('filter-family')?.value  || 'ALL';
+  const statVal = document.getElementById('filter-status')?.value  || 'ALL';
+  return Array.from(document.querySelectorAll('#interview-form .ivf-ctrl-section')).filter(sec => {
+    const fam      = sec.dataset.family   || '';
+    const answered = sec.dataset.answered === 'true';
+    const famOk    = famVal  === 'ALL' || fam === famVal;
+    const statOk   = statVal === 'ALL'
+                  || (statVal === 'answered'   &&  answered)
+                  || (statVal === 'unanswered' && !answered);
+    return famOk && statOk;
+  });
+}
+
+// Assign sections to pages so each page has at most PAGE_SIZE questions.
+// Sections are never split — if a section would overflow the page it starts a new one.
+// A section larger than PAGE_SIZE gets its own page.
+function _buildPageMap(sections) {
+  const map = [];   // parallel to sections: which page each belongs to
+  let page = 1, count = 0;
+  sections.forEach(sec => {
+    const qs = sec.querySelectorAll('.ivf-textarea, .ivf-select-input').length || 1;
+    if (count + qs > PAGE_SIZE && count > 0) { page++; count = 0; }
+    map.push(page);
+    count += qs;
+  });
+  return { map, pages: page };
+}
+
+function renderPage() {
+  const all      = Array.from(document.querySelectorAll('#interview-form .ivf-ctrl-section'));
+  const filtered = _getFilteredSections();
+  const { map, pages } = _buildPageMap(filtered);
+
+  if (currentPage > pages) currentPage = pages;
+  if (currentPage < 1)     currentPage = 1;
+
+  // Count totals for the current page
+  let pageQs = 0, totalQs = 0;
+  filtered.forEach((sec, i) => {
+    const qs = sec.querySelectorAll('.ivf-textarea, .ivf-select-input').length || 1;
+    totalQs += qs;
+    if (map[i] === currentPage) pageQs += qs;
+  });
+
+  // Hide everything, show current page's sections
+  all.forEach(s => s.style.display = 'none');
+  filtered.forEach((sec, i) => { if (map[i] === currentPage) sec.style.display = ''; });
+
+  // Build info string
+  const totalAllQs = all.reduce((n, s) => n + (s.querySelectorAll('.ivf-textarea, .ivf-select-input').length || 1), 0);
+  const filtActive = totalQs < totalAllQs;
+  const infoText = pages > 1
+    ? `Page ${currentPage} of ${pages} · ${pageQs} question${pageQs !== 1 ? 's' : ''} · ${totalQs} total${filtActive ? ` (filtered from ${totalAllQs})` : ''}`
+    : `${totalQs} question${totalQs !== 1 ? 's' : ''}${filtActive ? ` of ${totalAllQs}` : ''}`;
+
+  document.querySelectorAll('.ivf-page-info').forEach(el => el.textContent = infoText);
+  document.querySelectorAll('.ivf-page-prev').forEach(btn => btn.disabled = currentPage <= 1);
+  document.querySelectorAll('.ivf-page-next').forEach(btn => btn.disabled = currentPage >= pages);
+  document.querySelectorAll('.ivf-page-jumper').forEach(inp => { inp.value = ''; inp.max = pages; inp.placeholder = `1–${pages}`; });
+
+  const famActive  = (document.getElementById('filter-family')?.value  || 'ALL') !== 'ALL';
+  const statActive = (document.getElementById('filter-status')?.value  || 'ALL') !== 'ALL';
+  const countEl = document.getElementById('filter-count');
+  if (countEl) countEl.textContent = (famActive || statActive) ? `${filtered.length} of ${all.length} controls` : '';
+}
+
+function applyFilter() {
+  currentPage = 1;
+  renderPage();
+}
+
+function changePage(delta) {
+  currentPage += delta;
+  renderPage();
+  document.getElementById('page-nav-top')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function jumpPage(val) {
+  const n = parseInt(val, 10);
+  if (!isNaN(n)) { currentPage = n; renderPage(); }
+}
+
+// ── Paste prevention ────────────────────────────────────────────────────────
+document.querySelectorAll('.ivf-textarea').forEach(ta => {
+  ta.addEventListener('paste', e => {
+    e.preventDefault();
+    const qid = parseInt(ta.dataset.qid);
+    fieldState[qid].pasteAttempts++;
+    const toast = document.getElementById('paste-toast');
+    toast.style.display = 'block';
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(() => { toast.style.display = 'none'; }, 3000);
+    logEvent(qid, 'paste_attempt', { char_count: ta.value.length, paste_attempts: fieldState[qid].pasteAttempts });
+  });
+});
+
+// ── Keystroke tracking ──────────────────────────────────────────────────────
+let keystrokeBatch = {};
+
+document.querySelectorAll('.ivf-textarea').forEach(ta => {
+  if (!IS_OPEN) return;
+
+  ta.addEventListener('keydown', e => {
+    const qid = parseInt(ta.dataset.qid);
+    const fs  = fieldState[qid];
+    if (!fs.firstKeystroke && e.key.length === 1) {
+      fs.firstKeystroke = true;
+      logEvent(qid, 'first_keystroke', { char_count: ta.value.length });
+    }
+  });
+
+  ta.addEventListener('input', () => {
+    const qid = parseInt(ta.dataset.qid);
+    const fs  = fieldState[qid];
+    const newLen = ta.value.length;
+    const delta = Math.abs(newLen - fs.chars);
+    fs.keystrokes += Math.max(1, delta);
+    fs.chars = newLen;
+    fs.dirty = true;
+    ta.dataset.status = 'dirty';
+    updateCounters(qid);
+    updateAnsweredCount();
+    markDirtyStatus(qid);
+    if (!keystrokeBatch[qid]) keystrokeBatch[qid] = { delta: 0, timer: null };
+    keystrokeBatch[qid].delta += Math.max(1, delta);
+    clearTimeout(keystrokeBatch[qid].timer);
+    keystrokeBatch[qid].timer = setTimeout(() => {
+      logEvent(qid, 'keystroke_burst', { delta_keystrokes: keystrokeBatch[qid].delta, char_count: ta.value.length });
+      keystrokeBatch[qid].delta = 0;
+    }, 5000);
+    if (keystrokeBatch[qid].delta >= 10) {
+      clearTimeout(keystrokeBatch[qid].timer);
+      logEvent(qid, 'keystroke_burst', { delta_keystrokes: keystrokeBatch[qid].delta, char_count: ta.value.length });
+      keystrokeBatch[qid].delta = 0;
+    }
+  });
+
+  ta.addEventListener('focus', () => {
+    const qid = parseInt(ta.dataset.qid);
+    fieldState[qid].focusStart = Date.now();
+    logEvent(qid, 'focus', { char_count: ta.value.length });
+  });
+
+  ta.addEventListener('blur', () => {
+    const qid = parseInt(ta.dataset.qid);
+    const fs  = fieldState[qid];
+    const elapsed = fs.focusStart ? (Date.now() - fs.focusStart) / 1000 : 0;
+    fs.focusStart = null;
+    logEvent(qid, 'blur', { char_count: ta.value.length, time_on_field_s: elapsed });
+    if (fs.dirty) saveField(qid);
+  });
+});
+
+// ── Dirty/save status ────────────────────────────────────────────────────────
+function markDirtyStatus(qid) {
+  const ss = document.getElementById(`ss-${qid}`);
+  if (ss) ss.textContent = 'unsaved\u2026';
+}
+function markSavedStatus(qid) {
+  const ta = document.getElementById(`ta-${qid}`);
+  const ss = document.getElementById(`ss-${qid}`);
+  if (ss) ss.textContent = 'saved \u2713';
+  if (ta) ta.dataset.status = 'saved';
+  if (fieldState[qid]) fieldState[qid].dirty = false;
+}
+
+// ── Save a single field ─────────────────────────────────────────────────────
+async function saveField(qid) {
+  const ta = document.getElementById(`ta-${qid}`);
+  if (!ta) return;
+  try {
+    const resp = await fetch(`${API_BASE}/save`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ question_id: qid, response_text: ta.value }),
+    });
+    if (resp.ok) markSavedStatus(qid);
+  } catch(e) {}
+}
+
+// ── Log audit event ─────────────────────────────────────────────────────────
+async function logEvent(qid, eventType, eventData) {
+  try {
+    await fetch(`${API_BASE}/event`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ question_id: qid, event_type: eventType, event_data: eventData }),
+    });
+  } catch(e) {}
+}
+
+// ── Autosave every 30s ──────────────────────────────────────────────────────
+if (IS_OPEN) {
+  setInterval(() => {
+    document.querySelectorAll('.ivf-textarea').forEach(ta => {
+      const qid = parseInt(ta.dataset.qid);
+      if (fieldState[qid] && fieldState[qid].dirty) {
+        saveField(qid);
+        const notice = document.getElementById('autosave-notice');
+        if (notice) {
+          notice.textContent = 'Autosaved ' + new Date().toLocaleTimeString();
+          setTimeout(() => { notice.textContent = 'Autosaves every 30 seconds'; }, 3000);
+        }
+      }
+    });
+  }, 30000);
+}
+
+// ── Review & Submit button — saves all dirty fields, then navigates to attestation page ──
+document.getElementById('review-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('review-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving\u2026'; }
+  const savePromises = [];
+  document.querySelectorAll('.ivf-textarea').forEach(ta => {
+    const qid = parseInt(ta.dataset.qid);
+    if (fieldState[qid] && fieldState[qid].dirty) savePromises.push(saveField(qid));
+  });
+  await Promise.all(savePromises);
+  await logEvent(null, 'pre_submit_nav', { total_fields: document.querySelectorAll('.ivf-textarea').length });
+  window.location.href = `${API_BASE}/pre-submit`;
+});
+
+// ── Structured select handlers ───────────────────────────────────────────────
+const IMPL_STATUS_BADGE = {
+  'Fully Implemented':    'fully',
+  'Partially Implemented':'partial',
+  'Planned / In Progress':'planned',
+  'Not Implemented':      'none',
+  'Not Applicable':       'na',
+};
+
+function handleSelectChange(qid) {
+  const sel = document.getElementById(`ta-${qid}`);
+  if (!sel || sel.tagName !== 'SELECT') return;
+  const val = sel.value;
+  sel.classList.toggle('selected', !!val);
+  // Update badge
+  const badge = document.getElementById(`badge-${qid}`);
+  if (badge) {
+    badge.innerHTML = val
+      ? `<span class="ivf-impl-badge ${IMPL_STATUS_BADGE[val] || ''}">${val}</span>`
+      : '';
+  }
+  // Mark save status
+  const ss = document.getElementById(`ss-${qid}`);
+  if (ss) ss.textContent = 'unsaved\u2026';
+  // Autosave
+  saveField(qid);
+  updateAnsweredCount();
+}
+
+function handleRoleChange(qid) {
+  const sel    = document.getElementById(`role-select-${qid}`);
+  const name   = document.getElementById(`role-name-${qid}`);
+  const hidden = document.getElementById(`ta-${qid}`);
+  if (!sel || !hidden) return;
+  const role = sel.value;
+  const nameVal = name ? name.value.trim() : '';
+  hidden.value = role
+    ? (nameVal ? `Role: ${role} | Name: ${nameVal}` : `Role: ${role}`)
+    : nameVal;
+  sel.classList.toggle('selected', !!role);
+  const ss = document.getElementById(`ss-${qid}`);
+  if (ss) ss.textContent = 'unsaved\u2026';
+  saveField(qid);
+  updateAnsweredCount();
+}
+
+// ── Session-level framework toggles ─────────────────────────────────────────
+function toggleFramework(fwSn, btn) {
+  const isActive = btn.classList.toggle('active');
+  document.querySelectorAll(`.ivf-overlay-panel[data-fw="${fwSn}"]`).forEach(panel => {
+    panel.style.display = isActive ? 'block' : 'none';
+  });
+  updateAnsweredCount();
+}
+
+function initFrameworkPanels() {
+  document.querySelectorAll('.ivf-fw-toggle').forEach(btn => {
+    const fwSn = btn.dataset.fw;
+    const isActive = btn.classList.contains('active');
+    document.querySelectorAll(`.ivf-overlay-panel[data-fw="${fwSn}"]`).forEach(panel => {
+      panel.style.display = isActive ? 'block' : 'none';
+    });
+  });
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+initFrameworkPanels();
+updateAnsweredCount();
+document.querySelectorAll('.ivf-textarea').forEach(ta => updateCounters(parseInt(ta.dataset.qid)));
+enhanceFamilySelect();
+if (SESSION_TYPE !== 'daily_ops') renderPage();
+</script>
+{% endblock %}

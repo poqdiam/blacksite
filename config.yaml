@@ -115,7 +115,7 @@ security:
   cac_piv_auth: false          # Parse identity from client certificate header instead of Remote-User
   cac_header: "X-Client-Cert-Subject"   # Header Caddy injects with cert Subject DN
   cac_cn_prefix: ""            # Optional prefix to strip from CN (e.g. "DOD CA ")
-  require_mfa: true            # Require Authelia MFA header (X-Authelia-Auth-Level: two_factor)
+  require_mfa: false           # MFA enforced at perimeter by Authelia (two_factor policy); in-app header check disabled
   db_encryption: true          # SQLCipher AES-256 at-rest encryption — pysqlcipher3 installed ✓
   db_encryption_key_env: BLACKSITE_DB_KEY   # env var name holding the encryption key
   fips_session_crypto: false   # [PROD GUARD] Require FIPS-validated session crypto — do not enable in dev
