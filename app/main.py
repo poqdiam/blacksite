@@ -2103,7 +2103,7 @@ _DEMO_SHELL_ROLES: list[str] = [
 
 _VALID_SHELL_ROLES = {
     # Authority / oversight
-    "ao", "issm", "isso", "sca", "ciso",
+    "ao", "aodr", "issm", "isso", "sca", "ciso",
     # Operations
     "system_owner", "auditor", "bcdr", "employee",
     "pen_tester", "data_owner", "pmo", "incident_responder",
@@ -3883,6 +3883,7 @@ _ROLE_DASHBOARD: dict = {
     "issm":               "/issm/dashboard",
     "ciso":               "/ciso/dashboard",
     "ao":                 "/ao/decisions",
+    "aodr":               "/ao/decisions",
     "isso":               "/isso/dashboard",
     "admin":              "/admin",
 }

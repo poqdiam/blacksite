@@ -1494,6 +1494,58 @@ function dismissAC8Notice() {
       </a>
     </div>
 
+    {% elif role == 'aodr' %}
+    {# ── AODR NAV (Authorizing Official Designee Representative) ── #}
+    <div class="sb-group">
+      <div class="sb-group-label">Overview</div>
+      <a href="/ao/decisions" class="sb-link{% if p.startswith('/ao') %} active{% endif %}">
+        <span class="sb-icon">⊕</span><span class="sb-text">Decision Queue</span>
+      </a>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-label">Authorization Decisions</div>
+      <a href="/submissions" class="sb-link{% if p == '/submissions' %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Active Submissions</span>
+      </a>
+      <a href="/submissions/approved" class="sb-link{% if p == '/submissions/approved' %} active{% endif %}">
+        <span class="sb-icon">✓</span><span class="sb-text">Approved Packages</span>
+      </a>
+      <a href="/packages" class="sb-link{% if p.startswith('/packages') or p.startswith('/ato') %} active{% endif %}">
+        <span class="sb-icon">⊙</span><span class="sb-text">Auth Package</span>
+      </a>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-label">Risk &amp; Posture</div>
+      <a href="/posture" class="sb-link{% if p == '/posture' %} active{% endif %}">
+        <span class="sb-icon">◈</span><span class="sb-text">Compliance Posture</span>
+      </a>
+      <a href="/risks" class="sb-link{% if p.startswith('/risks') %} active{% endif %}">
+        <span class="sb-icon">⚠</span><span class="sb-text">Risk Register</span>
+      </a>
+      <a href="/systems" class="sb-link{% if p.startswith('/systems') %} active{% endif %}">
+        <span class="sb-icon">⊟</span><span class="sb-text">System Catalog</span>
+      </a>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-label">Tools</div>
+      <a href="/tools/r4-to-r5" class="sb-link{% if p == '/tools/r4-to-r5' %} active{% endif %}">
+        <span class="sb-icon">⇄</span><span class="sb-text">Rev 4 → Rev 5</span>
+      </a>
+      <a href="/tools/sp171-migration" class="sb-link{% if p == '/tools/sp171-migration' %} active{% endif %}">
+        <span class="sb-icon">⇄</span><span class="sb-text">800-171 Rev 2 → 3</span>
+      </a>
+    </div>
+
+    <div class="sb-group">
+      <div class="sb-group-label">Reports</div>
+      <a href="/reports" class="sb-link{% if p.startswith('/reports') %} active{% endif %}">
+        <span class="sb-icon">↓</span><span class="sb-text">Reports</span>
+      </a>
+    </div>
+
     {% elif role == 'ciso' %}
     {# ── CISO NAV (Chief Information Security Officer) ── #}
     <div class="sb-group">

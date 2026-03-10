@@ -115,11 +115,14 @@ async def login(page, persona: Persona) -> bool:
     """
     try:
         if persona.local_mode:
-            # Inject Remote-User header for all requests from this page
+            # Inject Remote-User header for all requests from this page.
+            # X-Authelia-Auth-Level simulates Authelia's MFA header so routes
+            # guarded by require_mfa (e.g. _check_mfa) pass in local mode.
             await page.set_extra_http_headers({
                 "Remote-User": persona.username,
                 "Remote-Name":  persona.username,
                 "Remote-Groups": "admins",
+                "X-Authelia-Auth-Level": "two_factor",
             })
             response = await page.goto(persona.base_url + "/", wait_until="domcontentloaded",
                                        timeout=15000)
