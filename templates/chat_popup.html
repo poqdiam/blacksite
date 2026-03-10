@@ -186,8 +186,8 @@
 (function() {
   "use strict";
 
-  const ROOM       = {{ room_json|safe }};
-  const MY_USER    = {{ me_json|safe }};
+  const ROOM       = {{ room_json|tojson }};
+  const MY_USER    = {{ me_json|tojson }};
 
   let ws = null;
   let lastMsgId = 0;

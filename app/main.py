@@ -1110,6 +1110,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
         # CSP: self-only, allow Chart.js CDN, inline styles for our design system
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
@@ -1207,6 +1208,11 @@ async def session_timeout_middleware(request: Request, call_next):
                 r.delete_cookie("bsv_user_view")
                 return r
         _LAST_ACTIVITY[user] = datetime.now(timezone.utc)  # BLKS022826-1003AC03
+        # Prune stale entries to prevent unbounded growth
+        if len(_LAST_ACTIVITY) > 500:
+            cutoff = datetime.now(timezone.utc) - (_SESSION_TIMEOUT * 2)
+            for stale in [u for u, t in list(_LAST_ACTIVITY.items()) if t < cutoff]:
+                _LAST_ACTIVITY.pop(stale, None)
         if user not in _PROFILES_ENSURED:
             asyncio.create_task(_ensure_profile(user))
     return await call_next(request)
@@ -1228,16 +1234,18 @@ async def _ensure_profile(user: str) -> None:
         pass
 
 
+_GEO_CACHE_MAX = 2000  # cap to prevent unbounded growth
+
 async def _geo_lookup(ips: list[str]) -> dict[str, dict]:
     """Batch geo-lookup via ip-api.com (free, no key). Returns IP → geo dict.
-    Results are cached in _GEO_CACHE for the lifetime of the process."""
+    Results are cached in _GEO_CACHE; evict oldest entries when cap is reached."""
     missing = [ip for ip in ips if ip and ip not in _GEO_CACHE]
     if missing:
         try:
             import httpx as _httpx
             payload = [{"query": ip, "fields": "query,city,country,countryCode,org,status"} for ip in missing[:100]]
             async with _httpx.AsyncClient(timeout=5) as client:
-                resp = await client.post("http://ip-api.com/batch", json=payload)
+                resp = await client.post("https://ip-api.com/batch", json=payload)
                 if resp.status_code == 200:
                     for entry in resp.json():
                         ip = entry.get("query", "")
@@ -1250,6 +1258,10 @@ async def _geo_lookup(ips: list[str]) -> dict[str, dict]:
                             }
                         elif ip:
                             _GEO_CACHE[ip] = {}
+                    # Evict oldest entries if over cap
+                    if len(_GEO_CACHE) > _GEO_CACHE_MAX:
+                        for old in list(_GEO_CACHE)[:len(_GEO_CACHE) - _GEO_CACHE_MAX]:
+                            _GEO_CACHE.pop(old, None)
         except Exception:
             pass
     return {ip: _GEO_CACHE.get(ip, {}) for ip in ips}
@@ -8601,6 +8613,8 @@ async def poam_item_detail(request: Request, item_id: str):
         item = row.scalar_one_or_none()
         if not item:
             raise HTTPException(status_code=404)
+        if item.system_id and not await _can_access_system(item.system_id, request, session):
+            raise HTTPException(status_code=403)
 
         sys_rows = await session.execute(select(System).order_by(System.name))
         systems  = sys_rows.scalars().all()
@@ -9019,6 +9033,10 @@ async def poam_evidence_download(request: Request, item_id: str, ev_id: str):
         ev = row.scalar_one_or_none()
         if not ev:
             raise HTTPException(status_code=404)
+        # Verify the user is authorized for the parent system
+        item = await session.get(PoamItem, item_id)
+        if item and item.system_id and not await _can_access_system(item.system_id, request, session):
+            raise HTTPException(status_code=403)
     from fastapi.responses import FileResponse
     return FileResponse(ev.file_path, filename=ev.filename)
 
@@ -13100,9 +13118,9 @@ async def api_preferences(request: Request):
 
     resp = JSONResponse({"ok": True, "font_size": font_size, "density": density,
                          "rows_per_page": rows})
-    resp.set_cookie("bsv_pref_font",    font_size, max_age=365*24*3600, httponly=False, samesite="lax")
-    resp.set_cookie("bsv_pref_density", density,   max_age=365*24*3600, httponly=False, samesite="lax")
-    resp.set_cookie("bsv_pref_rows",    str(rows), max_age=365*24*3600, httponly=False, samesite="lax")
+    resp.set_cookie("bsv_pref_font",    font_size, max_age=365*24*3600, httponly=False, samesite="lax", secure=True)
+    resp.set_cookie("bsv_pref_density", density,   max_age=365*24*3600, httponly=False, samesite="lax", secure=True)
+    resp.set_cookie("bsv_pref_rows",    str(rows), max_age=365*24*3600, httponly=False, samesite="lax", secure=True)
     return resp
 
 
@@ -15624,13 +15642,23 @@ async def admin_ssp_upload(
     if suffix not in _SSP_ALLOWED:
         raise HTTPException(400, f"File type '{suffix}' not allowed. Use: {', '.join(_SSP_ALLOWED)}")
 
+    _SSP_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > _SSP_MAX_BYTES:
+        raise HTTPException(413, "File too large. Maximum SSP upload size is 50 MB.")
+
     _SSP_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     review_id  = str(uuid.uuid4())
     safe_name  = f"{review_id}{suffix}"
     dest       = _SSP_UPLOAD_DIR / safe_name
 
+    total = 0
     async with aiofiles.open(dest, "wb") as f:
         while chunk := await file.read(1024 * 256):
+            total += len(chunk)
+            if total > _SSP_MAX_BYTES:
+                dest.unlink(missing_ok=True)
+                raise HTTPException(413, "File too large. Maximum SSP upload size is 50 MB.")
             await f.write(chunk)
 
     review = SspReview(
